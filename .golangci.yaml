@@ -1,0 +1,136 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    # default linters
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # end default linters
+    - goconst
+    - gocritic
+    - gosec
+    - revive
+    - spancheck
+    - unconvert
+    - copyloopvar
+    - testifylint # adhere to stretchr packages best practices
+    - whitespace # cleanup leading & trailing empty lines
+    - tagliatelle # enforce consistent tag format
+    - nolintlint # ensure nolint directives have an explanation
+    - ireturn # enforce "accept interfaces, return types" idiom. Typically makes code more testable
+    - gocyclo
+  settings:
+    errcheck:
+      check-blank: true
+    gocyclo:
+      min-complexity: 15
+    govet:
+      enable-all: true
+      disable:
+        - shadow # import shadowing is noisy; Go makes shadowing clear at point of use
+    nolintlint:
+      require-explanation: true
+      allow-unused: true
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: add-constant # prevent unnecessary string/int lints for defining a constant
+          disabled: true
+        - name: confusing-results # encourages naming results and, therefore, naked returns
+          disabled: true
+        - name: enforce-switch-style
+          arguments: ["allowNoDefault"] # don't require a default case always be present
+        - name: get-return # High chance of false positive; assumes func/method starting with `Get` should return something
+          disabled: true
+        - name: unhandled-error # handled by errcheck linter
+          disabled: true
+        - name: max-public-structs # overly-opinionated rule
+          disabled: true
+        - name: var-naming
+          arguments:
+            - ["ID"] # AllowList
+            - ["VM"] # DenyList
+            - - skip-package-name-checks: true
+        - name: line-length-limit # handled by golines formatter; prevent false-positive lints
+          disabled: true
+        - name: confusing-naming
+          disabled: true
+        - name: argument-limit
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: flag-parameter
+          disabled: true
+        - name: import-shadowing
+          disabled: true
+        - name: cognitive-complexity
+          arguments: [15] # default 7 is too aggressive for parsers with error handling
+        - name: cyclomatic
+          arguments: [15] # align with gocyclo threshold
+    spancheck:
+      checks:
+        - end
+        - record-error
+        - set-status
+    staticcheck:
+      checks: ["all"]
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - goconst
+          - gosec
+        path: _test\.go
+      - linters:
+          - revive
+        text: 'struct-tag: unknown option "(omitempty|optional)" in validate tag'
+      - linters:
+          - ireturn # AST expression parser must return Expr interface by design
+        path: pkg/parser/
+      - linters:
+          - ireturn # plugin registry must return Adapter interface by design
+        path: pkg/plugin/
+      - linters:
+          - gocyclo
+          - revive
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - golines
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/bamsammich/speclang)
+      custom-order: true
+    gofmt:
+      rewrite-rules:
+        - pattern: "interface{}"
+          replacement: "any"
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

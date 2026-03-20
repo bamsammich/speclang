@@ -1,0 +1,17 @@
+plugin http {
+  adapter: "builtin"
+
+  actions {
+    get(path: string)
+    post(path: string, body: any)
+    put(path: string, body: any)
+    delete(path: string)
+    header(name: string, value: string)
+  }
+
+  assertions {
+    status: int
+    body: any
+    header: string
+  }
+}
