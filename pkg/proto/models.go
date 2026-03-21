@@ -66,15 +66,15 @@ func flattenMessage(prefix string, msg *pb.Message) []*parser.Model {
 // protoFieldToField converts a protobuf field to a speclang Field.
 // Returns nil if the type is unsupported.
 func protoFieldToField(f *pb.Field) *parser.Field {
-	if f.IsRepeated {
-		fmt.Fprintf(os.Stderr, "warning: unsupported repeated field %q, skipping\n", f.FieldName)
-		return nil
-	}
-
 	typeExpr, ok := mapProtoType(f.Type)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "warning: unsupported type %q for field %q, skipping\n", f.Type, f.FieldName)
 		return nil
+	}
+
+	// Wrap in array for repeated fields.
+	if f.IsRepeated {
+		typeExpr = parser.TypeExpr{Name: "array", ElemType: &typeExpr}
 	}
 
 	if f.IsOptional {

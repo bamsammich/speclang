@@ -169,6 +169,10 @@ type ObjField struct {
 	Key   string `json:"key"`
 }
 
+type LenExpr struct {
+	Arg Expr `json:"arg"`
+}
+
 type RegexLiteral struct {
 	Pattern string `json:"pattern"`
 }
@@ -183,4 +187,5 @@ func (BinaryOp) exprNode()      {}
 func (UnaryOp) exprNode()       {}
 func (ObjectLiteral) exprNode() {}
 func (EnvRef) exprNode()        {}
+func (LenExpr) exprNode()       {}
 func (RegexLiteral) exprNode()  {}

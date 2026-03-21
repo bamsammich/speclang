@@ -40,6 +40,10 @@ func shrinkField(
 		return shrinkFloat(input, field.Name, stillFails)
 	case "bytes":
 		return shrinkBytes(input, field.Name, stillFails)
+	case "array":
+		return shrinkArray(input, field.Name, stillFails)
+	case "map":
+		return shrinkMap(input, field.Name, stillFails)
 	}
 
 	// Model lookup for named model types.
@@ -205,6 +209,72 @@ func shrinkBytes(
 		current[name] = base64.StdEncoding.EncodeToString(raw[:lo])
 	}
 	return current
+}
+
+// shrinkArray binary searches on length, then shrinks remaining elements.
+func shrinkArray(
+	input map[string]any,
+	name string,
+	stillFails func(map[string]any) bool,
+) map[string]any {
+	current := copyMap(input)
+	arr, ok := current[name].([]any)
+	if !ok || len(arr) == 0 {
+		return current
+	}
+
+	// Binary search on length (remove from end).
+	lo := 0
+	hi := len(arr)
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		candidate := copyMap(current)
+		candidate[name] = copySlice(arr[:mid])
+		if stillFails(candidate) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+
+	candidate := copyMap(current)
+	candidate[name] = copySlice(arr[:lo])
+	if stillFails(candidate) {
+		current[name] = copySlice(arr[:lo])
+	}
+	return current
+}
+
+// shrinkMap tries removing each key, keeping removals that preserve failure.
+func shrinkMap(
+	input map[string]any,
+	name string,
+	stillFails func(map[string]any) bool,
+) map[string]any {
+	current := copyMap(input)
+	m, ok := current[name].(map[string]any)
+	if !ok || len(m) == 0 {
+		return current
+	}
+
+	// Try removing each key.
+	for key := range m {
+		candidate := copyMap(current)
+		reduced := copyMap(m)
+		delete(reduced, key)
+		candidate[name] = reduced
+		if stillFails(candidate) {
+			current = candidate
+			m = reduced
+		}
+	}
+	return current
+}
+
+func copySlice(s []any) []any {
+	c := make([]any, len(s))
+	copy(c, s)
+	return c
 }
 
 // shrinkModel recurses into each field of a nested model.

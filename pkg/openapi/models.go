@@ -86,6 +86,21 @@ func schemaRefToField(name string, ref *openapi3.SchemaRef, optional bool) *pars
 	return field
 }
 
+// schemaRefToTypeExpr converts a SchemaRef to a TypeExpr, handling $ref.
+func schemaRefToTypeExpr(ref *openapi3.SchemaRef) (parser.TypeExpr, bool) {
+	if ref.Ref != "" {
+		modelName := refName(ref.Ref)
+		if modelName != "" {
+			return parser.TypeExpr{Name: modelName}, true
+		}
+		return parser.TypeExpr{}, false
+	}
+	if ref.Value != nil {
+		return mapType(ref.Value)
+	}
+	return parser.TypeExpr{}, false
+}
+
 // mapType maps an OpenAPI schema type to a speclang TypeExpr.
 func mapType(sch *openapi3.Schema) (parser.TypeExpr, bool) {
 	switch {
@@ -98,6 +113,12 @@ func mapType(sch *openapi3.Schema) (parser.TypeExpr, bool) {
 	case sch.Type.Is("number"):
 		return parser.TypeExpr{Name: "float"}, true
 	case sch.Type.Is("array"):
+		if sch.Items != nil {
+			elemTE, ok := schemaRefToTypeExpr(sch.Items)
+			if ok {
+				return parser.TypeExpr{Name: "array", ElemType: &elemTE}, true
+			}
+		}
 		return parser.TypeExpr{}, false
 	default:
 		return parser.TypeExpr{}, false

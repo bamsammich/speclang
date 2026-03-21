@@ -126,6 +126,16 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 		return generateString(rng)
 	case "bool":
 		return rng.IntN(2) == 1
+	case "array":
+		if t.ElemType != nil {
+			return g.generateArray(rng, *t.ElemType)
+		}
+		return nil
+	case "map":
+		if t.KeyType != nil && t.ValType != nil {
+			return g.generateMap(rng, *t.ValType)
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -188,6 +198,36 @@ func generateString(rng *rand.Rand) string {
 	return b.String()
 }
 
+// generateArray produces a random-length array with elements of the given type.
+func (g *Generator) generateArray(rng *rand.Rand, elemType parser.TypeExpr) []any {
+	var length int
+	r := rng.IntN(20)
+	switch {
+	case r < 16: // 80% small [0, 5]
+		length = rng.IntN(6)
+	case r < 19: // 15% medium [5, 20]
+		length = 5 + rng.IntN(16)
+	default: // 5% large [20, 100]
+		length = 20 + rng.IntN(81)
+	}
+	result := make([]any, length)
+	for i := range result {
+		result[i] = g.generateValue(rng, elemType)
+	}
+	return result
+}
+
+// generateMap produces a random-size map with string keys and typed values.
+func (g *Generator) generateMap(rng *rand.Rand, valType parser.TypeExpr) map[string]any {
+	size := rng.IntN(5) // [0, 4]
+	result := make(map[string]any, size)
+	for range size {
+		key := generateString(rng)
+		result[key] = g.generateValue(rng, valType)
+	}
+	return result
+}
+
 // checkConstraints returns true if all field constraints are satisfied.
 func checkConstraints(input map[string]any, fields []*parser.Field) bool {
 	for _, f := range fields {
@@ -239,6 +279,21 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 			m[f.Key] = v
 		}
 		return m, true
+	case parser.LenExpr:
+		val, ok := c.eval(e.Arg)
+		if !ok {
+			return nil, false
+		}
+		switch v := val.(type) {
+		case []any:
+			return len(v), true
+		case map[string]any:
+			return len(v), true
+		case string:
+			return len(v), true
+		default:
+			return nil, false
+		}
 	case parser.UnaryOp:
 		return c.evalUnary(e)
 	default:

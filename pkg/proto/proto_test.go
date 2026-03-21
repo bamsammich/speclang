@@ -94,12 +94,16 @@ func TestConvertMessages_Nested(t *testing.T) {
 	if search == nil {
 		t.Fatal("SearchResponse model not found")
 	}
-	// SearchResponse.results is repeated (skipped), only total_count remains
-	if len(search.Fields) != 1 {
-		t.Fatalf("expected 1 field in SearchResponse (repeated skipped), got %d", len(search.Fields))
+	// SearchResponse has results ([]SearchResponse_Result) and total_count
+	if len(search.Fields) != 2 {
+		t.Fatalf("expected 2 fields in SearchResponse, got %d", len(search.Fields))
 	}
-	if search.Fields[0].Name != "total_count" {
-		t.Errorf("expected field 'total_count', got %q", search.Fields[0].Name)
+	// Fields sorted: results, total_count
+	if search.Fields[0].Name != "results" {
+		t.Errorf("expected field 'results', got %q", search.Fields[0].Name)
+	}
+	if search.Fields[0].Type.Name != "array" {
+		t.Errorf("expected array type for results, got %q", search.Fields[0].Type.Name)
 	}
 }
 
@@ -112,7 +116,7 @@ func TestConvertMessages_Unsupported(t *testing.T) {
 	models := convertMessages(proto)
 
 	// MixedTypes: name (string), count (int), price (float), rating (float),
-	// data (bytes) survive; repeated and map are skipped
+	// data (bytes), tags ([]string) survive; map is skipped
 	if len(models) != 1 {
 		t.Fatalf("expected 1 model, got %d", len(models))
 	}
@@ -122,16 +126,19 @@ func TestConvertMessages_Unsupported(t *testing.T) {
 		t.Fatalf("expected model MixedTypes, got %q", m.Name)
 	}
 
-	if len(m.Fields) != 5 {
-		t.Fatalf("expected 5 supported fields, got %d", len(m.Fields))
+	if len(m.Fields) != 6 {
+		t.Fatalf("expected 6 supported fields, got %d", len(m.Fields))
 	}
 
-	// Fields sorted: count, data, name, price, rating
+	// Fields sorted: count, data, name, price, rating, tags
 	assertField(t, m.Fields[0], "count", "int", false)
 	assertField(t, m.Fields[1], "data", "bytes", false)
 	assertField(t, m.Fields[2], "name", "string", false)
 	assertField(t, m.Fields[3], "price", "float", false)
 	assertField(t, m.Fields[4], "rating", "float", false)
+	if m.Fields[5].Name != "tags" || m.Fields[5].Type.Name != "array" {
+		t.Errorf("expected tags as array, got %q/%q", m.Fields[5].Name, m.Fields[5].Type.Name)
+	}
 }
 
 func TestConvertMessages_Empty(t *testing.T) {

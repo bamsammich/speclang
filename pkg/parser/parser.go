@@ -463,18 +463,61 @@ func (p *parser) parseField() (*Field, error) {
 	return f, nil
 }
 
-// parseTypeExpr parses a type: ident or ident?
+// parseTypeExpr parses a type expression. The trailing ? binds to the
+// outermost type: []int? means "optional array of int", not "array of optional int".
 func (p *parser) parseTypeExpr() (TypeExpr, error) {
-	name, err := p.expect(TokenIdent)
+	te, err := p.parseTypeExprInner()
 	if err != nil {
 		return TypeExpr{}, err
 	}
-	te := TypeExpr{Name: name.Value}
 	if p.peek().Type == TokenQuestion {
 		p.advance()
 		te.Optional = true
 	}
 	return te, nil
+}
+
+// parseTypeExprInner parses the type without consuming a trailing ?.
+func (p *parser) parseTypeExprInner() (TypeExpr, error) {
+	// Array type: []T
+	if p.peek().Type == TokenLBracket {
+		p.advance() // consume [
+		if _, err := p.expect(TokenRBracket); err != nil {
+			return TypeExpr{}, err
+		}
+		elemType, err := p.parseTypeExprInner()
+		if err != nil {
+			return TypeExpr{}, err
+		}
+		return TypeExpr{Name: "array", ElemType: &elemType}, nil
+	}
+
+	name, err := p.expectIdent()
+	if err != nil {
+		return TypeExpr{}, err
+	}
+
+	// Map type: map[K, V]
+	if name.Value == "map" && p.peek().Type == TokenLBracket {
+		p.advance() // consume [
+		keyType, err := p.parseTypeExprInner()
+		if err != nil {
+			return TypeExpr{}, err
+		}
+		if _, err := p.expect(TokenComma); err != nil {
+			return TypeExpr{}, err
+		}
+		valType, err := p.parseTypeExprInner()
+		if err != nil {
+			return TypeExpr{}, err
+		}
+		if _, err := p.expect(TokenRBracket); err != nil {
+			return TypeExpr{}, err
+		}
+		return TypeExpr{Name: "map", KeyType: &keyType, ValType: &valType}, nil
+	}
+
+	return TypeExpr{Name: name.Value}, nil
 }
 
 // parseContract parses: contract { input { ... } output { ... } }
@@ -999,6 +1042,10 @@ func (p *parser) parseAtom() (Expr, error) {
 		return expr, nil
 
 	default:
+		// len(expr) built-in function
+		if tok.Type == TokenIdent && tok.Value == "len" {
+			return p.parseLenExpr()
+		}
 		if isIdentLike(tok.Type) {
 			return p.parseFieldRefExpr()
 		}
@@ -1019,6 +1066,22 @@ func (p *parser) parseFieldRefExpr() (Expr, error) {
 		path += "." + next.Value
 	}
 	return FieldRef{Path: path}, nil
+}
+
+// parseLenExpr parses: len(expr)
+func (p *parser) parseLenExpr() (Expr, error) {
+	p.advance() // consume "len"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arg, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return LenExpr{Arg: arg}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")
