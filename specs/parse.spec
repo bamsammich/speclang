@@ -67,4 +67,24 @@ scope parse_invalid {
       exit_code: 1
     }
   }
+
+  # Import with no resolver registered should fail gracefully.
+  scenario import_no_resolver {
+    given {
+      file: "testdata/openapi/import_no_resolver.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Import with bad syntax (missing parens) should fail.
+  scenario import_bad_syntax {
+    given {
+      file: "testdata/openapi/import_bad_syntax.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
 }

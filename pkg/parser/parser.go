@@ -8,6 +8,12 @@ import (
 
 // ParseFile reads a spec file, resolves includes, and returns the AST.
 func ParseFile(path string) (*Spec, error) {
+	return ParseFileWithImports(path, nil)
+}
+
+// ParseFileWithImports reads a spec file, resolves includes, and returns the AST.
+// The imports registry maps adapter names to import resolvers for the import directive.
+func ParseFileWithImports(path string, imports ImportRegistry) (*Spec, error) {
 	absRoot, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolving path: %w", err)
@@ -23,7 +29,11 @@ func ParseFile(path string) (*Spec, error) {
 		return nil, err
 	}
 
-	p := &parser{tokens: resolved}
+	p := &parser{
+		tokens:  resolved,
+		imports: imports,
+		fileDir: filepath.Dir(absRoot),
+	}
 	spec, err := p.parse()
 	if err != nil {
 		return nil, err
@@ -47,8 +57,10 @@ func Parse(source string) (*Spec, error) {
 }
 
 type parser struct {
-	tokens []Token
-	pos    int
+	tokens  []Token
+	imports ImportRegistry
+	fileDir string // directory of the spec file, for relative path resolution
+	pos     int
 }
 
 // peek returns the current token without consuming it.
@@ -166,6 +178,8 @@ func (p *parser) specMemberParser(typ TokenType) func() (any, error) {
 		return wrap(p.parseLocators)
 	case TokenScope:
 		return wrap(p.parseScope)
+	case TokenImport:
+		return wrap(p.parseImport)
 	default:
 		return nil
 	}
@@ -214,6 +228,9 @@ func (p *parser) parseSpecMember(spec *Spec) error {
 		spec.Scopes = append(spec.Scopes, v)
 	case map[string]string:
 		spec.Locators = v
+	case *importResult:
+		spec.Models = append(spec.Models, v.Models...)
+		spec.Scopes = append(spec.Scopes, v.Scopes...)
 	}
 	return nil
 }
