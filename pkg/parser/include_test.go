@@ -163,3 +163,31 @@ func TestParseFile_CircularIncludeError(t *testing.T) {
 		t.Fatal("expected error for circular include")
 	}
 }
+
+func TestParseFile_DuplicateModelError(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "include", "duplicate", "root.spec")
+	_, err := ParseFile(root)
+	if err == nil {
+		t.Fatal("expected error for duplicate model")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected error to mention 'duplicate', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Account") {
+		t.Fatalf("expected error to mention 'Account', got: %v", err)
+	}
+}
+
+func TestParseFile_DuplicateScopeError(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "include", "duplicate_scope", "root.spec")
+	_, err := ParseFile(root)
+	if err == nil {
+		t.Fatal("expected error for duplicate scope")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected error to mention 'duplicate', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "transfer") {
+		t.Fatalf("expected error to mention 'transfer', got: %v", err)
+	}
+}

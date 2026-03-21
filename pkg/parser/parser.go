@@ -24,7 +24,16 @@ func ParseFile(path string) (*Spec, error) {
 	}
 
 	p := &parser{tokens: resolved}
-	return p.parse()
+	spec, err := p.parse()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateNoDuplicates(spec); err != nil {
+		return nil, err
+	}
+
+	return spec, nil
 }
 
 // Parse parses spec source text into an AST.

@@ -91,3 +91,24 @@ func resolveIncludes(tokens []Token, dir string, filePath string, seen map[strin
 	result = append(result, Token{Type: TokenEOF, File: filePath})
 	return result, nil
 }
+
+// validateNoDuplicates checks that model names and scope names are unique.
+func validateNoDuplicates(spec *Spec) error {
+	models := make(map[string]bool)
+	for _, m := range spec.Models {
+		if models[m.Name] {
+			return fmt.Errorf("duplicate model %q", m.Name)
+		}
+		models[m.Name] = true
+	}
+
+	scopes := make(map[string]bool)
+	for _, s := range spec.Scopes {
+		if scopes[s.Name] {
+			return fmt.Errorf("duplicate scope %q", s.Name)
+		}
+		scopes[s.Name] = true
+	}
+
+	return nil
+}
