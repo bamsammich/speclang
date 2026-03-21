@@ -210,11 +210,13 @@ speclang/
 │   │   └── runner.go
 │   ├── adapter/          # adapter protocol + built-in adapters
 │   │   ├── protocol.go   # JSON IPC types
-│   │   └── http.go       # built-in HTTP adapter
+│   │   ├── http.go       # built-in HTTP adapter
+│   │   └── process.go    # built-in process adapter (subprocess execution)
 │   └── plugin/           # plugin spec loading
 │       └── plugin.go
 ├── plugins/
-│   └── http.plugin       # HTTP plugin definition (spec file)
+│   ├── http.plugin       # HTTP plugin definition
+│   └── process.plugin    # process plugin definition (subprocess execution)
 ├── examples/
 │   ├── transfer.spec     # root spec (includes models + scopes)
 │   ├── models/
@@ -223,13 +225,23 @@ speclang/
 │   │   └── transfer.spec # scope transfer (contract, invariants, scenarios)
 │   └── server/           # trivial Go HTTP server to test against
 │       └── main.go
+├── specs/                # self-verification specs (speclang verifying itself)
+│   ├── speclang.spec     # root: use process, includes parse/generate/verify
+│   ├── parse.spec        # parse_valid + parse_invalid scopes
+│   ├── generate.spec     # generator constraint satisfaction
+│   └── verify.spec       # verify_pass scope
 └── testdata/
-    └── include/          # multi-file include test fixtures
-        ├── basic/        # root includes models + scopes
-        ├── nested/       # A → B → C transitive includes
-        ├── circular/     # A ↔ B circular include (error case)
-        ├── duplicate/    # duplicate model names (error case)
-        └── duplicate_scope/  # duplicate scope names (error case)
+    ├── include/          # multi-file include test fixtures
+    │   ├── basic/        # root includes models + scopes
+    │   ├── nested/       # A → B → C transitive includes
+    │   ├── circular/     # A ↔ B circular include (error case)
+    │   ├── duplicate/    # duplicate model names (error case)
+    │   └── duplicate_scope/  # duplicate scope names (error case)
+    └── self/             # self-verification test fixtures
+        ├── minimal.spec
+        ├── invalid_unterminated.spec
+        ├── broken_transfer.spec
+        └── broken_server/main.go
 ```
 
 ## Tech Stack
@@ -237,12 +249,56 @@ speclang/
 - Go (latest stable)
 - No external dependencies for core runtime
 - `net/http` for built-in HTTP adapter
+- `os/exec` for built-in process adapter
 - `math/rand/v2` for input generation
 
 ## Commands
 
 ```bash
-go build ./cmd/specrun                    # build the CLI
-go test ./...                             # run all tests
-./specrun verify examples/transfer.spec   # run verification
+go build ./cmd/specrun                                          # build the CLI
+go test ./...                                                   # run all tests
+./specrun verify examples/transfer.spec                         # run verification
+./specrun parse examples/transfer.spec                          # parse spec, output AST as JSON
+./specrun generate examples/transfer.spec --scope transfer      # generate one input as JSON
+./specrun verify examples/transfer.spec --json                  # verify with JSON output
+./specrun verify specs/speclang.spec                            # self-verification
+```
+
+## Process Adapter
+
+The process adapter (`use process`) executes subprocesses and asserts against their output. It mirrors the HTTP adapter's pattern.
+
+### Config (from `target` block)
+
+- `command` — binary to run (required)
+
+### Config (from scope `config` block)
+
+- `args` — base arguments prepended to every exec call (optional, space-separated)
+
+### Action: `exec`
+
+Runs `command [...args] [...input_fields]`. Captures exit code, stdout (best-effort JSON parse), and stderr.
+
+### Assertions
+
+- `exit_code` — integer comparison
+- `stdout` — full parsed JSON body (or raw string if not JSON)
+- `stdout.field.path` — dot-path traversal into parsed JSON
+- `stderr` — raw string
+
+## Self-Verification
+
+Speclang verifies itself with its own specs via `specs/speclang.spec`. This is black-box verification through the runtime — speclang is both the verifier and the system under test.
+
+The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior:
+
+- **parse_valid** — verifies the parser accepts valid specs and produces expected AST structure
+- **parse_invalid** — verifies the parser rejects malformed specs with exit code 1
+- **generate** — verifies the generator produces constraint-satisfying outputs across seeds
+- **verify_pass** — verifies that `specrun verify` passes correct implementations
+
+Run self-verification:
+```bash
+SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec
 ```

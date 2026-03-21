@@ -105,6 +105,9 @@ linters:
           - ireturn # plugin registry must return Adapter interface by design
         path: pkg/plugin/
       - linters:
+          - ireturn # CLI wiring must return Adapter interface by design
+        path: cmd/specrun/
+      - linters:
           - gocyclo
           - revive
         path: _test\.go
