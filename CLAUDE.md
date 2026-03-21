@@ -31,12 +31,15 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 
 ```
 use <plugin>
+include "<path>"                     # top-level include
 
 spec <Name> {
 
   target {
     base_url: env(APP_URL)          # optional, plugin-dependent config
   }
+
+  include "<path>"                   # spec-body include
 
   locators {                         # UI-mode only
     <name>: [<css-selector>]
@@ -79,6 +82,20 @@ spec <Name> {
   }
 }
 ```
+
+### Include Directive
+
+`include "path/to/file.spec"` splices the contents of another file at the point of inclusion. The included file's tokens are inserted directly into the token stream, so the content must be syntactically valid at that position.
+
+- **Paths are relative** to the including file's directory
+- **Recursive includes** are supported (A includes B which includes C)
+- **Circular includes** are detected and produce a clear error
+- **Duplicate model or scope names** across included files produce an error
+- **Downstream transparency**: generator, runner, and adapter see a single merged `*Spec` — no include-awareness needed
+
+The include is resolved at the token level (pass 1) before parsing (pass 2). The parser has zero awareness of includes.
+
+### Scope and Declaration Rules
 
 - **Scope**: A named grouping that owns a contract, invariants, and scenarios. Plugin-specific config (path, method for HTTP; selectors for Playwright) goes in an opaque `config` block. The parser has zero awareness of config semantics — they're passed through to the adapter.
 - Contracts, invariants, and scenarios must live inside a scope (not at spec top-level).
@@ -184,7 +201,8 @@ speclang/
 │   ├── parser/           # spec file → AST
 │   │   ├── lexer.go
 │   │   ├── parser.go
-│   │   └── ast.go
+│   │   ├── ast.go
+│   │   └── include.go    # include resolution + duplicate validation
 │   ├── generator/        # AST → test inputs
 │   │   ├── generator.go
 │   │   └── shrink.go     # counterexample shrinking
@@ -198,11 +216,20 @@ speclang/
 ├── plugins/
 │   └── http.plugin       # HTTP plugin definition (spec file)
 ├── examples/
-│   ├── transfer.spec     # example spec
+│   ├── transfer.spec     # root spec (includes models + scopes)
+│   ├── models/
+│   │   └── account.spec  # model Account
+│   ├── scopes/
+│   │   └── transfer.spec # scope transfer (contract, invariants, scenarios)
 │   └── server/           # trivial Go HTTP server to test against
 │       └── main.go
 └── testdata/
-    └── *.spec            # parser test fixtures
+    └── include/          # multi-file include test fixtures
+        ├── basic/        # root includes models + scopes
+        ├── nested/       # A → B → C transitive includes
+        ├── circular/     # A ↔ B circular include (error case)
+        ├── duplicate/    # duplicate model names (error case)
+        └── duplicate_scope/  # duplicate scope names (error case)
 ```
 
 ## Tech Stack
