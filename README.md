@@ -183,6 +183,26 @@ Trigger with `/verify-spec` or automatically before creating PRs in projects wit
 
 When working in a project with `.spec` files, the plugin automatically detects them and reminds Claude that speclang skills are available.
 
+## OpenAPI Import
+
+If you have an existing OpenAPI 3.x schema, you can import models and scope scaffolds directly:
+
+```
+use http
+
+spec MyAPI {
+  target {
+    base_url: env(APP_URL, "http://localhost:8080")
+  }
+
+  import openapi("schema.yaml")
+}
+```
+
+This generates models from `components/schemas` and scopes from `paths`, letting you layer invariants and scenarios on top of your existing API definition.
+
+See [docs/openapi-import.md](docs/openapi-import.md) for the full guide, type mapping, and limitations.
+
 ## Plugins
 
 speclang uses a plugin architecture for interacting with different systems:

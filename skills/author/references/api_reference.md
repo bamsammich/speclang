@@ -150,6 +150,22 @@ include "models/account.spec"
 include "scopes/transfer.spec"
 ```
 
+## Import Directive
+
+Import models and scopes from external schema files. Currently supports OpenAPI 3.x (YAML or JSON).
+
+```
+import openapi("schema.yaml")
+```
+
+This generates:
+- **Models** from `components/schemas` (object types with properties)
+- **Scopes** from `paths` (each path+method → scope with config and contract)
+
+Type mapping: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name. Constraints (`minimum`/`maximum`) are converted to field constraint expressions. Unsupported types (array, float, enum) are skipped with a warning.
+
+Imported scopes have config and contracts populated but no invariants or scenarios — those are hand-authored on top of the imported scaffolds.
+
 ## Available Plugins
 
 ### `use http`

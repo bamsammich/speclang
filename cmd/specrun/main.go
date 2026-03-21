@@ -10,6 +10,7 @@ import (
 
 	"github.com/bamsammich/speclang/pkg/adapter"
 	"github.com/bamsammich/speclang/pkg/generator"
+	"github.com/bamsammich/speclang/pkg/openapi"
 	"github.com/bamsammich/speclang/pkg/parser"
 	"github.com/bamsammich/speclang/pkg/runner"
 )
@@ -40,7 +41,7 @@ func runParse(args []string) int {
 	}
 	specFile := args[0]
 
-	spec, err := parser.ParseFile(specFile)
+	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
@@ -94,7 +95,7 @@ func runGenerate(args []string) int {
 		return 1
 	}
 
-	spec, err := parser.ParseFile(specFile)
+	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
@@ -145,7 +146,7 @@ func runVerify(args []string) int {
 	}
 	specFile := fs.Arg(0)
 
-	spec, err := parser.ParseFile(specFile)
+	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
@@ -292,5 +293,12 @@ func resolveExprToString(expr parser.Expr) string {
 		return e.Default
 	default:
 		return fmt.Sprintf("%v", e)
+	}
+}
+
+// defaultImports returns the built-in import registry with all supported adapters.
+func defaultImports() parser.ImportRegistry {
+	return parser.ImportRegistry{
+		"openapi": &openapi.Resolver{},
 	}
 }
