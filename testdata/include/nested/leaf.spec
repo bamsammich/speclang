@@ -1,0 +1,3 @@
+model Item {
+  name: string
+}
