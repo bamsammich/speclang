@@ -138,6 +138,18 @@ func TestLexComments(t *testing.T) {
 	}
 }
 
+func TestLexInclude(t *testing.T) {
+	tokens, err := Lex(`include "models.spec"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 3 { // include, string, EOF
+		t.Fatalf("expected 3 tokens, got %d", len(tokens))
+	}
+	assertToken(t, tokens, 0, TokenInclude, "include")
+	assertToken(t, tokens, 1, TokenString, "models.spec")
+}
+
 // Helpers
 
 func assertToken(t *testing.T, tokens []Token, idx int, typ TokenType, value string) {

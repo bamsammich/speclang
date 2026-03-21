@@ -47,6 +47,7 @@ const (
 	TokenScope
 	TokenConfig
 	TokenEnv
+	TokenInclude
 
 	// Symbols
 	TokenLBrace   // {
@@ -105,6 +106,7 @@ var tokenNames = map[TokenType]string{
 	TokenScope:     "Scope",
 	TokenConfig:    "Config",
 	TokenEnv:       "Env",
+	TokenInclude:   "Include",
 	TokenLBrace:    "LBrace",
 	TokenRBrace:    "RBrace",
 	TokenLParen:    "LParen",
@@ -160,6 +162,7 @@ var keywords = map[string]TokenType{
 	"scope":     TokenScope,
 	"config":    TokenConfig,
 	"env":       TokenEnv,
+	"include":   TokenInclude,
 	"true":      TokenBool,
 	"false":     TokenBool,
 }
