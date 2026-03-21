@@ -13,6 +13,7 @@ scope verify_pass {
       scenarios_passed: int
       invariants_checked: int
       invariants_passed: int
+      scopes: any
     }
   }
 

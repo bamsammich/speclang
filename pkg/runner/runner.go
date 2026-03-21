@@ -12,12 +12,13 @@ import (
 
 // Result captures the outcome of a verification run.
 type Result struct {
-	Spec              string    `json:"spec"`
-	Failures          []Failure `json:"failures"`
-	ScenariosRun      int       `json:"scenarios_run"`
-	ScenariosPassed   int       `json:"scenarios_passed"`
-	InvariantsChecked int       `json:"invariants_checked"`
-	InvariantsPassed  int       `json:"invariants_passed"`
+	Spec              string        `json:"spec"`
+	Scopes            []ScopeResult `json:"scopes"`
+	Failures          []Failure     `json:"failures"`
+	ScenariosRun      int           `json:"scenarios_run"`
+	ScenariosPassed   int           `json:"scenarios_passed"`
+	InvariantsChecked int           `json:"invariants_checked"`
+	InvariantsPassed  int           `json:"invariants_passed"`
 }
 
 type Failure struct {
@@ -28,6 +29,22 @@ type Failure struct {
 	Actual      any    `json:"actual,omitempty"`
 	Description string `json:"description"`
 	Shrunk      bool   `json:"shrunk"`
+}
+
+// ScopeResult captures per-scope verification results.
+type ScopeResult struct {
+	Name   string        `json:"name"`
+	Checks []CheckResult `json:"checks"`
+}
+
+// CheckResult captures the outcome of a single scenario or invariant.
+type CheckResult struct {
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`               // "scenario" or "invariant"
+	Passed    bool     `json:"passed"`
+	InputsRun int      `json:"inputs_run"`          // 1 for given-scenarios, N for when/invariants
+	FailedAt  int      `json:"failed_at,omitempty"` // which input number failed (0 if passed)
+	Failure   *Failure `json:"failure,omitempty"`
 }
 
 // Runner orchestrates spec verification.
@@ -99,36 +116,49 @@ func (r *Runner) newScopeRunner(scope *parser.Scope) *scopeRunner {
 }
 
 func (sr *scopeRunner) run(res *Result) error {
+	scopeRes := ScopeResult{Name: sr.scope}
+
 	for _, sc := range sr.scenarios() {
+		var check CheckResult
+		var err error
+
 		if sc.Given != nil {
-			res.ScenariosRun++
-			if err := sr.runGivenScenario(sc, res); err != nil {
-				return fmt.Errorf(
-					"scope %q scenario %q: %w",
-					sr.scope, sc.Name, err,
-				)
-			}
+			check, err = sr.runGivenScenario(sc)
 		} else if sc.When != nil {
-			res.ScenariosRun++
-			if err := sr.runWhenScenario(sc, res); err != nil {
-				return fmt.Errorf(
-					"scope %q scenario %q: %w",
-					sr.scope, sc.Name, err,
-				)
-			}
+			check, err = sr.runWhenScenario(sc)
+		} else {
+			continue
+		}
+
+		if err != nil {
+			return fmt.Errorf("scope %q scenario %q: %w", sr.scope, sc.Name, err)
+		}
+
+		scopeRes.Checks = append(scopeRes.Checks, check)
+		res.ScenariosRun++
+		if check.Passed {
+			res.ScenariosPassed++
+		} else if check.Failure != nil {
+			res.Failures = append(res.Failures, *check.Failure)
 		}
 	}
 
 	for _, inv := range sr.invariants() {
+		check, err := sr.runInvariant(inv)
+		if err != nil {
+			return fmt.Errorf("scope %q invariant %q: %w", sr.scope, inv.Name, err)
+		}
+
+		scopeRes.Checks = append(scopeRes.Checks, check)
 		res.InvariantsChecked++
-		if err := sr.runInvariant(inv, res); err != nil {
-			return fmt.Errorf(
-				"scope %q invariant %q: %w",
-				sr.scope, inv.Name, err,
-			)
+		if check.Passed {
+			res.InvariantsPassed++
+		} else if check.Failure != nil {
+			res.Failures = append(res.Failures, *check.Failure)
 		}
 	}
 
+	res.Scopes = append(res.Scopes, scopeRes)
 	return nil
 }
 
@@ -227,54 +257,70 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 	return "exec", args, nil
 }
 
-func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario, res *Result) error {
+func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
 	input := assignmentsToMap(sc.Given.Assignments)
 
 	if _, err := sr.executeInput(input); err != nil {
-		return err
+		return CheckResult{}, err
+	}
+
+	check := CheckResult{
+		Name:      sc.Name,
+		Kind:      "scenario",
+		InputsRun: 1,
+		Passed:    true,
 	}
 
 	if sc.Then != nil {
 		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
-			return err
+			return CheckResult{}, err
 		} else if f != nil {
-			res.Failures = append(res.Failures, *f)
-			return nil
+			check.Passed = false
+			check.FailedAt = 1
+			check.Failure = f
 		}
 	}
 
-	res.ScenariosPassed++
-	return nil
+	return check, nil
 }
 
-func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario, res *Result) error {
+func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error) {
 	predicate := buildPredicate(sc.When.Predicates)
 
-	for range sr.runner.n {
+	check := CheckResult{
+		Name:   sc.Name,
+		Kind:   "scenario",
+		Passed: true,
+	}
+
+	for i := range sr.runner.n {
 		input, err := sr.generator.GenerateMatching(predicate)
 		if err != nil {
-			return err
+			return CheckResult{}, err
 		}
 
 		if _, err := sr.executeInput(input); err != nil {
-			return err
+			return CheckResult{}, err
 		}
+
+		check.InputsRun = i + 1
 
 		if sc.Then == nil {
 			continue
 		}
 
 		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
-			return err
+			return CheckResult{}, err
 		} else if f != nil {
 			f = sr.shrinkFailure(f, sc.Then)
-			res.Failures = append(res.Failures, *f)
-			return nil
+			check.Passed = false
+			check.FailedAt = i + 1
+			check.Failure = f
+			return check, nil
 		}
 	}
 
-	res.ScenariosPassed++
-	return nil
+	return check, nil
 }
 
 // buildPredicate creates a filter function from when-block predicates.
@@ -325,17 +371,25 @@ func (sr *scopeRunner) checkThenAssertions(
 	return nil, nil
 }
 
-func (sr *scopeRunner) runInvariant(inv *parser.Invariant, res *Result) error {
-	for range sr.runner.n {
+func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) {
+	check := CheckResult{
+		Name:   inv.Name,
+		Kind:   "invariant",
+		Passed: true,
+	}
+
+	for i := range sr.runner.n {
 		input, err := sr.generator.GenerateInput()
 		if err != nil {
-			return err
+			return CheckResult{}, err
 		}
 
 		output, err := sr.executeInput(input)
 		if err != nil {
-			return err
+			return CheckResult{}, err
 		}
+
+		check.InputsRun = i + 1
 
 		ctx := buildInvariantContext(input, output)
 
@@ -345,13 +399,14 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant, res *Result) error {
 
 		if f := checkInvariantAssertions(inv.Name, sr.scope, input, inv.Assertions, ctx); f != nil {
 			f = sr.shrinkInvariantFailure(f, inv)
-			res.Failures = append(res.Failures, *f)
-			return nil
+			check.Passed = false
+			check.FailedAt = i + 1
+			check.Failure = f
+			return check, nil
 		}
 	}
 
-	res.InvariantsPassed++
-	return nil
+	return check, nil
 }
 
 // shrinkFailure attempts to shrink a when-scenario failure to a minimal counterexample.
