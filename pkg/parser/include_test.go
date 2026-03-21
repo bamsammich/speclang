@@ -191,3 +191,32 @@ func TestParseFile_DuplicateScopeError(t *testing.T) {
 		t.Fatalf("expected error to mention 'transfer', got: %v", err)
 	}
 }
+
+func TestResolveIncludes_MissingFile(t *testing.T) {
+	tokens := []Token{
+		{Type: TokenInclude, Value: "include", File: "test.spec", Line: 1, Col: 1},
+		{Type: TokenString, Value: "nonexistent.spec", File: "test.spec", Line: 1, Col: 9},
+		{Type: TokenEOF, File: "test.spec"},
+	}
+
+	_, err := resolveIncludes(tokens, t.TempDir(), "/fake/test.spec", nil)
+	if err == nil {
+		t.Fatal("expected error for missing include file")
+	}
+}
+
+func TestResolveIncludes_NonStringAfterInclude(t *testing.T) {
+	tokens := []Token{
+		{Type: TokenInclude, Value: "include", File: "test.spec", Line: 1, Col: 1},
+		{Type: TokenIdent, Value: "foo", File: "test.spec", Line: 1, Col: 9},
+		{Type: TokenEOF, File: "test.spec"},
+	}
+
+	_, err := resolveIncludes(tokens, t.TempDir(), "/fake/test.spec", nil)
+	if err == nil {
+		t.Fatal("expected error when include is followed by non-string")
+	}
+	if !strings.Contains(err.Error(), "string path") {
+		t.Fatalf("expected error about string path, got: %v", err)
+	}
+}
