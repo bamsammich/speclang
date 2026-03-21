@@ -183,6 +183,50 @@ func TestVerify_JSON(t *testing.T) {
 	}
 }
 
+func TestVerify_ProcessAdapter(t *testing.T) {
+	bin := specrunBin(t)
+
+	specContent := `use process
+
+spec EchoTest {
+  target {
+    command: "echo"
+  }
+
+  scope echo {
+    config {
+      args: "{\"hello\":\"world\"}"
+    }
+
+    contract {
+      input {}
+      output {
+        exit_code: int
+      }
+    }
+
+    invariant always_succeeds {
+      exit_code == 0
+    }
+  }
+}`
+	specFile := filepath.Join(t.TempDir(), "echo.spec")
+	if err := os.WriteFile(specFile, []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "verify", "--json", "--iterations", "1", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("specrun verify failed: %v\n%s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output not valid JSON: %v\n%s", err, out)
+	}
+}
+
 func startTransferServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
