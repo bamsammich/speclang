@@ -1,3 +1,4 @@
+# Test fixture: basic include resolution (root -> models + scopes).
 use http
 
 spec TestAPI {

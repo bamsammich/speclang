@@ -178,6 +178,21 @@ func wrap[T any](fn func() (T, error)) func() (any, error) {
 // parseSpecMember parses a single member inside a spec body.
 func (p *parser) parseSpecMember(spec *Spec) error {
 	tok := p.peek()
+
+	// Handle description as an identifier, not a keyword.
+	if tok.Type == TokenIdent && tok.Value == "description" {
+		p.advance() // consume "description"
+		if _, err := p.expect(TokenColon); err != nil {
+			return err
+		}
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return err
+		}
+		spec.Description = val.Value
+		return nil
+	}
+
 	parse := p.specMemberParser(tok.Type)
 	if parse == nil {
 		return p.errAt(tok, fmt.Sprintf("unexpected token %s in spec body", tok.Type))

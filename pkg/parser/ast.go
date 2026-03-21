@@ -2,13 +2,14 @@ package parser
 
 // Spec is the top-level AST node for a parsed spec file.
 type Spec struct {
-	Uses     []string          `json:"uses,omitempty"`
-	Name     string            `json:"name"`
-	Target   *Target           `json:"target,omitempty"`
-	Locators map[string]string `json:"locators,omitempty"` // name -> selector
-	Models   []*Model          `json:"models,omitempty"`
-	Actions  []*Action         `json:"actions,omitempty"`
-	Scopes   []*Scope          `json:"scopes,omitempty"`
+	Uses        []string          `json:"uses,omitempty"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Target      *Target           `json:"target,omitempty"`
+	Locators    map[string]string `json:"locators,omitempty"`
+	Models      []*Model          `json:"models,omitempty"`
+	Actions     []*Action         `json:"actions,omitempty"`
+	Scopes      []*Scope          `json:"scopes,omitempty"`
 }
 
 // Scope is a named grouping that owns a contract, invariants, and scenarios.

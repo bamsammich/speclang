@@ -1,6 +1,7 @@
 use http
 
 spec AccountAPI {
+  description: "REST API for inter-account money transfers with balance tracking"
 
   target {
     base_url: env(APP_URL, "http://localhost:8080")
