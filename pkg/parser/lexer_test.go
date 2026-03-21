@@ -24,27 +24,14 @@ func TestLexTransferSpec(t *testing.T) {
 		t.Fatalf("expected EOF as last token, got %s", tokens[len(tokens)-1].Type)
 	}
 
-	// Spot-check key token sequences
-	types := make([]TokenType, len(tokens))
-	for i, tok := range tokens {
-		types[i] = tok.Type
-	}
-
 	// "use http" should be first two tokens
 	assertToken(t, tokens, 0, TokenUse, "use")
 	assertToken(t, tokens, 1, TokenIdent, "http")
 
-	// "spec Transfer {" next
+	// "spec AccountAPI {" next
 	assertToken(t, tokens, 2, TokenSpec, "spec")
 	assertToken(t, tokens, 3, TokenIdent, "AccountAPI")
 	assertToken(t, tokens, 4, TokenLBrace, "{")
-
-	// Find "model Account {" sequence
-	idx := findTokenSeq(tokens, TokenModel, TokenIdent)
-	if idx < 0 {
-		t.Fatal("could not find 'model Account'")
-	}
-	assertToken(t, tokens, idx+1, TokenIdent, "Account")
 
 	// Check that "env" is lexed as a keyword
 	envIdx := findToken(tokens, TokenEnv)
@@ -58,28 +45,25 @@ func TestLexTransferSpec(t *testing.T) {
 		t.Fatal("could not find string literal 'http://localhost:8080'")
 	}
 
-	// Check that "null" is lexed as TokenNull
-	nullIdx := findToken(tokens, TokenNull)
-	if nullIdx < 0 {
-		t.Fatal("could not find null keyword")
+	// Check include directives with string paths
+	inclIdx := findToken(tokens, TokenInclude)
+	if inclIdx < 0 {
+		t.Fatal("could not find include keyword")
+	}
+	assertToken(t, tokens, inclIdx+1, TokenString, "models/account.spec")
+
+	// Find second include
+	inclIdx2 := findTokenValue(tokens, TokenString, "scopes/transfer.spec")
+	if inclIdx2 < 0 {
+		t.Fatal("could not find include path 'scopes/transfer.spec'")
 	}
 
-	// Check operators: ==, !=, >, <=, >=, +
-	for _, op := range []TokenType{TokenEq, TokenNeq, TokenGt, TokenLte, TokenPlus} {
-		if findToken(tokens, op) < 0 {
-			t.Errorf("expected to find operator %s", op)
-		}
+	// model and scope tokens should NOT appear in root file (they are in included files)
+	if findToken(tokens, TokenModel) >= 0 {
+		t.Fatal("root file should not contain model token (moved to included file)")
 	}
-
-	// Check ? token (from string?)
-	if findToken(tokens, TokenQuestion) < 0 {
-		t.Fatal("expected to find ? token")
-	}
-
-	// Check int literal 100
-	intIdx := findTokenValue(tokens, TokenInt, "100")
-	if intIdx < 0 {
-		t.Fatal("could not find int literal 100")
+	if findToken(tokens, TokenScope) >= 0 {
+		t.Fatal("root file should not contain scope token (moved to included file)")
 	}
 
 	// Verify line tracking: "use" should be line 1
