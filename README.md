@@ -23,11 +23,19 @@ The test surface is unknowable to the implementer because inputs are generated f
 
 ## Getting Started
 
-### Prerequisites
+### Install
 
-- Go (latest stable)
+**With Go (macOS or Linux):**
 
-### Build
+```bash
+go install github.com/bamsammich/speclang/cmd/specrun@latest
+```
+
+**Pre-built binary (Linux only):**
+
+Download from [releases](https://github.com/bamsammich/speclang/releases). macOS binaries are not provided because unsigned binaries are blocked by Gatekeeper — use `go install` instead.
+
+**From source:**
 
 ```bash
 go build -o specrun ./cmd/specrun
