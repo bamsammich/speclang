@@ -1,3 +1,4 @@
+# Test fixture: transfer spec targeting a broken server (wrong balances).
 use http
 
 spec BrokenTransfer {

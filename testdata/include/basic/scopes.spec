@@ -1,3 +1,4 @@
+# Included by basic/root.spec.
 scope transfer {
   config {
     path: "/transfer"
