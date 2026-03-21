@@ -18,12 +18,36 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "parse":
+		os.Exit(runParse(os.Args[2:]))
 	case "verify":
 		os.Exit(runVerify(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
 	}
+}
+
+func runParse(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: specrun parse <spec-file>")
+		return 1
+	}
+	specFile := args[0]
+
+	spec, err := parser.ParseFile(specFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
+		return 1
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(spec); err != nil {
+		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runVerify(args []string) int {
