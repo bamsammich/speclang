@@ -43,6 +43,7 @@ spec <Name> {
 
   include "<path>"                   # spec-body include
   import openapi("<path>")           # import models/scopes from OpenAPI schema
+  import proto("<path>")             # import models/scopes from protobuf schema
 
   locators {                         # UI-mode only
     <name>: [<css-selector>]
@@ -256,6 +257,10 @@ speclang/
 │   │   ├── document.go   # OpenAPI doc loading via kin-openapi
 │   │   ├── models.go     # schema → Model conversion
 │   │   └── scopes.go     # path → Scope conversion
+│   ├── proto/            # Protobuf import resolver
+│   │   ├── proto.go      # Resolver implementing ImportResolver
+│   │   ├── models.go     # message → Model conversion
+│   │   └── scopes.go     # service/RPC → Scope conversion
 │   └── plugin/           # plugin spec loading
 │       └── plugin.go
 ├── plugins/
@@ -270,6 +275,9 @@ speclang/
 │   ├── openapi/          # OpenAPI import example
 │   │   ├── petstore.yaml # sample OpenAPI 3.0 spec
 │   │   └── petstore.spec # spec importing from OpenAPI schema
+│   ├── proto/            # Protobuf import example
+│   │   ├── user.proto    # sample protobuf service definition
+│   │   └── user.spec     # spec importing from protobuf schema
 │   └── server/           # trivial Go HTTP server to test against
 │       └── main.go
 ├── specs/                # self-verification specs (speclang verifying itself)
