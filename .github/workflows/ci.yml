@@ -22,5 +22,10 @@ jobs:
       - name: Test
         run: go test ./... -count=1
 
+      - name: Start example server
+        run: |
+          go run ./examples/server &
+          sleep 1
+
       - name: Self-verification
-        run: SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec
+        run: SPECRUN_BIN=./specrun APP_URL=http://localhost:8080 ./specrun verify specs/speclang.spec
