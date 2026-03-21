@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
 	"strings"
 
@@ -116,10 +118,24 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 	switch t.Name {
 	case "int":
 		return generateInt(rng)
+	case "float":
+		return generateFloat(rng)
+	case "bytes":
+		return generateBytes(rng)
 	case "string":
 		return generateString(rng)
 	case "bool":
 		return rng.IntN(2) == 1
+	case "array":
+		if t.ElemType != nil {
+			return g.generateArray(rng, *t.ElemType)
+		}
+		return nil
+	case "map":
+		if t.KeyType != nil && t.ValType != nil {
+			return g.generateMap(rng, *t.ValType)
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -136,6 +152,41 @@ func generateInt(rng *rand.Rand) int {
 	return rng.IntN(1001)
 }
 
+// generateFloat produces float64 values with multi-strategy distribution:
+// 10% boundary, 10% small, 30% medium, 50% wide.
+func generateFloat(rng *rand.Rand) float64 {
+	r := rng.IntN(10)
+	switch {
+	case r == 0: // 10% boundary values
+		boundaries := []float64{0.0, 1.0, -1.0, 0.5, -0.5, math.SmallestNonzeroFloat64}
+		return boundaries[rng.IntN(len(boundaries))]
+	case r == 1: // 10% small range [-1, 1]
+		return rng.Float64()*2.0 - 1.0
+	case r < 5: // 30% medium [-1e6, 1e6]
+		return rng.Float64()*2e6 - 1e6
+	default: // 50% wide with exponential scaling
+		exp := rng.Float64() * 20.0 // exponent [0, 20]
+		val := math.Pow(10, exp) * (rng.Float64()*2.0 - 1.0)
+		return val
+	}
+}
+
+// generateBytes produces base64-encoded random byte strings.
+func generateBytes(rng *rand.Rand) string {
+	var length int
+	if rng.IntN(5) == 0 {
+		boundaries := []int{0, 1, 16, 32}
+		length = boundaries[rng.IntN(len(boundaries))]
+	} else {
+		length = rng.IntN(33)
+	}
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = byte(rng.IntN(256))
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 func generateString(rng *rand.Rand) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 	length := rng.IntN(8) + 1
@@ -145,6 +196,36 @@ func generateString(rng *rand.Rand) string {
 		b.WriteByte(charset[rng.IntN(len(charset))])
 	}
 	return b.String()
+}
+
+// generateArray produces a random-length array with elements of the given type.
+func (g *Generator) generateArray(rng *rand.Rand, elemType parser.TypeExpr) []any {
+	var length int
+	r := rng.IntN(20)
+	switch {
+	case r < 16: // 80% small [0, 5]
+		length = rng.IntN(6)
+	case r < 19: // 15% medium [5, 20]
+		length = 5 + rng.IntN(16)
+	default: // 5% large [20, 100]
+		length = 20 + rng.IntN(81)
+	}
+	result := make([]any, length)
+	for i := range result {
+		result[i] = g.generateValue(rng, elemType)
+	}
+	return result
+}
+
+// generateMap produces a random-size map with string keys and typed values.
+func (g *Generator) generateMap(rng *rand.Rand, valType parser.TypeExpr) map[string]any {
+	size := rng.IntN(5) // [0, 4]
+	result := make(map[string]any, size)
+	for range size {
+		key := generateString(rng)
+		result[key] = g.generateValue(rng, valType)
+	}
+	return result
 }
 
 // checkConstraints returns true if all field constraints are satisfied.
@@ -176,6 +257,8 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 	switch e := expr.(type) {
 	case parser.LiteralInt:
 		return e.Value, true
+	case parser.LiteralFloat:
+		return e.Value, true
 	case parser.LiteralString:
 		return e.Value, true
 	case parser.LiteralBool:
@@ -196,6 +279,21 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 			m[f.Key] = v
 		}
 		return m, true
+	case parser.LenExpr:
+		val, ok := c.eval(e.Arg)
+		if !ok {
+			return nil, false
+		}
+		switch v := val.(type) {
+		case []any:
+			return len(v), true
+		case map[string]any:
+			return len(v), true
+		case string:
+			return len(v), true
+		default:
+			return nil, false
+		}
 	case parser.UnaryOp:
 		return c.evalUnary(e)
 	default:
@@ -216,11 +314,13 @@ func (c *evalCtx) evalUnary(e parser.UnaryOp) (any, bool) {
 		}
 		return !b, true
 	case "-":
-		n, isInt := toInt(val)
-		if !isInt {
-			return nil, false
+		if n, ok := toInt(val); ok {
+			return -n, true
 		}
-		return -n, true
+		if f, ok := toFloat(val); ok {
+			return -f, true
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -299,12 +399,19 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
 	case "<", "<=", ">", ">=", "+", "-", "*":
-		ln, lok := toInt(left)
-		rn, rok := toInt(right)
-		if !lok || !rok {
-			return nil, false
+		// If both sides are native int, use int arithmetic (avoids float precision issues).
+		ln, lok := left.(int)
+		rn, rok := right.(int)
+		if lok && rok {
+			return evalIntOp(op, ln, rn)
 		}
-		return evalIntOp(op, ln, rn)
+		// Otherwise try float arithmetic (handles float64 from JSON and float type).
+		lf, lfok := toFloat(left)
+		rf, rfok := toFloat(right)
+		if lfok && rfok {
+			return evalFloatOp(op, lf, rf)
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -326,10 +433,10 @@ func evalEqualityOp(op string, left, right any) (any, bool) {
 	eq := left == right
 	// Fall back to numeric comparison for int/float64 mismatch.
 	if !eq {
-		ln, lok := toInt(left)
-		rn, rok := toInt(right)
+		lf, lok := toFloat(left)
+		rf, rok := toFloat(right)
 		if lok && rok {
-			eq = ln == rn
+			eq = lf == rf
 		}
 	}
 	if op == "!=" {
@@ -359,12 +466,50 @@ func evalIntOp(op string, l, r int) (any, bool) {
 	}
 }
 
+func evalFloatOp(op string, l, r float64) (any, bool) {
+	switch op {
+	case "<":
+		return l < r, true
+	case "<=":
+		return l <= r, true
+	case ">":
+		return l > r, true
+	case ">=":
+		return l >= r, true
+	case "+":
+		return l + r, true
+	case "-":
+		return l - r, true
+	case "*":
+		return l * r, true
+	default:
+		return nil, false
+	}
+}
+
+// toInt converts a value to int. Only succeeds for native int or float64
+// values that are exact integers (no truncation of 3.7 to 3).
 func toInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
 		return n, true
 	case float64:
-		return int(n), true
+		if math.Floor(n) == n && !math.IsInf(n, 0) && !math.IsNaN(n) {
+			return int(n), true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// toFloat converts a value to float64. Succeeds for int and float64.
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
 	default:
 		return 0, false
 	}

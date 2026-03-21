@@ -66,15 +66,15 @@ func flattenMessage(prefix string, msg *pb.Message) []*parser.Model {
 // protoFieldToField converts a protobuf field to a speclang Field.
 // Returns nil if the type is unsupported.
 func protoFieldToField(f *pb.Field) *parser.Field {
-	if f.IsRepeated {
-		fmt.Fprintf(os.Stderr, "warning: unsupported repeated field %q, skipping\n", f.FieldName)
-		return nil
-	}
-
 	typeExpr, ok := mapProtoType(f.Type)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "warning: unsupported type %q for field %q, skipping\n", f.Type, f.FieldName)
 		return nil
+	}
+
+	// Wrap in array for repeated fields.
+	if f.IsRepeated {
+		typeExpr = parser.TypeExpr{Name: "array", ElemType: &typeExpr}
 	}
 
 	if f.IsOptional {
@@ -104,13 +104,13 @@ func mapProtoType(typ string) (parser.TypeExpr, bool) {
 	case "bool":
 		return parser.TypeExpr{Name: "bool"}, true
 
-	// Float types — unsupported
+	// Float types
 	case "float", "double":
-		return parser.TypeExpr{}, false
+		return parser.TypeExpr{Name: "float"}, true
 
-	// Bytes — unsupported
+	// Bytes
 	case "bytes":
-		return parser.TypeExpr{}, false
+		return parser.TypeExpr{Name: "bytes"}, true
 
 	default:
 		// Check for well-known types
@@ -144,9 +144,11 @@ func mapWellKnownType(typ string) (parser.TypeExpr, bool) {
 		"google.protobuf.UInt32Value", "google.protobuf.UInt64Value":
 		return parser.TypeExpr{Name: "int", Optional: true}, true
 
-	case "google.protobuf.FloatValue", "google.protobuf.DoubleValue",
-		"google.protobuf.BytesValue":
-		return parser.TypeExpr{}, false
+	case "google.protobuf.FloatValue", "google.protobuf.DoubleValue":
+		return parser.TypeExpr{Name: "float", Optional: true}, true
+
+	case "google.protobuf.BytesValue":
+		return parser.TypeExpr{Name: "bytes", Optional: true}, true
 
 	case "google.protobuf.Any", "google.protobuf.Struct",
 		"google.protobuf.Value", "google.protobuf.ListValue":

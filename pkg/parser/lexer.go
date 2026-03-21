@@ -28,6 +28,7 @@ const (
 	// Literals
 	TokenIdent TokenType = iota
 	TokenInt
+	TokenFloat
 	TokenString
 	TokenBool
 
@@ -90,6 +91,7 @@ const (
 var tokenNames = map[TokenType]string{
 	TokenIdent:     "Ident",
 	TokenInt:       "Int",
+	TokenFloat:     "Float",
 	TokenString:    "String",
 	TokenBool:      "Bool",
 	TokenUse:       "Use",
@@ -318,6 +320,15 @@ func (l *lexer) lexNumber() {
 	start := l.pos
 	for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
 		l.advance()
+	}
+	// Check for decimal point followed by digit → float literal
+	if l.pos < len(l.src)-1 && l.src[l.pos] == '.' && unicode.IsDigit(l.src[l.pos+1]) {
+		l.advance() // consume '.'
+		for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+			l.advance()
+		}
+		l.emit(TokenFloat, string(l.src[start:l.pos]), startLine, startCol)
+		return
 	}
 	l.emit(TokenInt, string(l.src[start:l.pos]), startLine, startCol)
 }
