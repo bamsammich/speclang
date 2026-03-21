@@ -503,6 +503,32 @@ func TestParseExprPrecedence(t *testing.T) {
 	}
 }
 
+func TestParse_Description(t *testing.T) {
+	t.Parallel()
+
+	spec, err := parser.Parse(`spec Foo {
+  description: "A test specification"
+}`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if spec.Description != "A test specification" {
+		t.Errorf("expected description %q, got %q", "A test specification", spec.Description)
+	}
+}
+
+func TestParse_DescriptionOptional(t *testing.T) {
+	t.Parallel()
+
+	spec, err := parser.Parse(`spec Foo {}`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if spec.Description != "" {
+		t.Errorf("expected empty description, got %q", spec.Description)
+	}
+}
+
 func TestParseErrorCases(t *testing.T) {
 	t.Parallel()
 
