@@ -150,12 +150,11 @@ speclang ships as a Claude Code plugin with two skills that integrate specificat
 
 ### Installation
 
-```bash
-# Add the marketplace
-claude plugins:add-marketplace bamsammich/speclang-marketplace
+In Claude Code, run:
 
-# Enable the plugin
-claude plugins:enable speclang@speclang-marketplace
+```
+/plugin marketplace add bamsammich/speclang-marketplace
+/plugin install speclang@speclang-marketplace
 ```
 
 ### Skills
