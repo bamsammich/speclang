@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message MixedTypes {
+  string name = 1;
+  int32 count = 2;
+  double price = 3;
+  float rating = 4;
+  bytes data = 5;
+  repeated string tags = 6;
+  map<string, int32> scores = 7;
+}
+
+enum Status {
+  UNKNOWN = 0;
+  ACTIVE = 1;
+  INACTIVE = 2;
+}

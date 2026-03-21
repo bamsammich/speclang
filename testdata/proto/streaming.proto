@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message Event {
+  string id = 1;
+  string payload = 2;
+}
+
+message Ack {
+  bool ok = 1;
+}
+
+service EventService {
+  rpc SendEvent(Event) returns (Ack);
+  rpc StreamEvents(Event) returns (stream Event);
+  rpc IngestEvents(stream Event) returns (Ack);
+  rpc BiDiStream(stream Event) returns (stream Event);
+}
