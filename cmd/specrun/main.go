@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -125,8 +126,8 @@ func runVerify(args []string) int {
 
 	config := resolveTargetConfig(spec.Target)
 
-	adp := adapter.NewHTTPAdapter()
-	if err := adp.Init(config); err != nil {
+	adp, err := createAdapter(spec, config)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
 	}
@@ -189,6 +190,30 @@ func printResults(res *runner.Result) {
 		if f.Actual != nil {
 			fmt.Printf("    actual:   %v\n", f.Actual)
 		}
+	}
+}
+
+func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.Adapter, error) {
+	if len(spec.Uses) == 0 {
+		return nil, errors.New("spec has no 'use' directive")
+	}
+
+	pluginName := spec.Uses[0]
+	switch pluginName {
+	case "http":
+		adp := adapter.NewHTTPAdapter()
+		if err := adp.Init(targetConfig); err != nil {
+			return nil, err
+		}
+		return adp, nil
+	case "process":
+		adp := adapter.NewProcessAdapter()
+		if err := adp.Init(targetConfig); err != nil {
+			return nil, err
+		}
+		return adp, nil
+	default:
+		return nil, fmt.Errorf("unknown plugin %q", pluginName)
 	}
 }
 
