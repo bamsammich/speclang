@@ -10,11 +10,15 @@ import (
 type Token struct {
 	Value string
 	Type  TokenType
+	File  string
 	Line  int
 	Col   int
 }
 
 func (t Token) String() string {
+	if t.File != "" {
+		return fmt.Sprintf("%s(%q)@%s:%d:%d", t.Type, t.Value, t.File, t.Line, t.Col)
+	}
 	return fmt.Sprintf("%s(%q)@%d:%d", t.Type, t.Value, t.Line, t.Col)
 }
 

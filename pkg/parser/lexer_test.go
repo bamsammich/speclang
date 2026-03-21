@@ -150,6 +150,17 @@ func TestLexInclude(t *testing.T) {
 	assertToken(t, tokens, 1, TokenString, "models.spec")
 }
 
+func TestTokenFileField(t *testing.T) {
+	tok := Token{Type: TokenIdent, Value: "foo", File: "test.spec", Line: 1, Col: 1}
+	if tok.File != "test.spec" {
+		t.Fatalf("expected File=test.spec, got %q", tok.File)
+	}
+	expected := `Ident("foo")@test.spec:1:1`
+	if tok.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, tok.String())
+	}
+}
+
 // Helpers
 
 func assertToken(t *testing.T, tokens []Token, idx int, typ TokenType, value string) {
