@@ -203,6 +203,18 @@ This generates models from `components/schemas` and scopes from `paths`, letting
 
 See [docs/openapi-import.md](docs/openapi-import.md) for the full guide, type mapping, and limitations.
 
+## Protobuf Import
+
+Import models and scopes from protobuf service definitions:
+
+```
+import proto("service.proto")
+```
+
+This generates models from `message` definitions and scopes from unary `rpc` methods.
+
+See [docs/protobuf-import.md](docs/protobuf-import.md) for details.
+
 ## Plugins
 
 speclang uses a plugin architecture for interacting with different systems:

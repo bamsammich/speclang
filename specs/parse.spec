@@ -44,6 +44,17 @@ scope parse_valid {
       name: "ImportTest"
     }
   }
+
+  # Verifies that import proto() parses and produces the correct spec name.
+  scenario proto_import {
+    given {
+      file: "testdata/proto/import_valid.spec"
+    }
+    then {
+      exit_code: 0
+      name: "ProtoImportTest"
+    }
+  }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
