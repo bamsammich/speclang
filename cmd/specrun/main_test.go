@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -147,4 +150,74 @@ func TestGenerate_Reproducible(t *testing.T) {
 	if string(first) != string(second) {
 		t.Errorf("expected same output with same seed\nfirst:  %s\nsecond: %s", first, second)
 	}
+}
+
+func TestVerify_JSON(t *testing.T) {
+	bin := specrunBin(t)
+
+	srv := startTransferServer(t)
+	defer srv.Close()
+
+	specFile, err := filepath.Abs("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	cmd := exec.Command(bin, "verify", "--json", "--seed", "42", "--iterations", "10", specFile)
+	cmd.Env = append(os.Environ(), "APP_URL="+srv.URL)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("specrun verify --json failed: %v\n%s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
+	}
+
+	if result["spec"] != "AccountAPI" {
+		t.Errorf("expected spec=AccountAPI, got %v", result["spec"])
+	}
+	if result["scenarios_run"] != float64(3) {
+		t.Errorf("expected scenarios_run=3, got %v", result["scenarios_run"])
+	}
+}
+
+func startTransferServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			From struct {
+				ID      string `json:"id"`
+				Balance int    `json:"balance"`
+			} `json:"from"`
+			To struct {
+				ID      string `json:"id"`
+				Balance int    `json:"balance"`
+			} `json:"to"`
+			Amount int `json:"amount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := map[string]any{
+			"from":  map[string]any{"id": req.From.ID, "balance": req.From.Balance},
+			"to":    map[string]any{"id": req.To.ID, "balance": req.To.Balance},
+			"error": nil,
+		}
+		switch {
+		case req.Amount <= 0:
+			resp["error"] = "invalid_amount"
+		case req.Amount > req.From.Balance:
+			resp["error"] = "insufficient_funds"
+		default:
+			resp["from"] = map[string]any{"id": req.From.ID, "balance": req.From.Balance - req.Amount}
+			resp["to"] = map[string]any{"id": req.To.ID, "balance": req.To.Balance + req.Amount}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+	return httptest.NewServer(mux)
 }

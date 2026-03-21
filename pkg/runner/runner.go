@@ -12,22 +12,22 @@ import (
 
 // Result captures the outcome of a verification run.
 type Result struct {
-	Spec              string
-	Failures          []Failure
-	ScenariosRun      int
-	ScenariosPassed   int
-	InvariantsChecked int
-	InvariantsPassed  int
+	Spec              string    `json:"spec"`
+	Failures          []Failure `json:"failures"`
+	ScenariosRun      int       `json:"scenarios_run"`
+	ScenariosPassed   int       `json:"scenarios_passed"`
+	InvariantsChecked int       `json:"invariants_checked"`
+	InvariantsPassed  int       `json:"invariants_passed"`
 }
 
 type Failure struct {
-	Name        string
-	Scope       string
-	Input       any
-	Expected    any
-	Actual      any
-	Description string
-	Shrunk      bool
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	Input       any    `json:"input,omitempty"`
+	Expected    any    `json:"expected,omitempty"`
+	Actual      any    `json:"actual,omitempty"`
+	Description string `json:"description"`
+	Shrunk      bool   `json:"shrunk"`
 }
 
 // Runner orchestrates spec verification.

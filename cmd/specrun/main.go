@@ -105,13 +105,14 @@ func runVerify(args []string) int {
 	fs := flag.NewFlagSet("verify", flag.ExitOnError)
 	seed := fs.Uint64("seed", 42, "random seed for input generation")
 	iterations := fs.Int("iterations", 100, "inputs per when-scenario and invariant")
+	jsonOutput := fs.Bool("json", false, "output results as JSON")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: specrun verify <spec-file> [--seed N] [--iterations N]")
+		fmt.Fprintln(os.Stderr, "usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json]")
 		return 1
 	}
 	specFile := fs.Arg(0)
@@ -134,8 +135,10 @@ func runVerify(args []string) int {
 	r := runner.New(spec, adp, *seed)
 	r.SetN(*iterations)
 
-	fmt.Printf("verifying %s (%s) with seed=%d, iterations=%d\n\n",
-		specFile, spec.Name, *seed, *iterations)
+	if !*jsonOutput {
+		fmt.Printf("verifying %s (%s) with seed=%d, iterations=%d\n\n",
+			specFile, spec.Name, *seed, *iterations)
+	}
 
 	res, err := r.Verify()
 	if err != nil {
@@ -143,7 +146,16 @@ func runVerify(args []string) int {
 		return 1
 	}
 
-	printResults(res)
+	if *jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(res); err != nil {
+			fmt.Fprintf(os.Stderr, "encoding error: %v\n", err)
+			return 1
+		}
+	} else {
+		printResults(res)
+	}
 
 	if len(res.Failures) > 0 {
 		return 1
