@@ -11,4 +11,5 @@ spec Speclang {
   include "parse.spec"
   include "generate.spec"
   include "verify.spec"
+  include "types.spec"
 }
