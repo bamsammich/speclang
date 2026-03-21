@@ -186,6 +186,16 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		return c.resolveRef(e.Path)
 	case parser.BinaryOp:
 		return c.evalBinary(e)
+	case parser.ObjectLiteral:
+		m := make(map[string]any, len(e.Fields))
+		for _, f := range e.Fields {
+			v, ok := c.eval(f.Value)
+			if !ok {
+				return nil, false
+			}
+			m[f.Key] = v
+		}
+		return m, true
 	case parser.UnaryOp:
 		return c.evalUnary(e)
 	default:

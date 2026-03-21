@@ -92,7 +92,7 @@ spec AccountAPI {
       output.to.balance >= 0
     }
 
-    # Smoke test with concrete values.
+    # Smoke test: expected values computed from input, not hardcoded.
     scenario success {
       given {
         from: { id: "alice", balance: 100 }
@@ -100,8 +100,8 @@ spec AccountAPI {
         amount: 30
       }
       then {
-        from.balance: 70
-        to.balance: 80
+        from.balance: from.balance - amount
+        to.balance: to.balance + amount
         error: null
       }
     }

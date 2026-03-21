@@ -102,6 +102,68 @@ func TestVerify_ScopeResults(t *testing.T) {
 	}
 }
 
+func TestRelationalAssertions(t *testing.T) {
+	t.Parallel()
+
+	// Build a spec with relational then-assertions programmatically.
+	spec := &parser.Spec{
+		Name: "RelTest",
+		Uses: []string{"http"},
+		Scopes: []*parser.Scope{{
+			Name: "math",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/add"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "relational",
+				Given: &parser.Block{
+					Assignments: []*parser.Assignment{
+						{Path: "a", Value: parser.LiteralInt{Value: 7}},
+						{Path: "b", Value: parser.LiteralInt{Value: 3}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{
+							Target: "sum",
+							Expected: parser.BinaryOp{
+								Left: parser.FieldRef{Path: "a"},
+								Op:   "+",
+								Right: parser.FieldRef{Path: "b"},
+							},
+						},
+					},
+				},
+			}},
+		}},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]int
+		json.NewDecoder(r.Body).Decode(&req)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int{"sum": req["a"] + req["b"]})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	adp := adapter.NewHTTPAdapter()
+	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner.New(spec, adp, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got %v", res.Failures[0].Description)
+	}
+}
+
 func TestVerifyTransferSpec(t *testing.T) {
 	spec, err := parser.ParseFile("../../examples/transfer.spec")
 	if err != nil {

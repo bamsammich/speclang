@@ -31,9 +31,11 @@ Convert natural language requirements into speclang specification files.
 
 | Pattern | Use when | Example |
 |---------|----------|---------|
-| `given` scenario | Documenting a specific expected behavior | "Transferring 30 from Alice(100) to Bob(50) should work" |
+| `given` scenario | Documenting a specific expected behavior (use relational assertions to compute expected values from input) | "Transferring 30 from Alice(100) to Bob(50) should work" |
 | `when` scenario | An entire class of inputs should produce the same outcome | "Any amount exceeding balance should fail" |
 | `invariant` | A property that must hold universally | "Money is conserved across transfers" |
+
+**Prefer relational assertions in `then` blocks** — write `from.balance: from.balance - amount` instead of `from.balance: 70`. This computes the expected value from the input, so the assertion adapts to any input and resists memorization. Literal values are still supported where appropriate (e.g., `error: null`).
 
 **Prefer invariants over scenarios when possible.** Invariants are the strongest form of verification — they test across the full input space, not just a slice.
 

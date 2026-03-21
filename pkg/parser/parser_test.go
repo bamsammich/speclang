@@ -348,9 +348,9 @@ func TestParseTransferSpec(t *testing.T) {
 		if sc.Then.Assertions[0].Target != "from.balance" {
 			t.Errorf("expected target 'from.balance', got %q", sc.Then.Assertions[0].Target)
 		}
-		expectedVal, ok := sc.Then.Assertions[0].Expected.(parser.LiteralInt)
-		if !ok || expectedVal.Value != 70 {
-			t.Errorf("expected LiteralInt{70}, got %v", sc.Then.Assertions[0].Expected)
+		binOp, ok := sc.Then.Assertions[0].Expected.(parser.BinaryOp)
+		if !ok || binOp.Op != "-" {
+			t.Errorf("expected BinaryOp{-}, got %v", sc.Then.Assertions[0].Expected)
 		}
 		// error: null
 		if sc.Then.Assertions[2].Target != "error" {

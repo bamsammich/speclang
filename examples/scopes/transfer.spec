@@ -45,8 +45,8 @@ scope transfer {
       amount: 30
     }
     then {
-      from.balance: 70
-      to.balance: 80
+      from.balance: from.balance - amount
+      to.balance: to.balance + amount
       error: null
     }
   }
