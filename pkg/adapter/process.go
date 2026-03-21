@@ -18,9 +18,9 @@ type lastExecResult struct {
 
 // ProcessAdapter is the built-in adapter for testing subprocesses.
 type ProcessAdapter struct {
+	last     *lastExecResult
 	Command  string
 	baseArgs []string
-	last     *lastExecResult
 }
 
 func NewProcessAdapter() *ProcessAdapter {
@@ -61,7 +61,7 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 		cmdArgs = append(cmdArgs, s)
 	}
 
-	cmd := exec.Command(a.Command, cmdArgs...)
+	cmd := exec.Command(a.Command, cmdArgs...) //nolint:gosec // process adapter intentionally executes user-specified commands from spec config
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf

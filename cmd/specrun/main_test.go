@@ -16,7 +16,11 @@ func specrunBin(t *testing.T) string {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "specrun")
 	cmd := exec.Command("go", "build", "-o", bin, ".")
-	cmd.Dir, _ = filepath.Abs(".")
+	absDir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+	cmd.Dir = absDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to build specrun: %v\n%s", err, out)
@@ -305,7 +309,9 @@ func startTransferServer(t *testing.T) *httptest.Server {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	return httptest.NewServer(mux)
 }

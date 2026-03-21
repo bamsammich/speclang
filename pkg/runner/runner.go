@@ -210,7 +210,10 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 				case string:
 					execArgs = append(execArgs, v)
 				default:
-					b, _ := json.Marshal(v)
+					b, err := json.Marshal(v)
+					if err != nil {
+						return "", nil, fmt.Errorf("marshaling input field %q: %w", field.Name, err)
+					}
 					execArgs = append(execArgs, string(b))
 				}
 			}

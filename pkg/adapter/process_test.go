@@ -105,6 +105,27 @@ func TestProcessAdapter_JSONStdout(t *testing.T) {
 	}
 }
 
+func TestProcessAdapter_Stderr(t *testing.T) {
+	a := NewProcessAdapter()
+	if err := a.Init(map[string]string{"command": "sh"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// "sh -c" writes to stderr
+	args := mustMarshal(t, []any{"-c", "echo error-output >&2"})
+	if _, err := a.Action("exec", args); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := a.Assert("stderr", "", json.RawMessage(`"error-output\n"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK {
+		t.Fatalf("stderr assertion failed: %s (actual: %s)", resp.Error, string(resp.Actual))
+	}
+}
+
 func TestProcessAdapter_AssertBeforeExec(t *testing.T) {
 	a := NewProcessAdapter()
 	a.Command = "echo"

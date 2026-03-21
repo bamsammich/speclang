@@ -22,5 +22,6 @@ scope generate {
   invariant constraints_satisfied {
     when exit_code == 0:
       output.amount > 0
+      output.amount <= output.from.balance
   }
 }
