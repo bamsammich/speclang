@@ -10,11 +10,15 @@ import (
 type Token struct {
 	Value string
 	Type  TokenType
+	File  string
 	Line  int
 	Col   int
 }
 
 func (t Token) String() string {
+	if t.File != "" {
+		return fmt.Sprintf("%s(%q)@%s:%d:%d", t.Type, t.Value, t.File, t.Line, t.Col)
+	}
 	return fmt.Sprintf("%s(%q)@%d:%d", t.Type, t.Value, t.Line, t.Col)
 }
 
@@ -47,6 +51,7 @@ const (
 	TokenScope
 	TokenConfig
 	TokenEnv
+	TokenInclude
 
 	// Symbols
 	TokenLBrace   // {
@@ -105,6 +110,7 @@ var tokenNames = map[TokenType]string{
 	TokenScope:     "Scope",
 	TokenConfig:    "Config",
 	TokenEnv:       "Env",
+	TokenInclude:   "Include",
 	TokenLBrace:    "LBrace",
 	TokenRBrace:    "RBrace",
 	TokenLParen:    "LParen",
@@ -160,6 +166,7 @@ var keywords = map[string]TokenType{
 	"scope":     TokenScope,
 	"config":    TokenConfig,
 	"env":       TokenEnv,
+	"include":   TokenInclude,
 	"true":      TokenBool,
 	"false":     TokenBool,
 }
