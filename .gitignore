@@ -34,5 +34,8 @@ go.work.sum
 # Claude Code
 .claude/
 
+# Worktrees
+.worktrees/
+
 # Built binaries
 /specrun
