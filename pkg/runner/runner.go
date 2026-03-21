@@ -12,22 +12,22 @@ import (
 
 // Result captures the outcome of a verification run.
 type Result struct {
-	Spec              string
-	Failures          []Failure
-	ScenariosRun      int
-	ScenariosPassed   int
-	InvariantsChecked int
-	InvariantsPassed  int
+	Spec              string    `json:"spec"`
+	Failures          []Failure `json:"failures"`
+	ScenariosRun      int       `json:"scenarios_run"`
+	ScenariosPassed   int       `json:"scenarios_passed"`
+	InvariantsChecked int       `json:"invariants_checked"`
+	InvariantsPassed  int       `json:"invariants_passed"`
 }
 
 type Failure struct {
-	Name        string
-	Scope       string
-	Input       any
-	Expected    any
-	Actual      any
-	Description string
-	Shrunk      bool
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	Input       any    `json:"input,omitempty"`
+	Expected    any    `json:"expected,omitempty"`
+	Actual      any    `json:"actual,omitempty"`
+	Description string `json:"description"`
+	Shrunk      bool   `json:"shrunk"`
 }
 
 // Runner orchestrates spec verification.
@@ -88,9 +88,6 @@ func (r *Runner) Verify() (*Result, error) {
 func (r *Runner) newScopeRunner(scope *parser.Scope) *scopeRunner {
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
 	method := strings.ToUpper(resolveConfigString(scope.Config, "method"))
-	if method == "" {
-		method = "POST"
-	}
 	return &scopeRunner{
 		runner:    r,
 		generator: gen,
@@ -159,20 +156,17 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, fmt.Errorf("marshaling input: %w", err)
 	}
 
-	args, err := json.Marshal([]json.RawMessage{
-		json.RawMessage(fmt.Sprintf("%q", sr.path)),
-		json.RawMessage(inputJSON),
-	})
+	actionName, args, err := sr.buildAction(inputJSON)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling args: %w", err)
+		return nil, err
 	}
 
-	resp, err := sr.runner.adapter.Action(strings.ToLower(sr.method), args)
+	resp, err := sr.runner.adapter.Action(actionName, args)
 	if err != nil {
-		return nil, fmt.Errorf("executing %s %s: %w", sr.method, sr.path, err)
+		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
 	if !resp.OK {
-		return nil, fmt.Errorf("%s %s failed: %s", sr.method, sr.path, resp.Error)
+		return nil, fmt.Errorf("action %q failed: %s", actionName, resp.Error)
 	}
 
 	var output map[string]any
@@ -180,6 +174,57 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, fmt.Errorf("parsing response: %w", err)
 	}
 	return output, nil
+}
+
+// buildAction constructs the adapter action call based on scope config.
+func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawMessage, error) {
+	if sr.method != "" {
+		// HTTP-style: action is the method, args are [path, body]
+		args, err := json.Marshal([]json.RawMessage{
+			json.RawMessage(fmt.Sprintf("%q", sr.path)),
+			inputJSON,
+		})
+		if err != nil {
+			return "", nil, fmt.Errorf("marshaling HTTP args: %w", err)
+		}
+		return strings.ToLower(sr.method), args, nil
+	}
+
+	// Process-style: action is "exec", args are scope config args + input fields as CLI args
+	var inputMap map[string]any
+	if err := json.Unmarshal(inputJSON, &inputMap); err != nil {
+		return "", nil, err
+	}
+
+	var execArgs []any
+	// Prepend scope config args (e.g., "parse" or "generate --scope transfer --seed")
+	if configArgs := resolveConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
+		for _, a := range strings.Fields(configArgs) {
+			execArgs = append(execArgs, a)
+		}
+	}
+	if sr.scopeDef.Contract != nil {
+		for _, field := range sr.scopeDef.Contract.Input {
+			if val, ok := inputMap[field.Name]; ok {
+				switch v := val.(type) {
+				case string:
+					execArgs = append(execArgs, v)
+				default:
+					b, err := json.Marshal(v)
+					if err != nil {
+						return "", nil, fmt.Errorf("marshaling input field %q: %w", field.Name, err)
+					}
+					execArgs = append(execArgs, string(b))
+				}
+			}
+		}
+	}
+
+	args, err := json.Marshal(execArgs)
+	if err != nil {
+		return "", nil, fmt.Errorf("marshaling exec args: %w", err)
+	}
+	return "exec", args, nil
 }
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario, res *Result) error {
