@@ -35,6 +35,8 @@ include "<path>"                     # top-level include
 
 spec <Name> {
 
+  description: "<description>"            # optional, for AI context
+
   target {
     base_url: env(APP_URL)          # optional, plugin-dependent config
   }
