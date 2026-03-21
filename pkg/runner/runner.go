@@ -348,7 +348,11 @@ func (sr *scopeRunner) checkThenAssertions(
 	then *parser.Block,
 ) (*Failure, error) {
 	for _, a := range then.Assertions {
-		expected, err := exprToJSON(a.Expected)
+		val, ok := generator.Eval(a.Expected, input)
+		if !ok {
+			return nil, fmt.Errorf("evaluating expected expression for %q", a.Target)
+		}
+		expected, err := json.Marshal(val)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
 		}

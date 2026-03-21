@@ -82,6 +82,8 @@ invariant conservation { ... }
 
 Fixed input values. Runs once. Documents expected behavior.
 
+`then` assertions can use **relational expressions** that reference input fields. The expected value is computed from the input, not hardcoded. This makes assertions resistant to memorization — an LLM can't learn "the answer is 70" because the answer depends on the input.
+
 ```
 scenario success {
   given {
@@ -90,8 +92,9 @@ scenario success {
     amount: 30
   }
   then {
-    from.balance: 70
-    to.balance: 80
+    from.balance: from.balance - amount   # 100 - 30 = 70
+    to.balance: to.balance + amount       # 50 + 30 = 80
+    error: null                           # literals still work
   }
 }
 ```
