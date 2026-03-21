@@ -196,6 +196,21 @@ Phase 4: Metamorphic relation support
 speclang/
 ├── CLAUDE.md
 ├── go.mod
+├── .claude-plugin/
+│   └── plugin.json           # Claude Code plugin manifest
+├── skills/
+│   ├── author/               # speclang:author — spec authoring from natural language
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── api_reference.md
+│   └── verify/               # speclang:verify — verification gate before merge
+│       └── SKILL.md
+├── commands/
+│   ├── spec.md               # /spec slash command
+│   └── verify-spec.md        # /verify-spec slash command
+├── hooks/
+│   ├── hooks.json            # session-start hook registration
+│   └── session-start.sh      # injects speclang awareness on session start
 ├── cmd/
 │   └── specrun/          # CLI entrypoint
 │       └── main.go
@@ -304,3 +319,16 @@ Run self-verification:
 ```bash
 SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec
 ```
+
+## Claude Code Plugin
+
+This repo is a Claude Code plugin. It ships skills (`speclang:author`, `speclang:verify`), slash commands (`/spec`, `/verify-spec`), and a session-start hook.
+
+**ALWAYS keep skills up-to-date.** When the spec language syntax, CLI commands, output format, or verification behavior changes, update the corresponding skill files and syntax reference:
+
+- `skills/author/SKILL.md` — authoring guidance and checklist
+- `skills/author/references/api_reference.md` — language syntax reference
+- `skills/verify/SKILL.md` — verification process and output interpretation
+- `hooks/session-start.sh` — session-start detection logic
+
+If a change to the runtime would make a skill give incorrect guidance, the skill update is part of the same change, not a follow-up.

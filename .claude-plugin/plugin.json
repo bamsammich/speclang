@@ -1,0 +1,12 @@
+{
+  "name": "speclang",
+  "description": "Specification-driven development skills: author speclang specs from natural language and verify implementations against specs before merging",
+  "version": "1.0.0",
+  "author": {
+    "name": "bamsammich"
+  },
+  "homepage": "https://github.com/bamsammich/speclang",
+  "repository": "https://github.com/bamsammich/speclang",
+  "license": "MIT",
+  "keywords": ["speclang", "specification", "verification", "testing", "property-based"]
+}
