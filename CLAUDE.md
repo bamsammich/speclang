@@ -42,6 +42,7 @@ spec <Name> {
   }
 
   include "<path>"                   # spec-body include
+  import openapi("<path>")           # import models/scopes from OpenAPI schema
 
   locators {                         # UI-mode only
     <name>: [<css-selector>]
@@ -96,6 +97,26 @@ spec <Name> {
 - **Downstream transparency**: generator, runner, and adapter see a single merged `*Spec` — no include-awareness needed
 
 The include is resolved at the token level (pass 1) before parsing (pass 2). The parser has zero awareness of includes.
+
+### Import Directive
+
+`import <adapter>("path")` imports models and scopes from an external schema file. The adapter name determines the format (currently only `openapi` is supported).
+
+```
+import openapi("schema.yaml")
+```
+
+- **Paths are relative** to the spec file's directory
+- **OpenAPI 3.x** (YAML or JSON) schemas are supported via [kin-openapi](https://github.com/getkin/kin-openapi)
+- **Models** are generated from `components/schemas` (object types with properties)
+- **Scopes** are generated from `paths` (each path+method → scope with config and contract)
+- **Type mapping**: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name
+- **Constraints**: `minimum`/`maximum` → field constraint expressions
+- **Unsupported types** (array, float, enum) are skipped with a warning
+- **Duplicate model or scope names** between imported and hand-written produce an error
+- **Downstream transparency**: generator, runner, and adapter see standard AST nodes — no import-awareness needed
+
+The import is resolved at parse time. The parser dispatches to a pluggable `ImportResolver` based on the adapter name.
 
 ### Scope and Declaration Rules
 
@@ -219,7 +240,8 @@ speclang/
 │   │   ├── lexer.go
 │   │   ├── parser.go
 │   │   ├── ast.go
-│   │   └── include.go    # include resolution + duplicate validation
+│   │   ├── include.go    # include resolution + duplicate validation
+│   │   └── import.go     # import directive + ImportResolver interface
 │   ├── generator/        # AST → test inputs
 │   │   ├── generator.go
 │   │   └── shrink.go     # counterexample shrinking
@@ -229,6 +251,11 @@ speclang/
 │   │   ├── protocol.go   # JSON IPC types
 │   │   ├── http.go       # built-in HTTP adapter
 │   │   └── process.go    # built-in process adapter (subprocess execution)
+│   ├── openapi/          # OpenAPI import resolver
+│   │   ├── openapi.go    # Resolver implementing ImportResolver
+│   │   ├── document.go   # OpenAPI doc loading via kin-openapi
+│   │   ├── models.go     # schema → Model conversion
+│   │   └── scopes.go     # path → Scope conversion
 │   └── plugin/           # plugin spec loading
 │       └── plugin.go
 ├── plugins/
@@ -240,6 +267,9 @@ speclang/
 │   │   └── account.spec  # model Account
 │   ├── scopes/
 │   │   └── transfer.spec # scope transfer (contract, invariants, scenarios)
+│   ├── openapi/          # OpenAPI import example
+│   │   ├── petstore.yaml # sample OpenAPI 3.0 spec
+│   │   └── petstore.spec # spec importing from OpenAPI schema
 │   └── server/           # trivial Go HTTP server to test against
 │       └── main.go
 ├── specs/                # self-verification specs (speclang verifying itself)

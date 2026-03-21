@@ -33,6 +33,17 @@ scope parse_valid {
       name: "AccountAPI"
     }
   }
+
+  # Verifies that import openapi() parses and produces the correct spec name.
+  scenario openapi_import {
+    given {
+      file: "testdata/openapi/import_valid.spec"
+    }
+    then {
+      exit_code: 0
+      name: "ImportTest"
+    }
+  }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
@@ -68,10 +79,10 @@ scope parse_invalid {
     }
   }
 
-  # Import with no resolver registered should fail gracefully.
-  scenario import_no_resolver {
+  # Import with unknown adapter should fail.
+  scenario import_unknown_adapter {
     given {
-      file: "testdata/openapi/import_no_resolver.spec"
+      file: "testdata/openapi/import_unknown_adapter.spec"
     }
     then {
       exit_code: 1

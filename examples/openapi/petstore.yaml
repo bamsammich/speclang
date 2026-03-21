@@ -1,0 +1,44 @@
+openapi: "3.0.0"
+info:
+  title: Petstore
+  version: "1.0.0"
+paths:
+  /pets:
+    get:
+      operationId: list_pets
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+    post:
+      operationId: create_pet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Pet"
+      responses:
+        "201":
+          description: Created pet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+components:
+  schemas:
+    Pet:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        tag:
+          type: string

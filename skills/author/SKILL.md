@@ -16,6 +16,7 @@ Convert natural language requirements into speclang specification files.
 
 ## Spec Writing Checklist
 
+- [ ] If the user has an OpenAPI spec, use `import openapi("path")` to import models and scopes
 - [ ] `use <plugin>` at the top
 - [ ] `spec <Name>` with a `description` explaining what the system is
 - [ ] `target` block with connection config
