@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
@@ -119,6 +120,8 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 		return generateInt(rng)
 	case "float":
 		return generateFloat(rng)
+	case "bytes":
+		return generateBytes(rng)
 	case "string":
 		return generateString(rng)
 	case "bool":
@@ -156,6 +159,22 @@ func generateFloat(rng *rand.Rand) float64 {
 		val := math.Pow(10, exp) * (rng.Float64()*2.0 - 1.0)
 		return val
 	}
+}
+
+// generateBytes produces base64-encoded random byte strings.
+func generateBytes(rng *rand.Rand) string {
+	var length int
+	if rng.IntN(5) == 0 {
+		boundaries := []int{0, 1, 16, 32}
+		length = boundaries[rng.IntN(len(boundaries))]
+	} else {
+		length = rng.IntN(33)
+	}
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = byte(rng.IntN(256))
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func generateString(rng *rand.Rand) string {

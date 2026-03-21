@@ -108,9 +108,9 @@ func mapProtoType(typ string) (parser.TypeExpr, bool) {
 	case "float", "double":
 		return parser.TypeExpr{Name: "float"}, true
 
-	// Bytes — mapped to string until bytes type is added
+	// Bytes
 	case "bytes":
-		return parser.TypeExpr{}, false
+		return parser.TypeExpr{Name: "bytes"}, true
 
 	default:
 		// Check for well-known types
@@ -148,7 +148,7 @@ func mapWellKnownType(typ string) (parser.TypeExpr, bool) {
 		return parser.TypeExpr{Name: "float", Optional: true}, true
 
 	case "google.protobuf.BytesValue":
-		return parser.TypeExpr{}, false
+		return parser.TypeExpr{Name: "bytes", Optional: true}, true
 
 	case "google.protobuf.Any", "google.protobuf.Struct",
 		"google.protobuf.Value", "google.protobuf.ListValue":

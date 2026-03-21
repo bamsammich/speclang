@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"encoding/base64"
+
 	"github.com/bamsammich/speclang/pkg/parser"
 )
 
@@ -36,6 +38,8 @@ func shrinkField(
 	switch field.Type.Name {
 	case "float":
 		return shrinkFloat(input, field.Name, stillFails)
+	case "bytes":
+		return shrinkBytes(input, field.Name, stillFails)
 	}
 
 	// Model lookup for named model types.
@@ -161,6 +165,44 @@ func shrinkFloat(
 	candidate[name] = lo
 	if stillFails(candidate) {
 		current[name] = lo
+	}
+	return current
+}
+
+// shrinkBytes decodes base64, binary searches on byte length, re-encodes.
+func shrinkBytes(
+	input map[string]any,
+	name string,
+	stillFails func(map[string]any) bool,
+) map[string]any {
+	current := copyMap(input)
+	encoded, ok := current[name].(string)
+	if !ok {
+		return current
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return current
+	}
+
+	lo := 0
+	hi := len(raw)
+
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		candidate := copyMap(current)
+		candidate[name] = base64.StdEncoding.EncodeToString(raw[:mid])
+		if stillFails(candidate) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+
+	candidate := copyMap(current)
+	candidate[name] = base64.StdEncoding.EncodeToString(raw[:lo])
+	if stillFails(candidate) {
+		current[name] = base64.StdEncoding.EncodeToString(raw[:lo])
 	}
 	return current
 }

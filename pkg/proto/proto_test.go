@@ -111,8 +111,8 @@ func TestConvertMessages_Unsupported(t *testing.T) {
 
 	models := convertMessages(proto)
 
-	// MixedTypes: name (string), count (int), price (float), rating (float) survive;
-	// bytes, repeated, map are skipped
+	// MixedTypes: name (string), count (int), price (float), rating (float),
+	// data (bytes) survive; repeated and map are skipped
 	if len(models) != 1 {
 		t.Fatalf("expected 1 model, got %d", len(models))
 	}
@@ -122,15 +122,16 @@ func TestConvertMessages_Unsupported(t *testing.T) {
 		t.Fatalf("expected model MixedTypes, got %q", m.Name)
 	}
 
-	if len(m.Fields) != 4 {
-		t.Fatalf("expected 4 supported fields, got %d", len(m.Fields))
+	if len(m.Fields) != 5 {
+		t.Fatalf("expected 5 supported fields, got %d", len(m.Fields))
 	}
 
-	// Fields sorted: count, name, price, rating
+	// Fields sorted: count, data, name, price, rating
 	assertField(t, m.Fields[0], "count", "int", false)
-	assertField(t, m.Fields[1], "name", "string", false)
-	assertField(t, m.Fields[2], "price", "float", false)
-	assertField(t, m.Fields[3], "rating", "float", false)
+	assertField(t, m.Fields[1], "data", "bytes", false)
+	assertField(t, m.Fields[2], "name", "string", false)
+	assertField(t, m.Fields[3], "price", "float", false)
+	assertField(t, m.Fields[4], "rating", "float", false)
 }
 
 func TestConvertMessages_Empty(t *testing.T) {
@@ -249,7 +250,7 @@ func TestMapProtoType(t *testing.T) {
 		{"bool", "bool", true},
 		{"float", "float", true},
 		{"double", "float", true},
-		{"bytes", "", false},
+		{"bytes", "bytes", true},
 		{"MyMessage", "MyMessage", true},
 		{"package.MyMessage", "MyMessage", true},
 		{"google.protobuf.Timestamp", "string", true},
