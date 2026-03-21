@@ -152,19 +152,25 @@ include "scopes/transfer.spec"
 
 ## Import Directive
 
-Import models and scopes from external schema files. Currently supports OpenAPI 3.x (YAML or JSON).
+Import models and scopes from external schema files. Supports OpenAPI 3.x and protobuf.
+
+### OpenAPI
 
 ```
 import openapi("schema.yaml")
 ```
 
-This generates:
-- **Models** from `components/schemas` (object types with properties)
-- **Scopes** from `paths` (each path+method → scope with config and contract)
+Generates models from `components/schemas` and scopes from `paths`. Type mapping: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name. Constraints (`minimum`/`maximum`) are converted to field constraint expressions.
 
-Type mapping: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name. Constraints (`minimum`/`maximum`) are converted to field constraint expressions. Unsupported types (array, float, enum) are skipped with a warning.
+### Protobuf
 
-Imported scopes have config and contracts populated but no invariants or scenarios — those are hand-authored on top of the imported scaffolds.
+```
+import proto("service.proto")
+```
+
+Generates models from `message` definitions and scopes from unary `rpc` methods. Type mapping: all integer types → `int`, `string` → `string`, `bool` → `bool`, message reference → model name.
+
+Unsupported types (array, float, enum, bytes, map) are skipped with a warning in both importers. Imported scopes have config and contracts populated but no invariants or scenarios — those are hand-authored.
 
 ## Available Plugins
 
