@@ -53,19 +53,24 @@ spec <Name> {
 ## Types
 
 - `int` — integer
+- `float` — floating-point number (e.g., `3.14`)
 - `string` — string
+- `bytes` — binary data (base64-encoded in JSON)
 - `bool` — boolean
 - `any` — untyped (passed through)
+- `[]T` — array/slice of type T (e.g., `[]int`, `[]Account`)
+- `map[K, V]` — map with key type K and value type V (e.g., `map[string, int]`)
 - `<ModelName>` — reference to a defined model
-- Append `?` for optional: `string?`
+- Append `?` for optional: `string?`, `[]int?` (optional array)
 
 ## Expressions
 
-- **Literals**: `42`, `"hello"`, `true`, `false`, `null`
+- **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
 - **Field references**: `from.balance`, `output.error`
 - **Environment**: `env(VAR)`, `env(VAR, "default")`
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
+- **Functions**: `len(expr)` — returns length of array, map, or string
 
 ## Comments
 
