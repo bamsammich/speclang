@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -31,9 +30,9 @@ func TestParse_ValidSpec(t *testing.T) {
 	}
 
 	cmd := exec.Command(bin, "parse", specFile)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("specrun parse failed: %v\nstderr: %s", err, getStderr(cmd))
+		t.Fatalf("specrun parse failed: %v\n%s", err, out)
 	}
 
 	var result map[string]any
@@ -78,16 +77,4 @@ func TestParse_MissingFile(t *testing.T) {
 	if !ok || exitErr.ExitCode() == 0 {
 		t.Errorf("expected non-zero exit code, got: %v", err)
 	}
-}
-
-// getStderr extracts stderr from a completed command (best-effort).
-func getStderr(cmd *exec.Cmd) string {
-	if cmd.Stderr == nil {
-		return ""
-	}
-	if f, ok := cmd.Stderr.(*os.File); ok {
-		b, _ := os.ReadFile(f.Name())
-		return string(b)
-	}
-	return ""
 }

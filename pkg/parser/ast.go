@@ -1,7 +1,5 @@
 package parser
 
-import "encoding/json"
-
 // Spec is the top-level AST node for a parsed spec file.
 type Spec struct {
 	Uses     []string          `json:"uses,omitempty"`
@@ -118,45 +116,6 @@ type Assignment struct {
 // Expr is an expression node.
 type Expr interface {
 	exprNode()
-}
-
-// exprJSON is a helper for serializing Expr interface values with a type discriminator.
-type exprJSON struct {
-	Type string `json:"type"`
-	Data any    `json:"data,omitempty"`
-}
-
-// marshalExpr wraps an Expr in a type-tagged envelope for JSON output.
-func marshalExpr(e Expr) ([]byte, error) {
-	if e == nil {
-		return []byte("null"), nil
-	}
-	var tag string
-	switch e.(type) {
-	case LiteralInt:
-		tag = "int"
-	case LiteralString:
-		tag = "string"
-	case LiteralBool:
-		tag = "bool"
-	case LiteralNull:
-		tag = "null"
-	case FieldRef:
-		tag = "field_ref"
-	case EnvRef:
-		tag = "env_ref"
-	case BinaryOp:
-		tag = "binary_op"
-	case UnaryOp:
-		tag = "unary_op"
-	case ObjectLiteral:
-		tag = "object"
-	case RegexLiteral:
-		tag = "regex"
-	default:
-		tag = "unknown"
-	}
-	return json.Marshal(exprJSON{Type: tag, Data: e})
 }
 
 type LiteralInt struct {
