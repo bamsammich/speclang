@@ -1,0 +1,13 @@
+plugin process {
+  adapter: "builtin"
+
+  actions {
+    exec(args: string)
+  }
+
+  assertions {
+    exit_code: int
+    stdout: any
+    stderr: string
+  }
+}
