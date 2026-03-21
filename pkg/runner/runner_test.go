@@ -50,6 +50,58 @@ func transferHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func TestVerify_ScopeResults(t *testing.T) {
+	spec, err := parser.ParseFile("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("parsing spec: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/accounts/transfer", transferHandler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	adp := adapter.NewHTTPAdapter()
+	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner.New(spec, adp, 42)
+	r.SetN(10)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if len(res.Scopes) != 1 {
+		t.Fatalf("expected 1 scope, got %d", len(res.Scopes))
+	}
+
+	scope := res.Scopes[0]
+	if scope.Name != "transfer" {
+		t.Errorf("expected scope name 'transfer', got %q", scope.Name)
+	}
+
+	// 3 scenarios + 3 invariants = 6 checks
+	if len(scope.Checks) != 6 {
+		t.Fatalf("expected 6 checks, got %d", len(scope.Checks))
+	}
+
+	for _, check := range scope.Checks {
+		if !check.Passed {
+			t.Errorf("check %q (%s) failed", check.Name, check.Kind)
+		}
+		if check.InputsRun < 1 {
+			t.Errorf("check %q has InputsRun=%d, expected >= 1", check.Name, check.InputsRun)
+		}
+	}
+
+	// Verify the first check is a scenario
+	if scope.Checks[0].Kind != "scenario" {
+		t.Errorf("expected first check to be scenario, got %q", scope.Checks[0].Kind)
+	}
+}
+
 func TestVerifyTransferSpec(t *testing.T) {
 	spec, err := parser.ParseFile("../../examples/transfer.spec")
 	if err != nil {
