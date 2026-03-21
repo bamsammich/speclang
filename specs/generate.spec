@@ -1,6 +1,6 @@
 scope generate {
   config {
-    args: "generate examples/transfer.spec --scope transfer"
+    args: "generate examples/transfer.spec --scope transfer --seed"
   }
 
   contract {

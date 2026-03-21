@@ -227,6 +227,46 @@ spec EchoTest {
 	}
 }
 
+func TestSelfVerification_Parse(t *testing.T) {
+	bin := specrunBin(t)
+
+	specFile, err := filepath.Abs("../../specs/speclang.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	projectRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("abs project root: %v", err)
+	}
+
+	srv := startTransferServer(t)
+	defer srv.Close()
+
+	cmd := exec.Command(bin, "verify", "--json", "--iterations", "10", specFile)
+	cmd.Env = append(os.Environ(),
+		"SPECRUN_BIN="+bin,
+		"APP_URL="+srv.URL,
+	)
+	// Set working dir to project root so relative paths in specs resolve correctly.
+	cmd.Dir = projectRoot
+	out, err := cmd.CombinedOutput()
+	t.Logf("output:\n%s", out)
+	if err != nil {
+		t.Fatalf("self-verification failed: %v\n%s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output not JSON: %v\n%s", err, out)
+	}
+
+	failures, _ := result["failures"].([]any)
+	if len(failures) > 0 {
+		t.Fatalf("self-verification had failures:\n%s", out)
+	}
+}
+
 func startTransferServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -257,8 +297,12 @@ func startTransferServer(t *testing.T) *httptest.Server {
 		case req.Amount > req.From.Balance:
 			resp["error"] = "insufficient_funds"
 		default:
-			resp["from"] = map[string]any{"id": req.From.ID, "balance": req.From.Balance - req.Amount}
-			resp["to"] = map[string]any{"id": req.To.ID, "balance": req.To.Balance + req.Amount}
+			resp["from"] = map[string]any{
+				"id": req.From.ID, "balance": req.From.Balance - req.Amount,
+			}
+			resp["to"] = map[string]any{
+				"id": req.To.ID, "balance": req.To.Balance + req.Amount,
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)

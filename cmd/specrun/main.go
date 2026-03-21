@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/bamsammich/speclang/pkg/adapter"
 	"github.com/bamsammich/speclang/pkg/generator"
@@ -54,21 +55,46 @@ func runParse(args []string) int {
 	return 0
 }
 
+// splitFlagsAndPositional separates flag arguments from positional arguments.
+// Flags (args starting with "-") and their values are collected into flagArgs;
+// the first non-flag arg is returned as the positional arg. This allows flags
+// to appear before or after the positional argument.
+func splitFlagsAndPositional(args []string) (flagArgs []string, positional string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
+			if positional == "" {
+				positional = a
+			}
+			continue
+		}
+		flagArgs = append(flagArgs, a)
+		if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			i++
+			flagArgs = append(flagArgs, args[i])
+		}
+	}
+	return flagArgs, positional
+}
+
 func runGenerate(args []string) int {
-	fs := flag.NewFlagSet("generate", flag.ExitOnError)
+	fs := flag.NewFlagSet("generate", flag.ContinueOnError)
 	scope := fs.String("scope", "", "scope name to generate input for")
 	seed := fs.Uint64("seed", 42, "random seed")
-	if err := fs.Parse(args); err != nil {
+
+	flagArgs, specFile := splitFlagsAndPositional(args)
+
+	if err := fs.Parse(flagArgs); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
 
-	if fs.NArg() < 1 || *scope == "" {
+	if specFile == "" || *scope == "" {
 		fmt.Fprintln(os.Stderr, "usage: specrun generate <spec-file> --scope <name> [--seed N]")
 		return 1
 	}
 
-	spec, err := parser.ParseFile(fs.Arg(0))
+	spec, err := parser.ParseFile(specFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
@@ -113,7 +139,8 @@ func runVerify(args []string) int {
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json]")
+		fmt.Fprintln(os.Stderr,
+			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json]")
 		return 1
 	}
 	specFile := fs.Arg(0)

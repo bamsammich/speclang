@@ -190,13 +190,19 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 		return strings.ToLower(sr.method), args, nil
 	}
 
-	// Process-style: action is "exec", args are the input fields as CLI args
+	// Process-style: action is "exec", args are scope config args + input fields as CLI args
 	var inputMap map[string]any
 	if err := json.Unmarshal(inputJSON, &inputMap); err != nil {
 		return "", nil, err
 	}
 
 	var execArgs []any
+	// Prepend scope config args (e.g., "parse" or "generate --scope transfer --seed")
+	if configArgs := resolveConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
+		for _, a := range strings.Fields(configArgs) {
+			execArgs = append(execArgs, a)
+		}
+	}
 	if sr.scopeDef.Contract != nil {
 		for _, field := range sr.scopeDef.Contract.Input {
 			if val, ok := inputMap[field.Name]; ok {
