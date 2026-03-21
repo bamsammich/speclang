@@ -2,17 +2,29 @@ package parser
 
 import (
 	"fmt"
-	"os"
+	"path/filepath"
 	"strconv"
 )
 
-// ParseFile reads a spec file and returns the AST.
+// ParseFile reads a spec file, resolves includes, and returns the AST.
 func ParseFile(path string) (*Spec, error) {
-	data, err := os.ReadFile(path)
+	absRoot, err := filepath.Abs(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading spec file: %w", err)
+		return nil, fmt.Errorf("resolving path: %w", err)
 	}
-	return Parse(string(data))
+
+	tokens, err := lexFile(absRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved, err := resolveIncludes(tokens, filepath.Dir(absRoot), absRoot, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &parser{tokens: resolved}
+	return p.parse()
 }
 
 // Parse parses spec source text into an AST.

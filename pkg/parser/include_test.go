@@ -115,3 +115,51 @@ func TestResolveIncludes_Circular(t *testing.T) {
 		t.Fatalf("expected error to mention 'circular', got: %v", err)
 	}
 }
+
+func TestParseFile_WithIncludes(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "include", "basic", "root.spec")
+	spec, err := ParseFile(root)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	if spec.Name != "TestAPI" {
+		t.Errorf("expected spec name TestAPI, got %q", spec.Name)
+	}
+	if len(spec.Uses) != 1 || spec.Uses[0] != "http" {
+		t.Errorf("expected Uses=[http], got %v", spec.Uses)
+	}
+	if len(spec.Models) != 1 || spec.Models[0].Name != "Account" {
+		t.Errorf("expected 1 model Account, got %v", spec.Models)
+	}
+	if len(spec.Scopes) != 1 || spec.Scopes[0].Name != "transfer" {
+		t.Errorf("expected 1 scope transfer, got %v", spec.Scopes)
+	}
+}
+
+func TestParseFile_NestedIncludes(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "include", "nested", "root.spec")
+	spec, err := ParseFile(root)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	if len(spec.Models) != 2 {
+		t.Fatalf("expected 2 models, got %d", len(spec.Models))
+	}
+	names := map[string]bool{}
+	for _, m := range spec.Models {
+		names[m.Name] = true
+	}
+	if !names["Item"] || !names["Container"] {
+		t.Errorf("expected models Item and Container, got %v", names)
+	}
+}
+
+func TestParseFile_CircularIncludeError(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "include", "circular", "a.spec")
+	_, err := ParseFile(root)
+	if err == nil {
+		t.Fatal("expected error for circular include")
+	}
+}
