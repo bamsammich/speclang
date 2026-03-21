@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -268,6 +269,45 @@ func TestSelfVerification_Parse(t *testing.T) {
 	failures, _ := result["failures"].([]any)
 	if len(failures) > 0 {
 		t.Fatalf("self-verification had failures:\n%s", out)
+	}
+}
+
+func TestVerify_HumanOutput(t *testing.T) {
+	bin := specrunBin(t)
+
+	srv := startTransferServer(t)
+	defer srv.Close()
+
+	specFile, err := filepath.Abs("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	cmd := exec.Command(bin, "verify", "--seed", "42", "--iterations", "10", specFile)
+	cmd.Env = append(os.Environ(), "APP_URL="+srv.URL)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify failed: %v\n%s", err, out)
+	}
+
+	output := string(out)
+
+	// Check per-scope structure
+	if !strings.Contains(output, "scope transfer:") {
+		t.Errorf("missing scope header in output:\n%s", output)
+	}
+
+	// Check per-item markers
+	if !strings.Contains(output, "✓ scenario success") {
+		t.Errorf("missing scenario success line:\n%s", output)
+	}
+	if !strings.Contains(output, "✓ invariant conservation") {
+		t.Errorf("missing invariant conservation line:\n%s", output)
+	}
+
+	// Check summary
+	if !strings.Contains(output, "Scenarios:  3/3 passed") {
+		t.Errorf("missing scenario summary:\n%s", output)
 	}
 }
 

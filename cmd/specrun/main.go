@@ -192,31 +192,57 @@ func runVerify(args []string) int {
 }
 
 func printResults(res *runner.Result) {
+	for _, scope := range res.Scopes {
+		fmt.Printf("  scope %s:\n", scope.Name)
+		for _, check := range scope.Checks {
+			if check.Passed {
+				printPassedCheck(check)
+			} else {
+				printFailedCheck(check)
+			}
+		}
+		fmt.Println()
+	}
+
 	fmt.Printf("Scenarios:  %d/%d passed\n", res.ScenariosPassed, res.ScenariosRun)
 	fmt.Printf("Invariants: %d/%d passed\n", res.InvariantsPassed, res.InvariantsChecked)
+}
 
-	if len(res.Failures) == 0 {
-		fmt.Println("\nAll checks passed.")
+func printPassedCheck(check runner.CheckResult) {
+	if check.InputsRun <= 1 {
+		fmt.Printf("    ✓ %s %s\n", check.Kind, check.Name)
+	} else {
+		fmt.Printf("    ✓ %s %s (%d inputs)\n", check.Kind, check.Name, check.InputsRun)
+	}
+}
+
+func printFailedCheck(check runner.CheckResult) {
+	suffix := ""
+	if check.Failure != nil && check.Failure.Shrunk {
+		suffix = ", shrunk"
+	}
+	if check.InputsRun <= 1 {
+		fmt.Printf("    ✗ %s %s (failed%s)\n", check.Kind, check.Name, suffix)
+	} else {
+		fmt.Printf("    ✗ %s %s (failed on input %d/%d%s)\n",
+			check.Kind, check.Name, check.FailedAt, check.InputsRun, suffix)
+	}
+
+	if check.Failure == nil {
 		return
 	}
 
-	fmt.Println("\nFailures:")
-	for _, f := range res.Failures {
-		fmt.Printf("\n  [%s] %s: %s\n", f.Scope, f.Name, f.Description)
-		if f.Shrunk {
-			fmt.Println("    (shrunk to minimal counterexample)")
+	f := check.Failure
+	if f.Input != nil {
+		if inputJSON, err := json.MarshalIndent(f.Input, "          ", "  "); err == nil {
+			fmt.Printf("        input:\n          %s\n", inputJSON)
 		}
-		if f.Input != nil {
-			if inputJSON, err := json.MarshalIndent(f.Input, "    ", "  "); err == nil {
-				fmt.Printf("    input: %s\n", inputJSON)
-			}
-		}
-		if f.Expected != nil {
-			fmt.Printf("    expected: %v\n", f.Expected)
-		}
-		if f.Actual != nil {
-			fmt.Printf("    actual:   %v\n", f.Actual)
-		}
+	}
+	if f.Expected != nil {
+		fmt.Printf("        expected: %v\n", f.Expected)
+	}
+	if f.Actual != nil {
+		fmt.Printf("        actual:   %v\n", f.Actual)
 	}
 }
 
