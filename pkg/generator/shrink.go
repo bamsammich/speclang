@@ -31,10 +31,19 @@ func shrinkField(
 		return input
 	}
 
+	// Dispatch on TypeExpr.Name first to disambiguate types that share
+	// the same Go runtime type (e.g., bytes and string are both string).
+	switch field.Type.Name {
+	case "float":
+		return shrinkFloat(input, field.Name, stillFails)
+	}
+
+	// Model lookup for named model types.
 	if m, ok := models[field.Type.Name]; ok {
 		return shrinkModel(input, field.Name, m, models, stillFails)
 	}
 
+	// Fall back to runtime type dispatch for legacy types.
 	switch val.(type) {
 	case int:
 		return shrinkInt(input, field.Name, stillFails)
@@ -113,6 +122,45 @@ func shrinkString(
 	candidate[name] = val[:lo]
 	if stillFails(candidate) {
 		current[name] = val[:lo]
+	}
+	return current
+}
+
+// shrinkFloat binary searches toward 0.0.
+func shrinkFloat(
+	input map[string]any,
+	name string,
+	stillFails func(map[string]any) bool,
+) map[string]any {
+	current := copyMap(input)
+	val, ok := current[name].(float64)
+	if !ok {
+		return current
+	}
+
+	lo := 0.0
+	hi := val
+	if val < 0 {
+		lo = val
+		hi = 0.0
+	}
+
+	const epsilon = 0.001
+	for hi-lo > epsilon {
+		mid := lo + (hi-lo)/2.0
+		candidate := copyMap(current)
+		candidate[name] = mid
+		if stillFails(candidate) {
+			hi = mid
+		} else {
+			lo = mid + epsilon
+		}
+	}
+
+	candidate := copyMap(current)
+	candidate[name] = lo
+	if stillFails(candidate) {
+		current[name] = lo
 	}
 	return current
 }

@@ -961,6 +961,14 @@ func (p *parser) parseAtom() (Expr, error) {
 		}
 		return LiteralInt{Value: v}, nil
 
+	case TokenFloat:
+		p.advance()
+		v, err := strconv.ParseFloat(tok.Value, 64)
+		if err != nil {
+			return nil, p.errAt(tok, fmt.Sprintf("invalid float: %s", tok.Value))
+		}
+		return LiteralFloat{Value: v}, nil
+
 	case TokenString:
 		p.advance()
 		return LiteralString{Value: tok.Value}, nil

@@ -569,6 +569,8 @@ func exprToValue(expr parser.Expr) any {
 	switch e := expr.(type) {
 	case parser.LiteralInt:
 		return e.Value
+	case parser.LiteralFloat:
+		return e.Value
 	case parser.LiteralString:
 		return e.Value
 	case parser.LiteralBool:

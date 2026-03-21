@@ -42,8 +42,11 @@ type Field struct {
 
 // TypeExpr represents a type in the spec language.
 type TypeExpr struct {
-	Name     string `json:"name"`           // "int", "string", "bool", or model name
-	Optional bool   `json:"optional,omitempty"` // trailing ?
+	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", or model name
+	ElemType *TypeExpr `json:"elem_type,omitempty"`     // element type for arrays
+	KeyType  *TypeExpr `json:"key_type,omitempty"`      // key type for maps
+	ValType  *TypeExpr `json:"val_type,omitempty"`      // value type for maps
+	Optional bool      `json:"optional,omitempty"`      // trailing ?
 }
 
 // Contract defines the input/output boundary of the system under test.
@@ -123,6 +126,10 @@ type LiteralInt struct {
 	Value int `json:"value"`
 }
 
+type LiteralFloat struct {
+	Value float64 `json:"value"`
+}
+
 type LiteralString struct {
 	Value string `json:"value"`
 }
@@ -167,6 +174,7 @@ type RegexLiteral struct {
 }
 
 func (LiteralInt) exprNode()    {}
+func (LiteralFloat) exprNode()  {}
 func (LiteralString) exprNode() {}
 func (LiteralBool) exprNode()   {}
 func (LiteralNull) exprNode()   {}

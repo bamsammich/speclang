@@ -3,6 +3,7 @@ package generator
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
 	"strings"
 
@@ -116,6 +117,8 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 	switch t.Name {
 	case "int":
 		return generateInt(rng)
+	case "float":
+		return generateFloat(rng)
 	case "string":
 		return generateString(rng)
 	case "bool":
@@ -134,6 +137,25 @@ func generateInt(rng *rand.Rand) int {
 		return boundaries[rng.IntN(len(boundaries))]
 	}
 	return rng.IntN(1001)
+}
+
+// generateFloat produces float64 values with multi-strategy distribution:
+// 10% boundary, 10% small, 30% medium, 50% wide.
+func generateFloat(rng *rand.Rand) float64 {
+	r := rng.IntN(10)
+	switch {
+	case r == 0: // 10% boundary values
+		boundaries := []float64{0.0, 1.0, -1.0, 0.5, -0.5, math.SmallestNonzeroFloat64}
+		return boundaries[rng.IntN(len(boundaries))]
+	case r == 1: // 10% small range [-1, 1]
+		return rng.Float64()*2.0 - 1.0
+	case r < 5: // 30% medium [-1e6, 1e6]
+		return rng.Float64()*2e6 - 1e6
+	default: // 50% wide with exponential scaling
+		exp := rng.Float64() * 20.0 // exponent [0, 20]
+		val := math.Pow(10, exp) * (rng.Float64()*2.0 - 1.0)
+		return val
+	}
 }
 
 func generateString(rng *rand.Rand) string {
@@ -176,6 +198,8 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 	switch e := expr.(type) {
 	case parser.LiteralInt:
 		return e.Value, true
+	case parser.LiteralFloat:
+		return e.Value, true
 	case parser.LiteralString:
 		return e.Value, true
 	case parser.LiteralBool:
@@ -216,11 +240,13 @@ func (c *evalCtx) evalUnary(e parser.UnaryOp) (any, bool) {
 		}
 		return !b, true
 	case "-":
-		n, isInt := toInt(val)
-		if !isInt {
-			return nil, false
+		if n, ok := toInt(val); ok {
+			return -n, true
 		}
-		return -n, true
+		if f, ok := toFloat(val); ok {
+			return -f, true
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -299,12 +325,19 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
 	case "<", "<=", ">", ">=", "+", "-", "*":
-		ln, lok := toInt(left)
-		rn, rok := toInt(right)
-		if !lok || !rok {
-			return nil, false
+		// If both sides are native int, use int arithmetic (avoids float precision issues).
+		ln, lok := left.(int)
+		rn, rok := right.(int)
+		if lok && rok {
+			return evalIntOp(op, ln, rn)
 		}
-		return evalIntOp(op, ln, rn)
+		// Otherwise try float arithmetic (handles float64 from JSON and float type).
+		lf, lfok := toFloat(left)
+		rf, rfok := toFloat(right)
+		if lfok && rfok {
+			return evalFloatOp(op, lf, rf)
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -326,10 +359,10 @@ func evalEqualityOp(op string, left, right any) (any, bool) {
 	eq := left == right
 	// Fall back to numeric comparison for int/float64 mismatch.
 	if !eq {
-		ln, lok := toInt(left)
-		rn, rok := toInt(right)
+		lf, lok := toFloat(left)
+		rf, rok := toFloat(right)
 		if lok && rok {
-			eq = ln == rn
+			eq = lf == rf
 		}
 	}
 	if op == "!=" {
@@ -359,12 +392,50 @@ func evalIntOp(op string, l, r int) (any, bool) {
 	}
 }
 
+func evalFloatOp(op string, l, r float64) (any, bool) {
+	switch op {
+	case "<":
+		return l < r, true
+	case "<=":
+		return l <= r, true
+	case ">":
+		return l > r, true
+	case ">=":
+		return l >= r, true
+	case "+":
+		return l + r, true
+	case "-":
+		return l - r, true
+	case "*":
+		return l * r, true
+	default:
+		return nil, false
+	}
+}
+
+// toInt converts a value to int. Only succeeds for native int or float64
+// values that are exact integers (no truncation of 3.7 to 3).
 func toInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
 		return n, true
 	case float64:
-		return int(n), true
+		if math.Floor(n) == n && !math.IsInf(n, 0) && !math.IsNaN(n) {
+			return int(n), true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// toFloat converts a value to float64. Succeeds for int and float64.
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
 	default:
 		return 0, false
 	}

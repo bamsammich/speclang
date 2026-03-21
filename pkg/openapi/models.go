@@ -96,8 +96,7 @@ func mapType(sch *openapi3.Schema) (parser.TypeExpr, bool) {
 	case sch.Type.Is("boolean"):
 		return parser.TypeExpr{Name: "bool"}, true
 	case sch.Type.Is("number"):
-		fmt.Fprintf(os.Stderr, "warning: mapping OpenAPI 'number' to 'int' (no float support)\n")
-		return parser.TypeExpr{Name: "int"}, true
+		return parser.TypeExpr{Name: "float"}, true
 	case sch.Type.Is("array"):
 		return parser.TypeExpr{}, false
 	default:
@@ -109,46 +108,34 @@ func mapType(sch *openapi3.Schema) (parser.TypeExpr, bool) {
 // minimum/maximum/exclusiveMinimum/exclusiveMaximum.
 func buildConstraint(fieldName string, sch *openapi3.Schema) parser.Expr {
 	ref := parser.FieldRef{Path: fieldName}
+	isFloat := sch.Type.Is("number")
+	numLit := func(v float64) parser.Expr {
+		if isFloat {
+			return parser.LiteralFloat{Value: v}
+		}
+		return parser.LiteralInt{Value: int(v)}
+	}
+
 	var lower, upper parser.Expr
 
 	if sch.ExclusiveMin {
 		if sch.Min != nil {
-			lower = parser.BinaryOp{
-				Left:  parser.LiteralInt{Value: int(*sch.Min)},
-				Op:    "<",
-				Right: ref,
-			}
+			lower = parser.BinaryOp{Left: numLit(*sch.Min), Op: "<", Right: ref}
 		}
 	} else if sch.Min != nil {
-		lower = parser.BinaryOp{
-			Left:  parser.LiteralInt{Value: int(*sch.Min)},
-			Op:    "<=",
-			Right: ref,
-		}
+		lower = parser.BinaryOp{Left: numLit(*sch.Min), Op: "<=", Right: ref}
 	}
 
 	if sch.ExclusiveMax {
 		if sch.Max != nil {
-			upper = parser.BinaryOp{
-				Left:  ref,
-				Op:    "<",
-				Right: parser.LiteralInt{Value: int(*sch.Max)},
-			}
+			upper = parser.BinaryOp{Left: ref, Op: "<", Right: numLit(*sch.Max)}
 		}
 	} else if sch.Max != nil {
-		upper = parser.BinaryOp{
-			Left:  ref,
-			Op:    "<=",
-			Right: parser.LiteralInt{Value: int(*sch.Max)},
-		}
+		upper = parser.BinaryOp{Left: ref, Op: "<=", Right: numLit(*sch.Max)}
 	}
 
 	if lower != nil && upper != nil {
-		return parser.BinaryOp{
-			Left:  lower,
-			Op:    "&&",
-			Right: upper,
-		}
+		return parser.BinaryOp{Left: lower, Op: "&&", Right: upper}
 	}
 	if lower != nil {
 		return lower

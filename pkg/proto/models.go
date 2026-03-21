@@ -104,11 +104,11 @@ func mapProtoType(typ string) (parser.TypeExpr, bool) {
 	case "bool":
 		return parser.TypeExpr{Name: "bool"}, true
 
-	// Float types — unsupported
+	// Float types
 	case "float", "double":
-		return parser.TypeExpr{}, false
+		return parser.TypeExpr{Name: "float"}, true
 
-	// Bytes — unsupported
+	// Bytes — mapped to string until bytes type is added
 	case "bytes":
 		return parser.TypeExpr{}, false
 
@@ -144,8 +144,10 @@ func mapWellKnownType(typ string) (parser.TypeExpr, bool) {
 		"google.protobuf.UInt32Value", "google.protobuf.UInt64Value":
 		return parser.TypeExpr{Name: "int", Optional: true}, true
 
-	case "google.protobuf.FloatValue", "google.protobuf.DoubleValue",
-		"google.protobuf.BytesValue":
+	case "google.protobuf.FloatValue", "google.protobuf.DoubleValue":
+		return parser.TypeExpr{Name: "float", Optional: true}, true
+
+	case "google.protobuf.BytesValue":
 		return parser.TypeExpr{}, false
 
 	case "google.protobuf.Any", "google.protobuf.Struct",
