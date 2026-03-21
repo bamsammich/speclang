@@ -1,3 +1,4 @@
+# Verifies the parser accepts valid specs and produces expected AST structure.
 scope parse_valid {
   config {
     args: "parse"
@@ -34,6 +35,7 @@ scope parse_valid {
   }
 }
 
+# Verifies the parser rejects malformed specs with a non-zero exit code.
 scope parse_invalid {
   config {
     args: "parse"

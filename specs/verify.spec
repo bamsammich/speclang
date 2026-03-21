@@ -1,3 +1,4 @@
+# Verifies that specrun verify passes correct implementations.
 scope verify_pass {
   config {
     args: "verify --json"
@@ -17,6 +18,7 @@ scope verify_pass {
     }
   }
 
+  # End-to-end: the transfer example must pass all checks.
   scenario transfer_spec_passes {
     given {
       file: "examples/transfer.spec"
