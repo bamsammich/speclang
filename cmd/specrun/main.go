@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/bamsammich/speclang/pkg/adapter"
+	"github.com/bamsammich/speclang/pkg/generator"
 	"github.com/bamsammich/speclang/pkg/parser"
 	"github.com/bamsammich/speclang/pkg/runner"
 )
@@ -20,6 +21,8 @@ func main() {
 	switch os.Args[1] {
 	case "parse":
 		os.Exit(runParse(os.Args[2:]))
+	case "generate":
+		os.Exit(runGenerate(os.Args[2:]))
 	case "verify":
 		os.Exit(runVerify(os.Args[2:]))
 	default:
@@ -45,6 +48,54 @@ func runParse(args []string) int {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(spec); err != nil {
 		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func runGenerate(args []string) int {
+	fs := flag.NewFlagSet("generate", flag.ExitOnError)
+	scope := fs.String("scope", "", "scope name to generate input for")
+	seed := fs.Uint64("seed", 42, "random seed")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if fs.NArg() < 1 || *scope == "" {
+		fmt.Fprintln(os.Stderr, "usage: specrun generate <spec-file> --scope <name> [--seed N]")
+		return 1
+	}
+
+	spec, err := parser.ParseFile(fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
+		return 1
+	}
+
+	var scopeDef *parser.Scope
+	for _, s := range spec.Scopes {
+		if s.Name == *scope {
+			scopeDef = s
+			break
+		}
+	}
+	if scopeDef == nil {
+		fmt.Fprintf(os.Stderr, "scope %q not found\n", *scope)
+		return 1
+	}
+
+	gen := generator.New(scopeDef.Contract, spec.Models, *seed)
+	input, err := gen.GenerateInput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "generation error: %v\n", err)
+		return 1
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(input); err != nil {
+		fmt.Fprintf(os.Stderr, "encoding error: %v\n", err)
 		return 1
 	}
 	return 0

@@ -78,3 +78,73 @@ func TestParse_MissingFile(t *testing.T) {
 		t.Errorf("expected non-zero exit code, got: %v", err)
 	}
 }
+
+func TestGenerate_ValidScope(t *testing.T) {
+	bin := specrunBin(t)
+
+	specFile, err := filepath.Abs("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	cmd := exec.Command(bin, "generate", "--scope", "transfer", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("specrun generate failed: %v\n%s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out)
+	}
+
+	for _, field := range []string{"from", "to", "amount"} {
+		if _, ok := result[field]; !ok {
+			t.Errorf("expected field %q in output, got keys: %v", field, result)
+		}
+	}
+}
+
+func TestGenerate_UnknownScope(t *testing.T) {
+	bin := specrunBin(t)
+
+	specFile, err := filepath.Abs("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	cmd := exec.Command(bin, "generate", "--scope", "nonexistent", specFile)
+	err = cmd.Run()
+	if err == nil {
+		t.Fatal("expected non-zero exit for unknown scope, got exit 0")
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() == 0 {
+		t.Errorf("expected non-zero exit code, got: %v", err)
+	}
+}
+
+func TestGenerate_Reproducible(t *testing.T) {
+	bin := specrunBin(t)
+
+	specFile, err := filepath.Abs("../../examples/transfer.spec")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+
+	run := func() []byte {
+		cmd := exec.Command(bin, "generate", "--scope", "transfer", "--seed", "99", specFile)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("specrun generate failed: %v\n%s", err, out)
+		}
+		return out
+	}
+
+	first := run()
+	second := run()
+
+	if string(first) != string(second) {
+		t.Errorf("expected same output with same seed\nfirst:  %s\nsecond: %s", first, second)
+	}
+}
