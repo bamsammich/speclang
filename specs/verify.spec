@@ -1,5 +1,6 @@
 # Verifies that specrun verify passes correct implementations.
 scope verify_pass {
+  use process
   config {
     args: "verify --json"
   }

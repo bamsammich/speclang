@@ -36,7 +36,6 @@ func TestParseImport_Basic(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   import test("schema.yaml")
 }
@@ -52,6 +51,7 @@ spec Test {
 		scopes: []*Scope{
 			{
 				Name: "list_pets",
+				Use:  "http",
 				Config: map[string]Expr{
 					"path":   LiteralString{Value: "/pets"},
 					"method": LiteralString{Value: "GET"},
@@ -88,13 +88,13 @@ func TestParseImport_MergesWithHandWritten(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   model Local {
     id: int
   }
   import test("schema.yaml")
   scope local_scope {
+    use http
     contract {
       input { x: int }
       output { y: int }
@@ -108,7 +108,7 @@ spec Test {
 			{Name: "Imported", Fields: []*Field{{Name: "a", Type: TypeExpr{Name: "string"}}}},
 		},
 		scopes: []*Scope{
-			{Name: "imported_scope"},
+			{Name: "imported_scope", Use: "http"},
 		},
 	}
 
@@ -146,7 +146,6 @@ func TestParseImport_UnknownAdapter(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   import unknown("schema.yaml")
 }
@@ -166,7 +165,6 @@ func TestParseImport_NilRegistry(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   import openapi("schema.yaml")
 }
@@ -185,7 +183,6 @@ func TestParseImport_ResolverError(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   import test("bad.yaml")
 }
@@ -206,7 +203,6 @@ func TestParseImport_DuplicateModelName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   model Pet {
     id: int
@@ -235,9 +231,9 @@ func TestParseImport_DuplicateScopeName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   scope my_scope {
+    use http
     contract {
       input { x: int }
       output { y: int }
@@ -267,7 +263,6 @@ func TestParseImport_EmptyResult(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	os.WriteFile(specFile, []byte(`
-use http
 spec Test {
   import test("empty.yaml")
 }
@@ -289,7 +284,6 @@ spec Test {
 
 func TestParseImport_SyntaxError_MissingParen(t *testing.T) {
 	src := `
-use http
 spec Test {
   import openapi "schema.yaml"
 }
@@ -302,7 +296,6 @@ spec Test {
 
 func TestParseImport_SyntaxError_MissingPath(t *testing.T) {
 	src := `
-use http
 spec Test {
   import openapi()
 }

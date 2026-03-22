@@ -37,6 +37,7 @@ func operationToScope(path, method string, op *openapi3.Operation) *parser.Scope
 
 	scope := &parser.Scope{
 		Name: name,
+		Use:  "http",
 		Config: map[string]parser.Expr{
 			"path":   parser.LiteralString{Value: path},
 			"method": parser.LiteralString{Value: strings.ToUpper(method)},

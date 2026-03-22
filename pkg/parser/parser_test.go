@@ -17,9 +17,6 @@ func TestParseTransferSpec(t *testing.T) {
 	t.Run("top-level structure", func(t *testing.T) {
 		t.Parallel()
 
-		if len(spec.Uses) != 1 || spec.Uses[0] != "http" {
-			t.Errorf("expected Uses=[http], got %v", spec.Uses)
-		}
 		if spec.Name != "AccountAPI" {
 			t.Errorf("expected Name=AccountAPI, got %q", spec.Name)
 		}
@@ -306,13 +303,13 @@ func TestParseTransferSpec(t *testing.T) {
 			t.Fatal("expected then block")
 		}
 
-		// Given block: 3 assignments
-		if len(sc.Given.Assignments) != 3 {
-			t.Fatalf("expected 3 given assignments, got %d", len(sc.Given.Assignments))
+		// Given block: 3 steps (all assignments)
+		if len(sc.Given.Steps) != 3 {
+			t.Fatalf("expected 3 given steps, got %d", len(sc.Given.Steps))
 		}
 
 		// from: { id: "alice", balance: 100 }
-		fromAssign := sc.Given.Assignments[0]
+		fromAssign := sc.Given.Steps[0].(*parser.Assignment)
 		if fromAssign.Path != "from" {
 			t.Errorf("expected path 'from', got %q", fromAssign.Path)
 		}
@@ -332,7 +329,7 @@ func TestParseTransferSpec(t *testing.T) {
 		}
 
 		// amount: 30
-		amountAssign := sc.Given.Assignments[2]
+		amountAssign := sc.Given.Steps[2].(*parser.Assignment)
 		if amountAssign.Path != "amount" {
 			t.Errorf("expected path 'amount', got %q", amountAssign.Path)
 		}
@@ -445,7 +442,7 @@ func TestParseExprPrecedence(t *testing.T) {
 	}{
 		{
 			name:  "addition before equality",
-			input: "spec T { scope s { invariant i { a + b == c } } }",
+			input: "spec T { scope s { use http invariant i { a + b == c } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				eq, ok := expr.(parser.BinaryOp)
@@ -460,7 +457,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "and before or",
-			input: "spec T { scope s { invariant i { a || b && c } } }",
+			input: "spec T { scope s { use http invariant i { a || b && c } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				or, ok := expr.(parser.BinaryOp)
@@ -475,7 +472,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "unary negation",
-			input: "spec T { scope s { invariant i { !a } } }",
+			input: "spec T { scope s { use http invariant i { !a } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				unary, ok := expr.(parser.UnaryOp)
@@ -536,7 +533,7 @@ func TestParseErrorCases(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"missing spec name", "use http\nspec {"},
+		{"missing spec name", "spec {"},
 		{"missing opening brace", "spec T model {}"},
 		{"unexpected token in spec body", "spec T { 123 }"},
 		{"unterminated spec", "spec T {"},

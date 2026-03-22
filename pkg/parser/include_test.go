@@ -126,9 +126,6 @@ func TestParseFile_WithIncludes(t *testing.T) {
 	if spec.Name != "TestAPI" {
 		t.Errorf("expected spec name TestAPI, got %q", spec.Name)
 	}
-	if len(spec.Uses) != 1 || spec.Uses[0] != "http" {
-		t.Errorf("expected Uses=[http], got %v", spec.Uses)
-	}
 	if len(spec.Models) != 1 || spec.Models[0].Name != "Account" {
 		t.Errorf("expected 1 model Account, got %v", spec.Models)
 	}

@@ -1,5 +1,3 @@
-use http
-
 spec UserAPI {
   description: "User service API imported from protobuf schema"
 

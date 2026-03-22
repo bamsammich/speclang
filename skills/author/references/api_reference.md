@@ -3,7 +3,6 @@
 ## File Structure
 
 ```
-use <plugin>                         # required: which adapter to use
 include "<path>"                     # optional: top-level include
 
 spec <Name> {
@@ -16,12 +15,22 @@ spec <Name> {
 
   include "<path>"                   # spec-body include
 
+  locators {                         # UI specs only: named element locators
+    <name>: [<css-selector>]
+  }
+
   model <Name> {
     <field>: <type>
     <field>: <type> { <constraint> }
   }
 
+  action <name>(<params>) {          # reusable action sequence
+    <plugin>.<verb>(<args>)
+  }
+
   scope <name> {
+    use <plugin>                     # required: which adapter drives this scope
+
     config {                         # opaque key-value pairs for adapter
       path: "/api/v1/resource"
       method: "POST"
@@ -42,13 +51,15 @@ spec <Name> {
     }
 
     scenario <name> {
-      given { ... }                  # concrete values (smoke test)
+      given { ... }                  # concrete values and/or action calls
       when { ... }                   # predicate (generative)
       then { ... }                   # assertions
     }
   }
 }
 ```
+
+**Important:** `use <plugin>` is declared at the **scope** level, not at spec level. Each scope independently declares which plugin drives it. This allows a single spec to mix plugins (e.g., one scope using `http` and another using `playwright`).
 
 ## Types
 
@@ -146,6 +157,75 @@ model Transfer {
 }
 ```
 
+## Locators Block
+
+UI specs declare named element locators at the spec level. Locator names are used in `given` blocks (as arguments to plugin actions) and in `then` blocks (with the `@plugin.property` assertion syntax).
+
+```
+locators {
+  username_field: [data-testid=username]
+  password_field: [data-testid=password]
+  submit_btn:     [data-testid=submit]
+  error_msg:      [data-testid=error]
+  welcome:        [data-testid=welcome]
+}
+```
+
+All locators must be pre-declared here. Inline selectors in action calls are not supported.
+
+## `@plugin.property` Assertion Syntax
+
+Use `locator@plugin.property: expected` in `then` blocks to assert on UI element state. The locator name is resolved from the spec's `locators` block to a CSS selector.
+
+```
+then {
+  welcome@playwright.visible: true
+  welcome@playwright.text: "Welcome, alice"
+  error_msg@playwright.visible: false
+}
+```
+
+This syntax is available to all adapters but is primarily used with `playwright`.
+
+## Mixed `given` Block Syntax
+
+`given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written.
+
+```
+given {
+  playwright.fill(username_field, "alice")   # action call
+  playwright.fill(password_field, "secret")  # action call
+  user: "alice"                               # data assignment
+  pass: "secret"                              # data assignment
+  playwright.click(submit_btn)               # action call
+}
+```
+
+Data assignments populate the input context for assertion evaluation. Action calls execute against the adapter immediately.
+
+You can also call named actions defined in `action` blocks:
+
+```
+action login(user, pass) {
+  playwright.fill(username_field, user)
+  playwright.fill(password_field, pass)
+  playwright.click(submit_btn)
+  playwright.wait(welcome)
+}
+
+scope login {
+  use playwright
+  scenario successful_login {
+    given {
+      login("alice", "secret")   # invoke named action
+    }
+    then {
+      welcome@playwright.visible: true
+    }
+  }
+}
+```
+
 ## Include Directive
 
 Split specs across files. Paths are relative to the including file.
@@ -186,3 +266,110 @@ For HTTP APIs. Scope config uses `path` and `method`. Target uses `base_url`.
 ### `use process`
 
 For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Target uses `command`. Scope config uses `args`.
+
+### `use playwright`
+
+For browser UI testing. Controls a real browser via Playwright. Target uses `base_url`, `headless` (default `"true"`), and `timeout` (milliseconds, default `"5000"`). Scope config uses `url` (the page path to navigate to).
+
+Requires Playwright browsers to be installed: `npx playwright install chromium`
+
+#### Actions
+
+| Action | Args | Description |
+|--------|------|-------------|
+| `playwright.goto(url)` | URL string | Navigate (prepends `base_url` if relative) |
+| `playwright.click(locator)` | locator name | Click element |
+| `playwright.fill(locator, value)` | locator name + text | Clear and type into input |
+| `playwright.type(locator, value)` | locator name + text | Append text (no clear) |
+| `playwright.select(locator, value)` | locator name + option | Select dropdown option |
+| `playwright.check(locator)` | locator name | Check checkbox |
+| `playwright.uncheck(locator)` | locator name | Uncheck checkbox |
+| `playwright.wait(locator)` | locator name | Wait for element to be visible |
+| `playwright.new_page()` | — | Create a fresh browser page |
+| `playwright.close_page()` | — | Close current page |
+| `playwright.clear_state()` | — | Clear cookies and localStorage |
+
+#### Assertions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `visible` | `bool` | Element is visible |
+| `text` | `string` | Text content |
+| `value` | `string` | Input field value |
+| `checked` | `bool` | Checkbox state |
+| `disabled` | `bool` | Whether element is disabled |
+| `count` | `int` | Number of matching elements |
+| `attribute.<name>` | `string` | Named attribute value (e.g., `attribute.href`) |
+
+#### Full Example
+
+```
+spec LoginApp {
+  description: "Login UI verification"
+
+  target {
+    base_url: env(APP_URL, "http://localhost:3000")
+    headless: "true"
+    timeout: "5000"
+  }
+
+  locators {
+    username_field: [data-testid=username]
+    password_field: [data-testid=password]
+    submit_btn:     [data-testid=submit]
+    welcome:        [data-testid=welcome]
+    error_msg:      [data-testid=error]
+  }
+
+  action login(user, pass) {
+    playwright.fill(username_field, user)
+    playwright.fill(password_field, pass)
+    playwright.click(submit_btn)
+  }
+
+  scope login {
+    use playwright
+
+    config {
+      url: "/login"
+    }
+
+    contract {
+      input {
+        user: string
+        pass: string
+      }
+      output {
+        ok: bool
+      }
+    }
+
+    scenario successful_login {
+      given {
+        login("alice", "secret")
+        user: "alice"
+      }
+      then {
+        welcome@playwright.visible: true
+        welcome@playwright.text: "Welcome, alice"
+        error_msg@playwright.visible: false
+      }
+    }
+
+    scenario invalid_credentials {
+      when {
+        pass != "secret"
+      }
+      then {
+        error_msg@playwright.visible: true
+      }
+    }
+
+    # The welcome banner must never appear when login fails.
+    invariant no_welcome_on_failure {
+      when ok == false:
+        welcome@playwright.visible: false
+    }
+  }
+}
+```

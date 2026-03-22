@@ -1,5 +1,6 @@
 # Verifies the generator produces constraint-satisfying outputs across seeds.
 scope generate {
+  use process
   config {
     args: "generate examples/transfer.spec --scope transfer --seed"
   }

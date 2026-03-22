@@ -1,5 +1,3 @@
-use process
-
 # Self-verification: speclang verifying its own runtime behavior.
 spec Speclang {
   description: "Black-box verification of the specrun CLI: parsing, generation, and end-to-end verify"
