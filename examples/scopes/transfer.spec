@@ -1,4 +1,5 @@
 scope transfer {
+  use http
   config {
     path: "/api/v1/accounts/transfer"
     method: "POST"

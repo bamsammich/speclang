@@ -1,5 +1,3 @@
-use http
-
 spec TypesTest {
   description: "Test spec exercising float, bytes, array, map, and len()"
 
@@ -13,6 +11,7 @@ spec TypesTest {
   }
 
   scope typed_inputs {
+    use http
     config {
       path: "/test"
       method: "POST"

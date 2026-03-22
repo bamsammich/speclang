@@ -49,6 +49,7 @@ func rpcToScope(serviceName string, rpc *pb.RPC, models map[string]*parser.Model
 
 	scope := &parser.Scope{
 		Name: rpc.RPCName,
+		Use:  "http",
 		Config: map[string]parser.Expr{
 			"service": parser.LiteralString{Value: serviceName},
 			"method":  parser.LiteralString{Value: rpc.RPCName},

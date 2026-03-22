@@ -155,14 +155,14 @@ func runVerify(args []string) int {
 
 	config := resolveTargetConfig(spec.Target)
 
-	adp, err := createAdapter(spec, config)
+	adapters, err := createAdapters(spec, config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
 	}
-	defer adp.Close()
+	defer closeAdapters(adapters)
 
-	r := runner.New(spec, adp, *seed)
+	r := runner.New(spec, adapters, *seed)
 	r.SetN(*iterations)
 
 	if !*jsonOutput {
@@ -248,12 +248,38 @@ func printFailedCheck(check runner.CheckResult) {
 	}
 }
 
-func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.Adapter, error) {
-	if len(spec.Uses) == 0 {
-		return nil, errors.New("spec has no 'use' directive")
+// collectPlugins returns the unique set of plugin names from all scopes.
+func collectPlugins(spec *parser.Spec) []string {
+	seen := make(map[string]bool)
+	var plugins []string
+	for _, scope := range spec.Scopes {
+		if scope.Use != "" && !seen[scope.Use] {
+			seen[scope.Use] = true
+			plugins = append(plugins, scope.Use)
+		}
+	}
+	return plugins
+}
+
+func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[string]adapter.Adapter, error) {
+	plugins := collectPlugins(spec)
+	if len(plugins) == 0 {
+		return nil, errors.New("no scopes declare a 'use' directive")
 	}
 
-	pluginName := spec.Uses[0]
+	adapters := make(map[string]adapter.Adapter, len(plugins))
+	for _, name := range plugins {
+		adp, err := createSingleAdapter(name, targetConfig)
+		if err != nil {
+			closeAdapters(adapters)
+			return nil, fmt.Errorf("initializing %q adapter: %w", name, err)
+		}
+		adapters[name] = adp
+	}
+	return adapters, nil
+}
+
+func createSingleAdapter(pluginName string, targetConfig map[string]string) (adapter.Adapter, error) {
 	switch pluginName {
 	case "http":
 		adp := adapter.NewHTTPAdapter()
@@ -275,6 +301,12 @@ func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.A
 		return adp, nil
 	default:
 		return nil, fmt.Errorf("unknown plugin %q", pluginName)
+	}
+}
+
+func closeAdapters(adapters map[string]adapter.Adapter) {
+	for _, adp := range adapters {
+		adp.Close() //nolint:errcheck
 	}
 }
 

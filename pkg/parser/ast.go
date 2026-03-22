@@ -2,7 +2,6 @@ package parser
 
 // Spec is the top-level AST node for a parsed spec file.
 type Spec struct {
-	Uses        []string          `json:"uses,omitempty"`
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	Target      *Target           `json:"target,omitempty"`
@@ -13,10 +12,12 @@ type Spec struct {
 }
 
 // Scope is a named grouping that owns a contract, invariants, and scenarios.
+// Use declares which plugin adapter handles this scope's execution.
 // The Config block is opaque key-value pairs interpreted by the adapter.
 type Scope struct {
 	Name       string              `json:"name"`
-	Config     map[string]Expr     `json:"config,omitempty"` // opaque key-value pairs, interpreted by adapter
+	Use        string              `json:"use"`                  // plugin binding (e.g. "http", "playwright")
+	Config     map[string]Expr     `json:"config,omitempty"`     // opaque key-value pairs, interpreted by adapter
 	Contract   *Contract           `json:"contract,omitempty"`
 	Invariants []*Invariant        `json:"invariants,omitempty"`
 	Scenarios  []*Scenario         `json:"scenarios,omitempty"`

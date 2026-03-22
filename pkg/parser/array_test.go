@@ -6,10 +6,10 @@ import (
 
 func TestParseArrayType(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   model Item { name: string }
   scope test {
+    use http
     contract {
       input {
         tags: []string
@@ -67,9 +67,9 @@ spec Test {
 
 func TestParseMapType(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input {
         metadata: map[string, int]
@@ -110,9 +110,9 @@ spec Test {
 
 func TestParseLenExpr(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input {
         items: []int { len(items) > 0 }

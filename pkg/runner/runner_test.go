@@ -66,7 +66,7 @@ func TestVerify_ScopeResults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := runner.New(spec, adp, 42)
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 42)
 	r.SetN(10)
 	res, err := r.Verify()
 	if err != nil {
@@ -108,9 +108,9 @@ func TestRelationalAssertions(t *testing.T) {
 	// Build a spec with relational then-assertions programmatically.
 	spec := &parser.Spec{
 		Name: "RelTest",
-		Uses: []string{"http"},
 		Scopes: []*parser.Scope{{
 			Name: "math",
+			Use:  "http",
 			Config: map[string]parser.Expr{
 				"path":   parser.LiteralString{Value: "/add"},
 				"method": parser.LiteralString{Value: "POST"},
@@ -154,7 +154,7 @@ func TestRelationalAssertions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := runner.New(spec, adp, 1)
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
 	res, err := r.Verify()
 	if err != nil {
 		t.Fatalf("verify: %v", err)
@@ -201,12 +201,12 @@ func TestLocatorResolution(t *testing.T) {
 
 	spec := &parser.Spec{
 		Name: "LocatorTest",
-		Uses: []string{"playwright"},
 		Locators: map[string]string{
 			"welcome": "[data-testid=welcome]",
 		},
 		Scopes: []*parser.Scope{{
 			Name:   "ui",
+			Use:    "playwright",
 			Config: map[string]parser.Expr{},
 			Scenarios: []*parser.Scenario{{
 				Name: "check_visible",
@@ -230,7 +230,7 @@ func TestLocatorResolution(t *testing.T) {
 	}
 
 	mock := &mockAdapter{}
-	r := runner.New(spec, mock, 1)
+	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
 	_, err := r.Verify()
 	if err != nil {
 		t.Fatalf("verify: %v", err)
@@ -254,10 +254,10 @@ func TestLocatorResolution_MissingLocator(t *testing.T) {
 
 	spec := &parser.Spec{
 		Name: "LocatorTest",
-		Uses: []string{"playwright"},
 		// No locators defined
 		Scopes: []*parser.Scope{{
 			Name:   "ui",
+			Use:    "playwright",
 			Config: map[string]parser.Expr{},
 			Scenarios: []*parser.Scenario{{
 				Name: "missing",
@@ -281,7 +281,7 @@ func TestLocatorResolution_MissingLocator(t *testing.T) {
 	}
 
 	mock := &mockAdapter{}
-	r := runner.New(spec, mock, 1)
+	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
 	_, err := r.Verify()
 	if err == nil {
 		t.Fatal("expected error for missing locator, got nil")
@@ -294,7 +294,6 @@ func TestGivenStepExecution(t *testing.T) {
 	// Spec with mixed given steps: calls and assignments, executed in order.
 	spec := &parser.Spec{
 		Name: "StepTest",
-		Uses: []string{"playwright"},
 		Locators: map[string]string{
 			"username": "[data-testid=username]",
 			"submit":   "[data-testid=submit]",
@@ -302,6 +301,7 @@ func TestGivenStepExecution(t *testing.T) {
 		},
 		Scopes: []*parser.Scope{{
 			Name:   "login",
+			Use:    "playwright",
 			Config: map[string]parser.Expr{},
 			Scenarios: []*parser.Scenario{{
 				Name: "login_flow",
@@ -343,7 +343,7 @@ func TestGivenStepExecution(t *testing.T) {
 	}
 
 	mock := &mockAdapter{}
-	r := runner.New(spec, mock, 1)
+	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
 	_, err := r.Verify()
 	if err != nil {
 		t.Fatalf("verify: %v", err)
@@ -408,7 +408,7 @@ func TestVerifyTransferSpec(t *testing.T) {
 		t.Fatalf("init adapter: %v", err)
 	}
 
-	r := runner.New(spec, adp, 42)
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 42)
 	r.SetN(100)
 
 	res, err := r.Verify()

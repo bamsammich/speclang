@@ -127,14 +127,10 @@ func (p *parser) expectIdent() (Token, error) {
 func (p *parser) parse() (*Spec, error) {
 	spec := &Spec{}
 
-	// Parse top-level "use" directives.
-	for p.peek().Type == TokenUse {
-		p.advance() // consume "use"
-		name, err := p.expect(TokenIdent)
-		if err != nil {
-			return nil, fmt.Errorf("parsing use: %w", err)
-		}
-		spec.Uses = append(spec.Uses, name.Value)
+	// Spec-level "use" is no longer valid — plugins are declared at scope level.
+	if p.peek().Type == TokenUse {
+		tok := p.peek()
+		return nil, p.errAt(tok, "'use' directive must be inside a scope block, not at spec level")
 	}
 
 	// Parse "spec Name { ... }"
@@ -159,6 +155,13 @@ func (p *parser) parse() (*Spec, error) {
 
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
+	}
+
+	// Validate: every scope must declare a plugin via 'use'.
+	for _, scope := range spec.Scopes {
+		if scope.Use == "" {
+			return nil, fmt.Errorf("scope %q is missing a 'use <plugin>' directive", scope.Name)
+		}
 	}
 
 	return spec, nil
@@ -292,6 +295,16 @@ func (p *parser) parseScope() (*Scope, error) {
 func (p *parser) parseScopeMember(scope *Scope) error {
 	tok := p.peek()
 	switch tok.Type {
+	case TokenUse:
+		p.advance() // consume "use"
+		name, err := p.expect(TokenIdent)
+		if err != nil {
+			return err
+		}
+		if scope.Use != "" {
+			return p.errAt(tok, fmt.Sprintf("scope %q has multiple 'use' directives", scope.Name))
+		}
+		scope.Use = name.Value
 	case TokenConfig:
 		config, err := p.parseScopeConfig()
 		if err != nil {

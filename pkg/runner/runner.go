@@ -49,19 +49,19 @@ type CheckResult struct {
 
 // Runner orchestrates spec verification.
 type Runner struct {
-	spec    *parser.Spec
-	adapter adapter.Adapter
-	seed    uint64
-	n       int
+	spec     *parser.Spec
+	adapters map[string]adapter.Adapter
+	seed     uint64
+	n        int
 }
 
 // New creates a runner for the given spec.
-func New(spec *parser.Spec, adp adapter.Adapter, seed uint64) *Runner {
+func New(spec *parser.Spec, adapters map[string]adapter.Adapter, seed uint64) *Runner {
 	return &Runner{
-		spec:    spec,
-		adapter: adp,
-		seed:    seed,
-		n:       100,
+		spec:     spec,
+		adapters: adapters,
+		seed:     seed,
+		n:        100,
 	}
 }
 
@@ -73,6 +73,7 @@ func (r *Runner) SetN(n int) {
 // scopeRunner holds per-scope state for running scenarios and invariants.
 type scopeRunner struct {
 	runner    *Runner
+	adapter   adapter.Adapter // resolved from scope.Use
 	generator *generator.Generator
 	scopeDef  *parser.Scope
 	scope     string
@@ -93,7 +94,10 @@ func (r *Runner) Verify() (*Result, error) {
 	res := &Result{Spec: r.spec.Name}
 
 	for _, scope := range r.spec.Scopes {
-		sr := r.newScopeRunner(scope)
+		sr, err := r.newScopeRunner(scope)
+		if err != nil {
+			return nil, err
+		}
 		if err := sr.run(res); err != nil {
 			return nil, err
 		}
@@ -102,17 +106,22 @@ func (r *Runner) Verify() (*Result, error) {
 	return res, nil
 }
 
-func (r *Runner) newScopeRunner(scope *parser.Scope) *scopeRunner {
+func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
+	adp, ok := r.adapters[scope.Use]
+	if !ok {
+		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", scope.Use, scope.Name)
+	}
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
 	method := strings.ToUpper(resolveConfigString(scope.Config, "method"))
 	return &scopeRunner{
 		runner:    r,
+		adapter:   adp,
 		generator: gen,
 		scopeDef:  scope,
 		scope:     scope.Name,
 		path:      resolveConfigString(scope.Config, "path"),
 		method:    method,
-	}
+	}, nil
 }
 
 func (sr *scopeRunner) run(res *Result) error {
@@ -191,7 +200,7 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, err
 	}
 
-	resp, err := sr.runner.adapter.Action(actionName, args)
+	resp, err := sr.adapter.Action(actionName, args)
 	if err != nil {
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
@@ -320,7 +329,7 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			if err != nil {
 				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
 			}
-			resp, err := sr.runner.adapter.Action(s.Method, args)
+			resp, err := sr.adapter.Action(s.Method, args)
 			if err != nil {
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
 			}
@@ -429,7 +438,7 @@ func hasPluginAssertions(assertions []*parser.Assertion) bool {
 
 // newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
 func (sr *scopeRunner) newPageWithNavigation() error {
-	resp, err := sr.runner.adapter.Action("new_page", nil)
+	resp, err := sr.adapter.Action("new_page", nil)
 	if err != nil {
 		return fmt.Errorf("creating new page: %w", err)
 	}
@@ -440,7 +449,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 	url := resolveConfigString(sr.scopeDef.Config, "url")
 	if url != "" {
 		args, _ := json.Marshal([]string{url})
-		resp, err := sr.runner.adapter.Action("goto", args)
+		resp, err := sr.adapter.Action("goto", args)
 		if err != nil {
 			return fmt.Errorf("navigating to %q: %w", url, err)
 		}
@@ -453,7 +462,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 
 // closePage closes the current page via the adapter.
 func (sr *scopeRunner) closePage() error {
-	resp, err := sr.runner.adapter.Action("close_page", nil)
+	resp, err := sr.adapter.Action("close_page", nil)
 	if err != nil {
 		return err
 	}
@@ -507,7 +516,7 @@ func (sr *scopeRunner) checkThenAssertions(
 			locator = selector
 			property = a.Property
 		}
-		resp, err := sr.runner.adapter.Assert(property, locator, expected)
+		resp, err := sr.adapter.Assert(property, locator, expected)
 		if err != nil {
 			return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
 		}

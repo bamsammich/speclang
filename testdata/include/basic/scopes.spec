@@ -1,5 +1,6 @@
 # Included by basic/root.spec.
 scope transfer {
+  use http
   config {
     path: "/transfer"
     method: "POST"

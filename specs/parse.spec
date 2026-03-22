@@ -1,5 +1,6 @@
 # Verifies the parser accepts valid specs and produces expected AST structure.
 scope parse_valid {
+  use process
   config {
     args: "parse"
   }
@@ -59,6 +60,7 @@ scope parse_valid {
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
 scope parse_invalid {
+  use process
   config {
     args: "parse"
   }

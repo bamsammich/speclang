@@ -4,9 +4,9 @@ import "testing"
 
 func TestParseGivenBlock_Assignments(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input { x: int }
       output { y: int }
@@ -40,9 +40,9 @@ spec Test {
 
 func TestParseGivenBlock_ActionCalls(t *testing.T) {
 	spec, err := Parse(`
-use playwright
 spec Test {
   scope test {
+    use playwright
     contract {
       input { x: int }
       output { ok: bool }

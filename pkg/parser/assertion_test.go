@@ -4,12 +4,12 @@ import "testing"
 
 func TestParseThenBlock_AtSyntax(t *testing.T) {
 	spec, err := Parse(`
-use playwright
 spec Test {
   locators {
     welcome: [data-testid=welcome]
   }
   scope test {
+    use playwright
     contract {
       input { x: int }
       output { ok: bool }
@@ -55,9 +55,9 @@ spec Test {
 
 func TestParseThenBlock_PathAssertion_Unchanged(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input { x: int }
       output { y: int }

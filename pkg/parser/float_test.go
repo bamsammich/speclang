@@ -84,9 +84,9 @@ func TestLexFloat(t *testing.T) {
 
 func TestParseFloatLiteral(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input {
         price: float { price > 0.5 }
