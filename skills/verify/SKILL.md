@@ -31,6 +31,12 @@ go build -o ./specrun ./cmd/specrun
 which specrun
 ```
 
+### 2b. For playwright specs, ensure browsers are installed
+
+```bash
+specrun install playwright
+```
+
 ### 3. Run verification
 
 ```bash
