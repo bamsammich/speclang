@@ -779,7 +779,12 @@ func (p *parser) parseScenarioBlock(sc *Scenario) error {
 	return nil
 }
 
-// parseGivenBlock parses: { assignments... }
+// parseGivenBlock parses: { (assignments | calls)... }
+// Distinguishes calls from assignments by lookahead:
+//   - ident.ident( → namespaced call
+//   - ident(       → local call
+//   - ident:       → assignment
+//   - ident.ident: → dotted-path assignment
 func (p *parser) parseGivenBlock() (*Block, error) {
 	if _, err := p.expect(TokenLBrace); err != nil {
 		return nil, err
@@ -787,27 +792,54 @@ func (p *parser) parseGivenBlock() (*Block, error) {
 
 	block := &Block{}
 	for p.peek().Type != TokenRBrace {
-		path, err := p.parseFieldPath()
-		if err != nil {
-			return nil, err
+		if p.isGivenCall() {
+			call, err := p.parseCall()
+			if err != nil {
+				return nil, err
+			}
+			block.Steps = append(block.Steps, call)
+		} else {
+			path, err := p.parseFieldPath()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(TokenColon); err != nil {
+				return nil, err
+			}
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			block.Steps = append(block.Steps, &Assignment{
+				Path:  path,
+				Value: val,
+			})
 		}
-		if _, err := p.expect(TokenColon); err != nil {
-			return nil, err
-		}
-		val, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		block.Steps = append(block.Steps, &Assignment{
-			Path:  path,
-			Value: val,
-		})
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
 	}
 	return block, nil
+}
+
+// isGivenCall returns true if the current position starts a call (not an assignment).
+// Patterns: ident( or ident.ident(
+func (p *parser) isGivenCall() bool {
+	if p.pos >= len(p.tokens) {
+		return false
+	}
+	// ident( → local call
+	if p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == TokenLParen {
+		return true
+	}
+	// ident.ident( → namespaced call
+	if p.pos+3 < len(p.tokens) &&
+		p.tokens[p.pos+1].Type == TokenDot &&
+		p.tokens[p.pos+3].Type == TokenLParen {
+		return true
+	}
+	return false
 }
 
 // parseWhenBlock parses: { predicates... }
