@@ -90,11 +90,17 @@ type Scenario struct {
 	Name  string `json:"name"`
 }
 
-// Block is a braced section containing assignments, predicates, or assertions.
+// GivenStep is a step in a given block — either an assignment or an action call.
+type GivenStep interface{ givenStep() }
+
+func (*Assignment) givenStep() {}
+func (*Call) givenStep()       {}
+
+// Block is a braced section containing steps, predicates, or assertions.
 type Block struct {
-	Assignments []*Assignment `json:"assignments,omitempty"` // concrete values (given blocks)
-	Predicates  []Expr        `json:"predicates,omitempty"`  // when-predicate conditions (when blocks)
-	Assertions  []*Assertion  `json:"assertions,omitempty"`  // then-block checks
+	Steps      []GivenStep  `json:"steps,omitempty"`      // ordered: assignments + calls (given blocks)
+	Predicates []Expr       `json:"predicates,omitempty"` // when-predicate conditions (when blocks)
+	Assertions []*Assertion `json:"assertions,omitempty"` // then-block checks
 }
 
 // Assertion is a check. Two forms:

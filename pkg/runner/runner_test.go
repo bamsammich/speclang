@@ -118,9 +118,9 @@ func TestRelationalAssertions(t *testing.T) {
 			Scenarios: []*parser.Scenario{{
 				Name: "relational",
 				Given: &parser.Block{
-					Assignments: []*parser.Assignment{
-						{Path: "a", Value: parser.LiteralInt{Value: 7}},
-						{Path: "b", Value: parser.LiteralInt{Value: 3}},
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "a", Value: parser.LiteralInt{Value: 7}},
+						&parser.Assignment{Path: "b", Value: parser.LiteralInt{Value: 3}},
 					},
 				},
 				Then: &parser.Block{

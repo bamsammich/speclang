@@ -258,7 +258,7 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 }
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
-	input := assignmentsToMap(sc.Given.Assignments)
+	input := stepsToMap(sc.Given.Steps)
 
 	if _, err := sr.executeInput(input); err != nil {
 		return CheckResult{}, err
@@ -540,11 +540,13 @@ func buildInvariantContext(input, output map[string]any) map[string]any {
 	return ctx
 }
 
-// assignmentsToMap converts a list of assignments to a nested map.
-func assignmentsToMap(assignments []*parser.Assignment) map[string]any {
+// stepsToMap extracts assignments from given steps into a nested map.
+func stepsToMap(steps []parser.GivenStep) map[string]any {
 	result := make(map[string]any)
-	for _, a := range assignments {
-		setPath(result, a.Path, exprToValue(a.Value))
+	for _, s := range steps {
+		if a, ok := s.(*parser.Assignment); ok {
+			setPath(result, a.Path, exprToValue(a.Value))
+		}
 	}
 	return result
 }

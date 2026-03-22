@@ -798,7 +798,7 @@ func (p *parser) parseGivenBlock() (*Block, error) {
 		if err != nil {
 			return nil, err
 		}
-		block.Assignments = append(block.Assignments, &Assignment{
+		block.Steps = append(block.Steps, &Assignment{
 			Path:  path,
 			Value: val,
 		})

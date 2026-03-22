@@ -306,13 +306,13 @@ func TestParseTransferSpec(t *testing.T) {
 			t.Fatal("expected then block")
 		}
 
-		// Given block: 3 assignments
-		if len(sc.Given.Assignments) != 3 {
-			t.Fatalf("expected 3 given assignments, got %d", len(sc.Given.Assignments))
+		// Given block: 3 steps (all assignments)
+		if len(sc.Given.Steps) != 3 {
+			t.Fatalf("expected 3 given steps, got %d", len(sc.Given.Steps))
 		}
 
 		// from: { id: "alice", balance: 100 }
-		fromAssign := sc.Given.Assignments[0]
+		fromAssign := sc.Given.Steps[0].(*parser.Assignment)
 		if fromAssign.Path != "from" {
 			t.Errorf("expected path 'from', got %q", fromAssign.Path)
 		}
@@ -332,7 +332,7 @@ func TestParseTransferSpec(t *testing.T) {
 		}
 
 		// amount: 30
-		amountAssign := sc.Given.Assignments[2]
+		amountAssign := sc.Given.Steps[2].(*parser.Assignment)
 		if amountAssign.Path != "amount" {
 			t.Errorf("expected path 'amount', got %q", amountAssign.Path)
 		}
