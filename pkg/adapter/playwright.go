@@ -99,6 +99,8 @@ func (a *PlaywrightAdapter) Action(name string, args json.RawMessage) (*Response
 		return a.doUncheck(rawArgs)
 	case "wait":
 		return a.doWait(rawArgs)
+	case "resize":
+		return a.doResize(rawArgs)
 	case "new_page":
 		return a.doNewPage()
 	case "close_page":
@@ -328,6 +330,23 @@ func (a *PlaywrightAdapter) doWait(args []json.RawMessage) (*Response, error) {
 	if err := a.page.Locator(selector).WaitFor(playwright.LocatorWaitForOptions{
 		Timeout: &a.timeout,
 	}); err != nil {
+		return &Response{OK: false, Error: err.Error()}, nil
+	}
+	return &Response{OK: true}, nil
+}
+
+func (a *PlaywrightAdapter) doResize(args []json.RawMessage) (*Response, error) {
+	if len(args) < 2 {
+		return nil, errors.New("resize requires width and height arguments")
+	}
+	var width, height int
+	if err := json.Unmarshal(args[0], &width); err != nil {
+		return nil, fmt.Errorf("parsing width: %w", err)
+	}
+	if err := json.Unmarshal(args[1], &height); err != nil {
+		return nil, fmt.Errorf("parsing height: %w", err)
+	}
+	if err := a.page.SetViewportSize(width, height); err != nil {
 		return &Response{OK: false, Error: err.Error()}, nil
 	}
 	return &Response{OK: true}, nil

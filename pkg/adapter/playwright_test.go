@@ -219,6 +219,38 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("resize viewport", func(t *testing.T) {
+		// Resize to mobile.
+		resizeArgs, _ := json.Marshal([]int{375, 812})
+		resp, err := adp.Action("resize", resizeArgs)
+		if err != nil {
+			t.Fatalf("resize: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("resize failed: %s", resp.Error)
+		}
+
+		// Page should still work at mobile size.
+		gotoArgs, _ := json.Marshal([]string{"/login"})
+		resp, err = adp.Action("goto", gotoArgs)
+		if err != nil {
+			t.Fatalf("goto after resize: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("goto after resize failed: %s", resp.Error)
+		}
+
+		// Resize back to desktop.
+		resizeArgs, _ = json.Marshal([]int{1920, 1080})
+		resp, err = adp.Action("resize", resizeArgs)
+		if err != nil {
+			t.Fatalf("resize back: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("resize back failed: %s", resp.Error)
+		}
+	})
+
 	t.Run("failed login shows error", func(t *testing.T) {
 		// Navigate fresh.
 		gotoArgs, _ := json.Marshal([]string{"/login"})

@@ -10,6 +10,7 @@ plugin playwright {
         check(selector: string)
         uncheck(selector: string)
         wait(selector: string)
+        resize(width: int, height: int)
         new_page()
         close_page()
         clear_state()

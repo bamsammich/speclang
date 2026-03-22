@@ -351,6 +351,7 @@ APP_URL=http://localhost:3000 specrun verify login.spec
 | `check(selector)` | CSS selector | Check checkbox |
 | `uncheck(selector)` | CSS selector | Uncheck checkbox |
 | `wait(selector)` | CSS selector | Wait for element visible |
+| `resize(width, height)` | integers | Set viewport size (e.g., 375×812 for mobile) |
 
 **Available assertions** (used as `locator@playwright.<property>`):
 
