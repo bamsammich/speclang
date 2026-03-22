@@ -267,6 +267,12 @@ func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.A
 			return nil, err
 		}
 		return adp, nil
+	case "playwright":
+		adp := adapter.NewPlaywrightAdapter()
+		if err := adp.Init(targetConfig); err != nil {
+			return nil, err
+		}
+		return adp, nil
 	default:
 		return nil, fmt.Errorf("unknown plugin %q", pluginName)
 	}
