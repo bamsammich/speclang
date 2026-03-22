@@ -22,7 +22,7 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
   - `invariant` — universal law, must hold for ALL valid inputs
-- **Plugin = spec + adapter binary**: Plugin spec declares typed actions/assertions. Adapter binary implements them over JSON stdin/stdout protocol.
+- **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout). Built-in plugins cover common use cases; external plugins extend the system without modifying specrun.
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC.
 - **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks. Each scope has an opaque `config` block for plugin-specific settings (e.g., HTTP path/method). The parser is agnostic to config semantics.
 - **Counterexample shrinking**: When a failure is found, the runtime performs binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively) to produce minimal counterexamples.
