@@ -14,6 +14,7 @@ import (
 	"github.com/bamsammich/speclang/pkg/parser"
 	protoResolver "github.com/bamsammich/speclang/pkg/proto"
 	"github.com/bamsammich/speclang/pkg/runner"
+	playwright "github.com/playwright-community/playwright-go"
 )
 
 func main() {
@@ -29,6 +30,8 @@ func main() {
 		os.Exit(runGenerate(os.Args[2:]))
 	case "verify":
 		os.Exit(runVerify(os.Args[2:]))
+	case "install":
+		os.Exit(runInstall(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -245,6 +248,31 @@ func printFailedCheck(check runner.CheckResult) {
 	}
 	if f.Actual != nil {
 		fmt.Printf("        actual:   %v\n", f.Actual)
+	}
+}
+
+func runInstall(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: specrun install <plugin>")
+		fmt.Fprintln(os.Stderr, "  supported: playwright")
+		return 1
+	}
+
+	switch args[0] {
+	case "playwright":
+		fmt.Println("Installing Playwright browsers (chromium)...")
+		err := playwright.Install(&playwright.RunOptions{
+			Browsers: []string{"chromium"},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
+			return 1
+		}
+		fmt.Println("Playwright browsers installed successfully.")
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", args[0])
+		return 1
 	}
 }
 

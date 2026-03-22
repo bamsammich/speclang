@@ -49,14 +49,14 @@ func skipIfNoBrowsers(t *testing.T) {
 	t.Helper()
 	instance, err := pw.Run()
 	if err != nil {
-		t.Skipf("playwright not available (run 'npx playwright install chromium'): %v", err)
+		t.Skipf("playwright not available (run 'specrun install playwright'): %v", err)
 	}
 	browser, err := instance.Chromium.Launch(pw.BrowserTypeLaunchOptions{
 		Headless: pw.Bool(true),
 	})
 	if err != nil {
 		instance.Stop() //nolint:errcheck
-		t.Skipf("chromium not installed (run 'npx playwright install chromium'): %v", err)
+		t.Skipf("chromium not installed (run 'specrun install playwright'): %v", err)
 	}
 	browser.Close() //nolint:errcheck
 	instance.Stop() //nolint:errcheck

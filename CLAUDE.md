@@ -329,6 +329,7 @@ go test ./...                                                   # run all tests
 ./specrun generate examples/transfer.spec --scope transfer      # generate one input as JSON
 ./specrun verify examples/transfer.spec --json                  # verify with JSON output
 ./specrun verify specs/speclang.spec                            # self-verification
+./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 
 ## Process Adapter

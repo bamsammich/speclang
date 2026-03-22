@@ -49,7 +49,7 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 
 	pw, err := playwright.Run()
 	if err != nil {
-		return fmt.Errorf("starting playwright: %w\n\nHint: run 'npx playwright install chromium' to install browsers", err)
+		return fmt.Errorf("starting playwright: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
 	}
 	a.pw = pw
 
@@ -58,7 +58,7 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 	})
 	if err != nil {
 		a.pw.Stop() //nolint:errcheck
-		return fmt.Errorf("launching browser: %w\n\nHint: run 'npx playwright install chromium' to install browsers", err)
+		return fmt.Errorf("launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
 	}
 	a.browser = browser
 
