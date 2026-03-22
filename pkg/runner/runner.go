@@ -355,6 +355,7 @@ func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, erro
 
 func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error) {
 	predicate := buildPredicate(sc.When.Predicates)
+	needsPageIsolation := sc.Then != nil && hasPluginAssertions(sc.Then.Assertions)
 
 	check := CheckResult{
 		Name:   sc.Name,
@@ -368,28 +369,98 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 			return CheckResult{}, err
 		}
 
+		if needsPageIsolation {
+			if err := sr.newPageWithNavigation(); err != nil {
+				return CheckResult{}, fmt.Errorf("iteration %d: %w", i+1, err)
+			}
+		}
+
 		if _, err := sr.executeInput(input); err != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			return CheckResult{}, err
 		}
 
 		check.InputsRun = i + 1
 
 		if sc.Then == nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			continue
 		}
 
 		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			return CheckResult{}, err
 		} else if f != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			f = sr.shrinkFailure(f, sc.Then)
 			check.Passed = false
 			check.FailedAt = i + 1
 			check.Failure = f
 			return check, nil
 		}
+
+		if needsPageIsolation {
+			if err := sr.closePage(); err != nil {
+				return CheckResult{}, fmt.Errorf("iteration %d: closing page: %w", i+1, err)
+			}
+		}
 	}
 
 	return check, nil
+}
+
+// hasPluginAssertions returns true if any assertion uses @plugin.property syntax.
+func hasPluginAssertions(assertions []*parser.Assertion) bool {
+	for _, a := range assertions {
+		if a.Plugin != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
+func (sr *scopeRunner) newPageWithNavigation() error {
+	resp, err := sr.runner.adapter.Action("new_page", nil)
+	if err != nil {
+		return fmt.Errorf("creating new page: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("creating new page: %s", resp.Error)
+	}
+
+	url := resolveConfigString(sr.scopeDef.Config, "url")
+	if url != "" {
+		args, _ := json.Marshal([]string{url})
+		resp, err := sr.runner.adapter.Action("goto", args)
+		if err != nil {
+			return fmt.Errorf("navigating to %q: %w", url, err)
+		}
+		if !resp.OK {
+			return fmt.Errorf("navigating to %q: %s", url, resp.Error)
+		}
+	}
+	return nil
+}
+
+// closePage closes the current page via the adapter.
+func (sr *scopeRunner) closePage() error {
+	resp, err := sr.runner.adapter.Action("close_page", nil)
+	if err != nil {
+		return err
+	}
+	if !resp.OK {
+		return fmt.Errorf("closing page: %s", resp.Error)
+	}
+	return nil
 }
 
 // buildPredicate creates a filter function from when-block predicates.
