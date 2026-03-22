@@ -357,7 +357,17 @@ func (sr *scopeRunner) checkThenAssertions(
 			return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
 		}
 
-		resp, err := sr.runner.adapter.Assert(a.Target, "", expected)
+		property := a.Target
+		locator := ""
+		if a.Plugin != "" {
+			selector, ok := sr.runner.spec.Locators[a.Target]
+			if !ok {
+				return nil, fmt.Errorf("locator %q not defined in locators block", a.Target)
+			}
+			locator = selector
+			property = a.Property
+		}
+		resp, err := sr.runner.adapter.Assert(property, locator, expected)
 		if err != nil {
 			return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
 		}
