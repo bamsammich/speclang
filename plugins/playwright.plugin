@@ -1,0 +1,26 @@
+plugin playwright {
+    adapter: "builtin"
+
+    actions {
+        goto(url: string)
+        click(selector: string)
+        fill(selector: string, value: string)
+        type(selector: string, value: string)
+        select(selector: string, value: string)
+        check(selector: string)
+        uncheck(selector: string)
+        wait(selector: string)
+        new_page()
+        close_page()
+        clear_state()
+    }
+
+    assertions {
+        visible: bool
+        text: string
+        value: string
+        checked: bool
+        disabled: bool
+        count: int
+    }
+}
