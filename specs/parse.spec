@@ -56,6 +56,17 @@ scope parse_valid {
       name: "ProtoImportTest"
     }
   }
+
+  # Verifies that playwright spec syntax (locators, @assertions, mixed given) parses.
+  scenario playwright_spec {
+    given {
+      file: "testdata/playwright/login.spec"
+    }
+    then {
+      exit_code: 0
+      name: "LoginUI"
+    }
+  }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
