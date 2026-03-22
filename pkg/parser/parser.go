@@ -876,6 +876,27 @@ func (p *parser) parseThenBlock() (*Block, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		a := &Assertion{Target: path}
+
+		// Check for @plugin.property syntax: target@plugin.property: expected
+		if p.peek().Type == TokenAt {
+			p.advance() // consume @
+			plugin, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(TokenDot); err != nil {
+				return nil, err
+			}
+			property, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			a.Plugin = plugin.Value
+			a.Property = property.Value
+		}
+
 		if _, err := p.expect(TokenColon); err != nil {
 			return nil, err
 		}
@@ -883,10 +904,8 @@ func (p *parser) parseThenBlock() (*Block, error) {
 		if err != nil {
 			return nil, err
 		}
-		block.Assertions = append(block.Assertions, &Assertion{
-			Target:   path,
-			Expected: val,
-		})
+		a.Expected = val
+		block.Assertions = append(block.Assertions, a)
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
