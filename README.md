@@ -229,10 +229,10 @@ speclang uses a plugin architecture for interacting with different systems. Each
 
 Use `playwright` to write specs for browser-driven UIs. It controls a real browser via [Playwright](https://playwright.dev/).
 
-**Requirements:** Install Playwright browsers before running:
+**Setup:**
 
 ```bash
-npx playwright install chromium
+specrun install playwright    # downloads Chromium (~165 MB, one-time)
 ```
 
 **Locators:** Declare named element locators at spec level, then reference them by name in actions and assertions:
@@ -325,6 +325,53 @@ spec LoginApp {
   }
 }
 ```
+
+**Running a playwright spec:**
+
+```bash
+# 1. Install browsers (one-time)
+specrun install playwright
+
+# 2. Start your web app
+#    (specrun doesn't manage your app — it connects to a running server)
+
+# 3. Verify
+APP_URL=http://localhost:3000 specrun verify login.spec
+```
+
+**Available actions:**
+
+| Action | Args | Description |
+|--------|------|-------------|
+| `goto(url)` | URL string | Navigate (prepends `base_url` for relative paths) |
+| `click(selector)` | CSS selector | Click element |
+| `fill(selector, value)` | selector + text | Clear and type into input |
+| `type(selector, value)` | selector + text | Append text (no clear) |
+| `select(selector, value)` | selector + option | Select dropdown option |
+| `check(selector)` | CSS selector | Check checkbox |
+| `uncheck(selector)` | CSS selector | Uncheck checkbox |
+| `wait(selector)` | CSS selector | Wait for element visible |
+
+**Available assertions** (used as `locator@playwright.<property>`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `visible` | bool | Element is visible |
+| `text` | string | Text content |
+| `value` | string | Input value |
+| `checked` | bool | Checkbox state |
+| `disabled` | bool | Disabled state |
+| `count` | int | Number of matching elements |
+| `attribute.<name>` | string | Attribute value |
+
+**Configuration:**
+
+| Key | Where | Default | Description |
+|-----|-------|---------|-------------|
+| `base_url` | `target` block | — (required) | App URL, prepended to relative goto paths |
+| `headless` | `target` block | `"true"` | Set `"false"` to see the browser |
+| `timeout` | `target` block | `"5000"` | Action/assertion timeout in milliseconds |
+| `url` | scope `config` | — | Page URL for generative scenario isolation |
 
 ## License
 
