@@ -356,7 +356,7 @@ Runs `command [...args] [...input_fields]`. Captures exit code, stdout (best-eff
 
 ## Playwright Adapter
 
-The playwright adapter (`use playwright`) drives a browser via [go-rod](https://github.com/go-rod/rod) and is compiled into specrun (no subprocess). It uses the `locators` block for named CSS selectors and supports interleaved action calls and field assignments in `given` blocks.
+The playwright adapter (`use playwright`) drives a browser via [playwright-go](https://github.com/playwright-community/playwright-go) and is compiled into specrun (no subprocess). It uses the `locators` block for named CSS selectors and supports interleaved action calls and field assignments in `given` blocks.
 
 ### Config (from `target` block)
 
