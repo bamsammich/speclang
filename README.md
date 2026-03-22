@@ -43,11 +43,9 @@ go build -o specrun ./cmd/specrun
 
 ### Write a spec
 
-Here's a minimal spec for an HTTP API:
+Here's a minimal spec for an HTTP API. Note that `use <plugin>` is declared inside each `scope`, not at the top of the file:
 
 ```
-use http
-
 spec AccountAPI {
   description: "REST API for inter-account money transfers"
 
@@ -61,6 +59,8 @@ spec AccountAPI {
   }
 
   scope transfer {
+    use http
+
     config {
       path: "/api/v1/accounts/transfer"
       method: "POST"
@@ -188,8 +188,6 @@ When working in a project with `.spec` files, the plugin automatically detects t
 If you have an existing OpenAPI 3.x schema, you can import models and scope scaffolds directly:
 
 ```
-use http
-
 spec MyAPI {
   target {
     base_url: env(APP_URL, "http://localhost:8080")
@@ -198,6 +196,8 @@ spec MyAPI {
   import openapi("schema.yaml")
 }
 ```
+
+Imported scopes will need a `use http` declaration added to each scope, along with invariants and scenarios.
 
 This generates models from `components/schemas` and scopes from `paths`, letting you layer invariants and scenarios on top of your existing API definition.
 
@@ -217,12 +217,114 @@ See [docs/protobuf-import.md](docs/protobuf-import.md) for details.
 
 ## Plugins
 
-speclang uses a plugin architecture for interacting with different systems:
+speclang uses a plugin architecture for interacting with different systems. Each `scope` declares `use <plugin>` to select which plugin drives it — a single spec can mix plugins across scopes.
 
 | Plugin | Use case | Target config | Scope config |
 |--------|----------|---------------|--------------|
 | `http` | REST APIs | `base_url` | `path`, `method` |
 | `process` | CLI tools / subprocesses | `command` | `args` |
+| `playwright` | Browser UIs | `base_url`, `headless`, `timeout` | `url` |
+
+### Playwright
+
+Use `playwright` to write specs for browser-driven UIs. It controls a real browser via [Playwright](https://playwright.dev/).
+
+**Requirements:** Install Playwright browsers before running:
+
+```bash
+npx playwright install chromium
+```
+
+**Locators:** Declare named element locators at spec level, then reference them by name in actions and assertions:
+
+```
+locators {
+  username_field: [data-testid=username]
+  submit_btn:     [data-testid=submit]
+  welcome:        [data-testid=welcome]
+  error_msg:      [data-testid=error]
+}
+```
+
+**Assertion syntax:** Use `locator@playwright.property: expected` in `then` blocks:
+
+```
+then {
+  welcome@playwright.visible: true
+  welcome@playwright.text: "Welcome, alice"
+}
+```
+
+**Full example:**
+
+```
+spec LoginApp {
+  description: "Login UI verification"
+
+  target {
+    base_url: env(APP_URL, "http://localhost:3000")
+  }
+
+  locators {
+    username_field: [data-testid=username]
+    password_field: [data-testid=password]
+    submit_btn:     [data-testid=submit]
+    welcome:        [data-testid=welcome]
+    error_msg:      [data-testid=error]
+  }
+
+  action login(user, pass) {
+    playwright.fill(username_field, user)
+    playwright.fill(password_field, pass)
+    playwright.click(submit_btn)
+  }
+
+  scope login {
+    use playwright
+
+    config {
+      url: "/login"
+    }
+
+    contract {
+      input {
+        user: string
+        pass: string
+      }
+      output {
+        ok: bool
+      }
+    }
+
+    scenario successful_login {
+      given {
+        login("alice", "secret")
+        user: "alice"
+      }
+      then {
+        welcome@playwright.visible: true
+        welcome@playwright.text: "Welcome, alice"
+      }
+    }
+
+    scenario invalid_credentials {
+      when {
+        pass != "secret"
+      }
+      then {
+        error_msg@playwright.visible: true
+        welcome@playwright.visible: false
+      }
+    }
+
+    # Welcome banner must never appear when login failed.
+    invariant no_welcome_on_failure {
+      when ok == false:
+        welcome@playwright.visible: false
+    }
+  }
+}
+```
 
 ## License
 
