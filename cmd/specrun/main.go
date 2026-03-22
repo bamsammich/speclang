@@ -14,6 +14,7 @@ import (
 	"github.com/bamsammich/speclang/pkg/parser"
 	protoResolver "github.com/bamsammich/speclang/pkg/proto"
 	"github.com/bamsammich/speclang/pkg/runner"
+	playwright "github.com/playwright-community/playwright-go"
 )
 
 func main() {
@@ -29,6 +30,8 @@ func main() {
 		os.Exit(runGenerate(os.Args[2:]))
 	case "verify":
 		os.Exit(runVerify(os.Args[2:]))
+	case "install":
+		os.Exit(runInstall(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -155,14 +158,14 @@ func runVerify(args []string) int {
 
 	config := resolveTargetConfig(spec.Target)
 
-	adp, err := createAdapter(spec, config)
+	adapters, err := createAdapters(spec, config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
 	}
-	defer adp.Close()
+	defer closeAdapters(adapters)
 
-	r := runner.New(spec, adp, *seed)
+	r := runner.New(spec, adapters, *seed)
 	r.SetN(*iterations)
 
 	if !*jsonOutput {
@@ -248,12 +251,63 @@ func printFailedCheck(check runner.CheckResult) {
 	}
 }
 
-func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.Adapter, error) {
-	if len(spec.Uses) == 0 {
-		return nil, errors.New("spec has no 'use' directive")
+func runInstall(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: specrun install <plugin>")
+		fmt.Fprintln(os.Stderr, "  supported: playwright")
+		return 1
 	}
 
-	pluginName := spec.Uses[0]
+	switch args[0] {
+	case "playwright":
+		fmt.Println("Installing Playwright browsers (chromium)...")
+		err := playwright.Install(&playwright.RunOptions{
+			Browsers: []string{"chromium"},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
+			return 1
+		}
+		fmt.Println("Playwright browsers installed successfully.")
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", args[0])
+		return 1
+	}
+}
+
+// collectPlugins returns the unique set of plugin names from all scopes.
+func collectPlugins(spec *parser.Spec) []string {
+	seen := make(map[string]bool)
+	var plugins []string
+	for _, scope := range spec.Scopes {
+		if scope.Use != "" && !seen[scope.Use] {
+			seen[scope.Use] = true
+			plugins = append(plugins, scope.Use)
+		}
+	}
+	return plugins
+}
+
+func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[string]adapter.Adapter, error) {
+	plugins := collectPlugins(spec)
+	if len(plugins) == 0 {
+		return nil, errors.New("no scopes declare a 'use' directive")
+	}
+
+	adapters := make(map[string]adapter.Adapter, len(plugins))
+	for _, name := range plugins {
+		adp, err := createSingleAdapter(name, targetConfig)
+		if err != nil {
+			closeAdapters(adapters)
+			return nil, fmt.Errorf("initializing %q adapter: %w", name, err)
+		}
+		adapters[name] = adp
+	}
+	return adapters, nil
+}
+
+func createSingleAdapter(pluginName string, targetConfig map[string]string) (adapter.Adapter, error) {
 	switch pluginName {
 	case "http":
 		adp := adapter.NewHTTPAdapter()
@@ -267,8 +321,20 @@ func createAdapter(spec *parser.Spec, targetConfig map[string]string) (adapter.A
 			return nil, err
 		}
 		return adp, nil
+	case "playwright":
+		adp := adapter.NewPlaywrightAdapter()
+		if err := adp.Init(targetConfig); err != nil {
+			return nil, err
+		}
+		return adp, nil
 	default:
 		return nil, fmt.Errorf("unknown plugin %q", pluginName)
+	}
+}
+
+func closeAdapters(adapters map[string]adapter.Adapter) {
+	for _, adp := range adapters {
+		adp.Close() //nolint:errcheck
 	}
 }
 

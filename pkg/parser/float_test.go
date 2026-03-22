@@ -84,9 +84,9 @@ func TestLexFloat(t *testing.T) {
 
 func TestParseFloatLiteral(t *testing.T) {
 	spec, err := Parse(`
-use http
 spec Test {
   scope test {
+    use http
     contract {
       input {
         price: float { price > 0.5 }
@@ -135,7 +135,7 @@ spec Test {
 	}
 
 	// Check given value is LiteralFloat
-	given := scope.Scenarios[0].Given.Assignments[0]
+	given := scope.Scenarios[0].Given.Steps[0].(*Assignment)
 	gv, ok := given.Value.(LiteralFloat)
 	if !ok {
 		t.Fatalf("given value type = %T, want LiteralFloat", given.Value)

@@ -1,5 +1,3 @@
-use http
-
 spec PetstoreAPI {
   description: "Pet store API imported from OpenAPI schema"
 

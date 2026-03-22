@@ -127,14 +127,10 @@ func (p *parser) expectIdent() (Token, error) {
 func (p *parser) parse() (*Spec, error) {
 	spec := &Spec{}
 
-	// Parse top-level "use" directives.
-	for p.peek().Type == TokenUse {
-		p.advance() // consume "use"
-		name, err := p.expect(TokenIdent)
-		if err != nil {
-			return nil, fmt.Errorf("parsing use: %w", err)
-		}
-		spec.Uses = append(spec.Uses, name.Value)
+	// Spec-level "use" is no longer valid — plugins are declared at scope level.
+	if p.peek().Type == TokenUse {
+		tok := p.peek()
+		return nil, p.errAt(tok, "'use' directive must be inside a scope block, not at spec level")
 	}
 
 	// Parse "spec Name { ... }"
@@ -159,6 +155,13 @@ func (p *parser) parse() (*Spec, error) {
 
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
+	}
+
+	// Validate: every scope must declare a plugin via 'use'.
+	for _, scope := range spec.Scopes {
+		if scope.Use == "" {
+			return nil, fmt.Errorf("scope %q is missing a 'use <plugin>' directive", scope.Name)
+		}
 	}
 
 	return spec, nil
@@ -292,6 +295,16 @@ func (p *parser) parseScope() (*Scope, error) {
 func (p *parser) parseScopeMember(scope *Scope) error {
 	tok := p.peek()
 	switch tok.Type {
+	case TokenUse:
+		p.advance() // consume "use"
+		name, err := p.expect(TokenIdent)
+		if err != nil {
+			return err
+		}
+		if scope.Use != "" {
+			return p.errAt(tok, fmt.Sprintf("scope %q has multiple 'use' directives", scope.Name))
+		}
+		scope.Use = name.Value
 	case TokenConfig:
 		config, err := p.parseScopeConfig()
 		if err != nil {
@@ -779,7 +792,12 @@ func (p *parser) parseScenarioBlock(sc *Scenario) error {
 	return nil
 }
 
-// parseGivenBlock parses: { assignments... }
+// parseGivenBlock parses: { (assignments | calls)... }
+// Distinguishes calls from assignments by lookahead:
+//   - ident.ident( → namespaced call
+//   - ident(       → local call
+//   - ident:       → assignment
+//   - ident.ident: → dotted-path assignment
 func (p *parser) parseGivenBlock() (*Block, error) {
 	if _, err := p.expect(TokenLBrace); err != nil {
 		return nil, err
@@ -787,27 +805,54 @@ func (p *parser) parseGivenBlock() (*Block, error) {
 
 	block := &Block{}
 	for p.peek().Type != TokenRBrace {
-		path, err := p.parseFieldPath()
-		if err != nil {
-			return nil, err
+		if p.isGivenCall() {
+			call, err := p.parseCall()
+			if err != nil {
+				return nil, err
+			}
+			block.Steps = append(block.Steps, call)
+		} else {
+			path, err := p.parseFieldPath()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(TokenColon); err != nil {
+				return nil, err
+			}
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			block.Steps = append(block.Steps, &Assignment{
+				Path:  path,
+				Value: val,
+			})
 		}
-		if _, err := p.expect(TokenColon); err != nil {
-			return nil, err
-		}
-		val, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		block.Assignments = append(block.Assignments, &Assignment{
-			Path:  path,
-			Value: val,
-		})
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
 	}
 	return block, nil
+}
+
+// isGivenCall returns true if the current position starts a call (not an assignment).
+// Patterns: ident( or ident.ident(
+func (p *parser) isGivenCall() bool {
+	if p.pos >= len(p.tokens) {
+		return false
+	}
+	// ident( → local call
+	if p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == TokenLParen {
+		return true
+	}
+	// ident.ident( → namespaced call
+	if p.pos+3 < len(p.tokens) &&
+		p.tokens[p.pos+1].Type == TokenDot &&
+		p.tokens[p.pos+3].Type == TokenLParen {
+		return true
+	}
+	return false
 }
 
 // parseWhenBlock parses: { predicates... }
@@ -844,6 +889,27 @@ func (p *parser) parseThenBlock() (*Block, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		a := &Assertion{Target: path}
+
+		// Check for @plugin.property syntax: target@plugin.property: expected
+		if p.peek().Type == TokenAt {
+			p.advance() // consume @
+			plugin, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(TokenDot); err != nil {
+				return nil, err
+			}
+			property, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			a.Plugin = plugin.Value
+			a.Property = property.Value
+		}
+
 		if _, err := p.expect(TokenColon); err != nil {
 			return nil, err
 		}
@@ -851,10 +917,8 @@ func (p *parser) parseThenBlock() (*Block, error) {
 		if err != nil {
 			return nil, err
 		}
-		block.Assertions = append(block.Assertions, &Assertion{
-			Target:   path,
-			Expected: val,
-		})
+		a.Expected = val
+		block.Assertions = append(block.Assertions, a)
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {

@@ -191,14 +191,13 @@ func TestVerify_JSON(t *testing.T) {
 func TestVerify_ProcessAdapter(t *testing.T) {
 	bin := specrunBin(t)
 
-	specContent := `use process
-
-spec EchoTest {
+	specContent := `spec EchoTest {
   target {
     command: "echo"
   }
 
   scope echo {
+    use process
     config {
       args: "{\"hello\":\"world\"}"
     }

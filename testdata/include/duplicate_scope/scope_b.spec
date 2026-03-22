@@ -1,4 +1,5 @@
 scope transfer {
+  use http
   config {
     path: "/b"
     method: "POST"

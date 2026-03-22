@@ -49,19 +49,19 @@ type CheckResult struct {
 
 // Runner orchestrates spec verification.
 type Runner struct {
-	spec    *parser.Spec
-	adapter adapter.Adapter
-	seed    uint64
-	n       int
+	spec     *parser.Spec
+	adapters map[string]adapter.Adapter
+	seed     uint64
+	n        int
 }
 
 // New creates a runner for the given spec.
-func New(spec *parser.Spec, adp adapter.Adapter, seed uint64) *Runner {
+func New(spec *parser.Spec, adapters map[string]adapter.Adapter, seed uint64) *Runner {
 	return &Runner{
-		spec:    spec,
-		adapter: adp,
-		seed:    seed,
-		n:       100,
+		spec:     spec,
+		adapters: adapters,
+		seed:     seed,
+		n:        100,
 	}
 }
 
@@ -73,6 +73,7 @@ func (r *Runner) SetN(n int) {
 // scopeRunner holds per-scope state for running scenarios and invariants.
 type scopeRunner struct {
 	runner    *Runner
+	adapter   adapter.Adapter // resolved from scope.Use
 	generator *generator.Generator
 	scopeDef  *parser.Scope
 	scope     string
@@ -93,7 +94,10 @@ func (r *Runner) Verify() (*Result, error) {
 	res := &Result{Spec: r.spec.Name}
 
 	for _, scope := range r.spec.Scopes {
-		sr := r.newScopeRunner(scope)
+		sr, err := r.newScopeRunner(scope)
+		if err != nil {
+			return nil, err
+		}
 		if err := sr.run(res); err != nil {
 			return nil, err
 		}
@@ -102,17 +106,22 @@ func (r *Runner) Verify() (*Result, error) {
 	return res, nil
 }
 
-func (r *Runner) newScopeRunner(scope *parser.Scope) *scopeRunner {
+func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
+	adp, ok := r.adapters[scope.Use]
+	if !ok {
+		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", scope.Use, scope.Name)
+	}
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
 	method := strings.ToUpper(resolveConfigString(scope.Config, "method"))
 	return &scopeRunner{
 		runner:    r,
+		adapter:   adp,
 		generator: gen,
 		scopeDef:  scope,
 		scope:     scope.Name,
 		path:      resolveConfigString(scope.Config, "path"),
 		method:    method,
-	}
+	}, nil
 }
 
 func (sr *scopeRunner) run(res *Result) error {
@@ -191,7 +200,7 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, err
 	}
 
-	resp, err := sr.runner.adapter.Action(actionName, args)
+	resp, err := sr.adapter.Action(actionName, args)
 	if err != nil {
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
@@ -258,10 +267,22 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 }
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
-	input := assignmentsToMap(sc.Given.Assignments)
+	var input map[string]any
 
-	if _, err := sr.executeInput(input); err != nil {
-		return CheckResult{}, err
+	if hasCalls(sc.Given.Steps) {
+		// Step-by-step execution: calls go to the adapter in order,
+		// assignments accumulate into the input context.
+		var err error
+		input, err = sr.executeGivenSteps(sc.Given.Steps)
+		if err != nil {
+			return CheckResult{}, err
+		}
+	} else {
+		// Request/response execution: collect all assignments, dispatch as one action.
+		input = stepsToMap(sc.Given.Steps)
+		if _, err := sr.executeInput(input); err != nil {
+			return CheckResult{}, err
+		}
 	}
 
 	check := CheckResult{
@@ -284,8 +305,66 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 	return check, nil
 }
 
+// hasCalls returns true if any given step is a Call (not just assignments).
+// When calls are present, steps execute in order rather than being batched.
+func hasCalls(steps []parser.GivenStep) bool {
+	for _, s := range steps {
+		if _, ok := s.(*parser.Call); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// executeGivenSteps walks given block steps in order: calls go to the adapter,
+// assignments accumulate into the input context for assertion evaluation.
+func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]any, error) {
+	input := make(map[string]any)
+	for _, step := range steps {
+		switch s := step.(type) {
+		case *parser.Assignment:
+			setPath(input, s.Path, exprToValue(s.Value))
+		case *parser.Call:
+			args, err := sr.marshalCallArgs(s)
+			if err != nil {
+				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
+			}
+			resp, err := sr.adapter.Action(s.Method, args)
+			if err != nil {
+				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
+			}
+			if !resp.OK {
+				return nil, fmt.Errorf("action %s.%s failed: %s", s.Namespace, s.Method, resp.Error)
+			}
+		}
+	}
+	return input, nil
+}
+
+// marshalCallArgs converts Call expression arguments to JSON for the adapter.
+// FieldRef args are resolved as locator names from the spec's locators map.
+func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, error) {
+	var resolved []any
+	for _, arg := range call.Args {
+		switch a := arg.(type) {
+		case parser.FieldRef:
+			// Resolve locator name to CSS selector
+			if selector, ok := sr.runner.spec.Locators[a.Path]; ok {
+				resolved = append(resolved, selector)
+			} else {
+				// Not a locator — pass the name as-is (could be a variable)
+				resolved = append(resolved, a.Path)
+			}
+		default:
+			resolved = append(resolved, exprToValue(arg))
+		}
+	}
+	return json.Marshal(resolved)
+}
+
 func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error) {
 	predicate := buildPredicate(sc.When.Predicates)
+	needsPageIsolation := sc.Then != nil && hasPluginAssertions(sc.Then.Assertions)
 
 	check := CheckResult{
 		Name:   sc.Name,
@@ -299,28 +378,98 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 			return CheckResult{}, err
 		}
 
+		if needsPageIsolation {
+			if err := sr.newPageWithNavigation(); err != nil {
+				return CheckResult{}, fmt.Errorf("iteration %d: %w", i+1, err)
+			}
+		}
+
 		if _, err := sr.executeInput(input); err != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			return CheckResult{}, err
 		}
 
 		check.InputsRun = i + 1
 
 		if sc.Then == nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			continue
 		}
 
 		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			return CheckResult{}, err
 		} else if f != nil {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
 			f = sr.shrinkFailure(f, sc.Then)
 			check.Passed = false
 			check.FailedAt = i + 1
 			check.Failure = f
 			return check, nil
 		}
+
+		if needsPageIsolation {
+			if err := sr.closePage(); err != nil {
+				return CheckResult{}, fmt.Errorf("iteration %d: closing page: %w", i+1, err)
+			}
+		}
 	}
 
 	return check, nil
+}
+
+// hasPluginAssertions returns true if any assertion uses @plugin.property syntax.
+func hasPluginAssertions(assertions []*parser.Assertion) bool {
+	for _, a := range assertions {
+		if a.Plugin != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
+func (sr *scopeRunner) newPageWithNavigation() error {
+	resp, err := sr.adapter.Action("new_page", nil)
+	if err != nil {
+		return fmt.Errorf("creating new page: %w", err)
+	}
+	if !resp.OK {
+		return fmt.Errorf("creating new page: %s", resp.Error)
+	}
+
+	url := resolveConfigString(sr.scopeDef.Config, "url")
+	if url != "" {
+		args, _ := json.Marshal([]string{url})
+		resp, err := sr.adapter.Action("goto", args)
+		if err != nil {
+			return fmt.Errorf("navigating to %q: %w", url, err)
+		}
+		if !resp.OK {
+			return fmt.Errorf("navigating to %q: %s", url, resp.Error)
+		}
+	}
+	return nil
+}
+
+// closePage closes the current page via the adapter.
+func (sr *scopeRunner) closePage() error {
+	resp, err := sr.adapter.Action("close_page", nil)
+	if err != nil {
+		return err
+	}
+	if !resp.OK {
+		return fmt.Errorf("closing page: %s", resp.Error)
+	}
+	return nil
 }
 
 // buildPredicate creates a filter function from when-block predicates.
@@ -357,7 +506,17 @@ func (sr *scopeRunner) checkThenAssertions(
 			return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
 		}
 
-		resp, err := sr.runner.adapter.Assert(a.Target, "", expected)
+		property := a.Target
+		locator := ""
+		if a.Plugin != "" {
+			selector, ok := sr.runner.spec.Locators[a.Target]
+			if !ok {
+				return nil, fmt.Errorf("locator %q not defined in locators block", a.Target)
+			}
+			locator = selector
+			property = a.Property
+		}
+		resp, err := sr.adapter.Assert(property, locator, expected)
 		if err != nil {
 			return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
 		}
@@ -540,11 +699,13 @@ func buildInvariantContext(input, output map[string]any) map[string]any {
 	return ctx
 }
 
-// assignmentsToMap converts a list of assignments to a nested map.
-func assignmentsToMap(assignments []*parser.Assignment) map[string]any {
+// stepsToMap extracts assignments from given steps into a nested map.
+func stepsToMap(steps []parser.GivenStep) map[string]any {
 	result := make(map[string]any)
-	for _, a := range assignments {
-		setPath(result, a.Path, exprToValue(a.Value))
+	for _, s := range steps {
+		if a, ok := s.(*parser.Assignment); ok {
+			setPath(result, a.Path, exprToValue(a.Value))
+		}
 	}
 	return result
 }

@@ -24,14 +24,10 @@ func TestLexTransferSpec(t *testing.T) {
 		t.Fatalf("expected EOF as last token, got %s", tokens[len(tokens)-1].Type)
 	}
 
-	// "use http" should be first two tokens
-	assertToken(t, tokens, 0, TokenUse, "use")
-	assertToken(t, tokens, 1, TokenIdent, "http")
-
-	// "spec AccountAPI {" next
-	assertToken(t, tokens, 2, TokenSpec, "spec")
-	assertToken(t, tokens, 3, TokenIdent, "AccountAPI")
-	assertToken(t, tokens, 4, TokenLBrace, "{")
+	// "spec AccountAPI {" should be first tokens
+	assertToken(t, tokens, 0, TokenSpec, "spec")
+	assertToken(t, tokens, 1, TokenIdent, "AccountAPI")
+	assertToken(t, tokens, 2, TokenLBrace, "{")
 
 	// Check that "env" is lexed as a keyword
 	envIdx := findToken(tokens, TokenEnv)
@@ -66,13 +62,9 @@ func TestLexTransferSpec(t *testing.T) {
 		t.Fatal("root file should not contain scope token (moved to included file)")
 	}
 
-	// Verify line tracking: "use" should be line 1
+	// Verify line tracking: "spec" should be line 1
 	if tokens[0].Line != 1 {
-		t.Errorf("expected 'use' on line 1, got line %d", tokens[0].Line)
-	}
-	// "spec" should be line 3
-	if tokens[2].Line != 3 {
-		t.Errorf("expected 'spec' on line 3, got line %d", tokens[2].Line)
+		t.Errorf("expected 'spec' on line 1, got line %d", tokens[0].Line)
 	}
 }
 

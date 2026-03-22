@@ -1,5 +1,6 @@
 # Verifies the parser and generator handle extended types (float, bytes, array, map).
 scope parse_types {
+  use process
   config {
     args: "parse"
   }
@@ -28,6 +29,7 @@ scope parse_types {
 
 # Verifies the generator produces valid outputs for extended types.
 scope generate_types {
+  use process
   config {
     args: "generate testdata/self/types.spec --scope typed_inputs --seed"
   }

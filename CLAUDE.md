@@ -15,14 +15,14 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 ### Settled Decisions
 
 - **Calling convention**: `verb(args)` universally — both built-in primitives and user-defined actions
-- **Plugin architecture**: The core language has zero built-in primitives. All interaction verbs and assertion types come from plugins (`use http`, `use playwright`, `use go`)
+- **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout). Built-in plugins cover common use cases; external plugins extend the system without modifying specrun.
+- **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level. Each scope independently declares which plugin drives it.
 - **Namespaced calls**: Plugin methods are called as `plugin.method()` (e.g., `playwright.fill(locator, value)`)
 - **Assertion syntax in `then` blocks**: `locator@plugin.property: expected` (e.g., `error_msg@playwright.visible: true`)
 - **Three scenario types** (ascending verification strength):
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
   - `invariant` — universal law, must hold for ALL valid inputs
-- **Plugin = spec + adapter binary**: Plugin spec declares typed actions/assertions. Adapter binary implements them over JSON stdin/stdout protocol.
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC.
 - **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks. Each scope has an opaque `config` block for plugin-specific settings (e.g., HTTP path/method). The parser is agnostic to config semantics.
 - **Counterexample shrinking**: When a failure is found, the runtime performs binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively) to produce minimal counterexamples.
@@ -30,7 +30,6 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 ### Spec File Structure
 
 ```
-use <plugin>
 include "<path>"                     # top-level include
 
 spec <Name> {
@@ -45,7 +44,7 @@ spec <Name> {
   import openapi("<path>")           # import models/scopes from OpenAPI schema
   import proto("<path>")             # import models/scopes from protobuf schema
 
-  locators {                         # UI-mode only
+  locators {                         # named selectors for UI specs
     <name>: [<css-selector>]
   }
 
@@ -59,6 +58,8 @@ spec <Name> {
   }
 
   scope <name> {
+    use <plugin>                      # declares which plugin drives this scope
+
     config {                          # opaque key-value pairs, passed to adapter
       path: "/api/v1/resource"
       method: "POST"
@@ -79,9 +80,14 @@ spec <Name> {
     }
 
     scenario <name> {
-      given { ... }                  # concrete values OR action sequence
+      given {                        # concrete assignments and/or action calls
+        <field>: <value>
+        <plugin>.<verb>(<args>)
+      }
       when { ... }                   # predicate (generative) OR action sequence
-      then { ... }                   # assertions
+      then {                         # assertions
+        <locator>@<plugin>.<property>: <expected>
+      }
     }
   }
 }
@@ -122,6 +128,7 @@ The import is resolved at parse time. The parser dispatches to a pluggable `Impo
 ### Scope and Declaration Rules
 
 - **Scope**: A named grouping that owns a contract, invariants, and scenarios. Plugin-specific config (path, method for HTTP; selectors for Playwright) goes in an opaque `config` block. The parser has zero awareness of config semantics — they're passed through to the adapter.
+- Each scope must declare `use <plugin>` to specify which adapter drives it. Different scopes in the same spec can use different plugins.
 - Contracts, invariants, and scenarios must live inside a scope (not at spec top-level).
 
 ### Plugin Definition
@@ -141,6 +148,8 @@ plugin <name> {
 ```
 
 ### Adapter Protocol (JSON over stdin/stdout)
+
+This protocol applies to **external** adapters (subprocess communication). **Built-in adapters** (http, process, playwright) implement the same `Adapter` interface in Go directly — no JSON IPC, no subprocess.
 
 **Action request:**
 ```json
@@ -208,7 +217,7 @@ Phase 1: **HTTP plugin + runtime core**
 - Runner: execute generated inputs, check assertions and invariants
 - Target: verify a trivial HTTP API (e.g., bank transfer endpoint)
 
-Phase 2: Playwright plugin + adapter
+Phase 2: **Playwright plugin + built-in adapter** (scope-level `use`, locators, action sequences in `given`)
 Phase 3: Go unit plugin + adapter
 Phase 4: Metamorphic relation support
 
@@ -251,7 +260,8 @@ speclang/
 │   ├── adapter/          # adapter protocol + built-in adapters
 │   │   ├── protocol.go   # JSON IPC types
 │   │   ├── http.go       # built-in HTTP adapter
-│   │   └── process.go    # built-in process adapter (subprocess execution)
+│   │   ├── process.go    # built-in process adapter (subprocess execution)
+│   │   └── playwright.go # built-in Playwright adapter (compiled into specrun)
 │   ├── openapi/          # OpenAPI import resolver
 │   │   ├── openapi.go    # Resolver implementing ImportResolver
 │   │   ├── document.go   # OpenAPI doc loading via kin-openapi
@@ -265,7 +275,8 @@ speclang/
 │       └── plugin.go
 ├── plugins/
 │   ├── http.plugin       # HTTP plugin definition
-│   └── process.plugin    # process plugin definition (subprocess execution)
+│   ├── process.plugin    # process plugin definition (subprocess execution)
+│   └── playwright.plugin # Playwright plugin definition
 ├── examples/
 │   ├── transfer.spec     # root spec (includes models + scopes)
 │   ├── models/
@@ -292,6 +303,7 @@ speclang/
     │   ├── circular/     # A ↔ B circular include (error case)
     │   ├── duplicate/    # duplicate model names (error case)
     │   └── duplicate_scope/  # duplicate scope names (error case)
+    ├── playwright/       # Playwright adapter test fixtures
     └── self/             # self-verification test fixtures
         ├── minimal.spec
         ├── invalid_unterminated.spec
@@ -317,6 +329,7 @@ go test ./...                                                   # run all tests
 ./specrun generate examples/transfer.spec --scope transfer      # generate one input as JSON
 ./specrun verify examples/transfer.spec --json                  # verify with JSON output
 ./specrun verify specs/speclang.spec                            # self-verification
+./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 
 ## Process Adapter
@@ -341,6 +354,41 @@ Runs `command [...args] [...input_fields]`. Captures exit code, stdout (best-eff
 - `stdout` — full parsed JSON body (or raw string if not JSON)
 - `stdout.field.path` — dot-path traversal into parsed JSON
 - `stderr` — raw string
+
+## Playwright Adapter
+
+The playwright adapter (`use playwright`) drives a browser via [playwright-go](https://github.com/playwright-community/playwright-go) and is compiled into specrun (no subprocess). It uses the `locators` block for named CSS selectors and supports interleaved action calls and field assignments in `given` blocks.
+
+### Config (from `target` block)
+
+- `base_url` — browser start URL (required)
+
+### Actions
+
+- `playwright.goto(url)` — navigate to URL
+- `playwright.fill(locator, value)` — fill an input
+- `playwright.click(locator)` — click an element
+
+### Assertions
+
+- `<locator>@playwright.visible: <bool>` — element visibility
+- `<locator>@playwright.text: <string>` — element text content
+- `<locator>@playwright.value: <string>` — input value
+
+`<locator>` is either a named locator from the spec's `locators` block or a raw CSS selector string.
+
+### Mixed `given` blocks
+
+`given` blocks may interleave field assignments and action calls:
+
+```
+given {
+  amount: 1000
+  playwright.goto("/transfer")
+  playwright.fill(amount_input, amount)
+  playwright.click(submit_btn)
+}
+```
 
 ## Self-Verification
 
