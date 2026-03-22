@@ -260,16 +260,16 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
 	var input map[string]any
 
-	if sr.isInteractive() {
-		// Interactive adapters (playwright): walk steps in order.
-		// Calls go to the adapter, assignments accumulate into the input context.
+	if hasCalls(sc.Given.Steps) {
+		// Step-by-step execution: calls go to the adapter in order,
+		// assignments accumulate into the input context.
 		var err error
 		input, err = sr.executeGivenSteps(sc.Given.Steps)
 		if err != nil {
 			return CheckResult{}, err
 		}
 	} else {
-		// Request/response adapters (http, process): collect assignments, dispatch once.
+		// Request/response execution: collect all assignments, dispatch as one action.
 		input = stepsToMap(sc.Given.Steps)
 		if _, err := sr.executeInput(input); err != nil {
 			return CheckResult{}, err
@@ -296,11 +296,11 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 	return check, nil
 }
 
-// isInteractive returns true if the spec uses an interactive adapter (e.g., playwright)
-// where given blocks contain action calls that must execute step-by-step.
-func (sr *scopeRunner) isInteractive() bool {
-	for _, u := range sr.runner.spec.Uses {
-		if u == "playwright" {
+// hasCalls returns true if any given step is a Call (not just assignments).
+// When calls are present, steps execute in order rather than being batched.
+func hasCalls(steps []parser.GivenStep) bool {
+	for _, s := range steps {
+		if _, ok := s.(*parser.Call); ok {
 			return true
 		}
 	}
