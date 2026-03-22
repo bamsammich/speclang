@@ -164,9 +164,15 @@ func TestRelationalAssertions(t *testing.T) {
 	}
 }
 
-// mockAdapter records Assert calls to verify locator resolution.
+// mockAdapter records Action and Assert calls for testing.
 type mockAdapter struct {
+	actionCalls []actionCall
 	assertCalls []assertCall
+}
+
+type actionCall struct {
+	Name string
+	Args json.RawMessage
 }
 
 type assertCall struct {
@@ -177,6 +183,7 @@ type assertCall struct {
 
 func (m *mockAdapter) Init(config map[string]string) error { return nil }
 func (m *mockAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
+	m.actionCalls = append(m.actionCalls, actionCall{Name: name, Args: args})
 	return &adapter.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 }
 func (m *mockAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
@@ -199,11 +206,8 @@ func TestLocatorResolution(t *testing.T) {
 			"welcome": "[data-testid=welcome]",
 		},
 		Scopes: []*parser.Scope{{
-			Name: "ui",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/home"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
+			Name:   "ui",
+			Config: map[string]parser.Expr{},
 			Scenarios: []*parser.Scenario{{
 				Name: "check_visible",
 				Given: &parser.Block{
@@ -281,6 +285,110 @@ func TestLocatorResolution_MissingLocator(t *testing.T) {
 	_, err := r.Verify()
 	if err == nil {
 		t.Fatal("expected error for missing locator, got nil")
+	}
+}
+
+func TestGivenStepExecution(t *testing.T) {
+	t.Parallel()
+
+	// Spec with mixed given steps: calls and assignments, executed in order.
+	spec := &parser.Spec{
+		Name: "StepTest",
+		Uses: []string{"playwright"},
+		Locators: map[string]string{
+			"username": "[data-testid=username]",
+			"submit":   "[data-testid=submit]",
+			"welcome":  "[data-testid=welcome]",
+		},
+		Scopes: []*parser.Scope{{
+			Name:   "login",
+			Config: map[string]parser.Expr{},
+			Scenarios: []*parser.Scenario{{
+				Name: "login_flow",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						// playwright.fill(username, "alice")
+						&parser.Call{
+							Namespace: "playwright",
+							Method:    "fill",
+							Args: []parser.Expr{
+								parser.FieldRef{Path: "username"},
+								parser.LiteralString{Value: "alice"},
+							},
+						},
+						// user: "alice"
+						&parser.Assignment{Path: "user", Value: parser.LiteralString{Value: "alice"}},
+						// playwright.click(submit)
+						&parser.Call{
+							Namespace: "playwright",
+							Method:    "click",
+							Args: []parser.Expr{
+								parser.FieldRef{Path: "submit"},
+							},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{
+							Target:   "welcome",
+							Plugin:   "playwright",
+							Property: "visible",
+							Expected: parser.LiteralBool{Value: true},
+						},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(spec, mock, 1)
+	_, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	// Verify action calls executed in order
+	if len(mock.actionCalls) != 2 {
+		t.Fatalf("expected 2 action calls, got %d", len(mock.actionCalls))
+	}
+
+	// First call: fill(username_selector, "alice")
+	if mock.actionCalls[0].Name != "fill" {
+		t.Errorf("action 0: name = %q, want 'fill'", mock.actionCalls[0].Name)
+	}
+	var fillArgs []any
+	json.Unmarshal(mock.actionCalls[0].Args, &fillArgs)
+	if len(fillArgs) != 2 {
+		t.Fatalf("fill: expected 2 args, got %d", len(fillArgs))
+	}
+	if fillArgs[0] != "[data-testid=username]" {
+		t.Errorf("fill arg 0 = %q, want '[data-testid=username]'", fillArgs[0])
+	}
+	if fillArgs[1] != "alice" {
+		t.Errorf("fill arg 1 = %q, want 'alice'", fillArgs[1])
+	}
+
+	// Second call: click(submit_selector)
+	if mock.actionCalls[1].Name != "click" {
+		t.Errorf("action 1: name = %q, want 'click'", mock.actionCalls[1].Name)
+	}
+	var clickArgs []any
+	json.Unmarshal(mock.actionCalls[1].Args, &clickArgs)
+	if len(clickArgs) != 1 || clickArgs[0] != "[data-testid=submit]" {
+		t.Errorf("click args = %v, want [[data-testid=submit]]", clickArgs)
+	}
+
+	// Verify assertion
+	if len(mock.assertCalls) != 1 {
+		t.Fatalf("expected 1 assert call, got %d", len(mock.assertCalls))
+	}
+	if mock.assertCalls[0].Property != "visible" {
+		t.Errorf("assert property = %q, want 'visible'", mock.assertCalls[0].Property)
+	}
+	if mock.assertCalls[0].Locator != "[data-testid=welcome]" {
+		t.Errorf("assert locator = %q, want '[data-testid=welcome]'", mock.assertCalls[0].Locator)
 	}
 }
 

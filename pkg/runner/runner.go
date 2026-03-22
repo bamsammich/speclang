@@ -258,10 +258,22 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 }
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
-	input := stepsToMap(sc.Given.Steps)
+	var input map[string]any
 
-	if _, err := sr.executeInput(input); err != nil {
-		return CheckResult{}, err
+	if sr.isInteractive() {
+		// Interactive adapters (playwright): walk steps in order.
+		// Calls go to the adapter, assignments accumulate into the input context.
+		var err error
+		input, err = sr.executeGivenSteps(sc.Given.Steps)
+		if err != nil {
+			return CheckResult{}, err
+		}
+	} else {
+		// Request/response adapters (http, process): collect assignments, dispatch once.
+		input = stepsToMap(sc.Given.Steps)
+		if _, err := sr.executeInput(input); err != nil {
+			return CheckResult{}, err
+		}
 	}
 
 	check := CheckResult{
@@ -282,6 +294,63 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 	}
 
 	return check, nil
+}
+
+// isInteractive returns true if the spec uses an interactive adapter (e.g., playwright)
+// where given blocks contain action calls that must execute step-by-step.
+func (sr *scopeRunner) isInteractive() bool {
+	for _, u := range sr.runner.spec.Uses {
+		if u == "playwright" {
+			return true
+		}
+	}
+	return false
+}
+
+// executeGivenSteps walks given block steps in order: calls go to the adapter,
+// assignments accumulate into the input context for assertion evaluation.
+func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]any, error) {
+	input := make(map[string]any)
+	for _, step := range steps {
+		switch s := step.(type) {
+		case *parser.Assignment:
+			setPath(input, s.Path, exprToValue(s.Value))
+		case *parser.Call:
+			args, err := sr.marshalCallArgs(s)
+			if err != nil {
+				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
+			}
+			resp, err := sr.runner.adapter.Action(s.Method, args)
+			if err != nil {
+				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
+			}
+			if !resp.OK {
+				return nil, fmt.Errorf("action %s.%s failed: %s", s.Namespace, s.Method, resp.Error)
+			}
+		}
+	}
+	return input, nil
+}
+
+// marshalCallArgs converts Call expression arguments to JSON for the adapter.
+// FieldRef args are resolved as locator names from the spec's locators map.
+func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, error) {
+	var resolved []any
+	for _, arg := range call.Args {
+		switch a := arg.(type) {
+		case parser.FieldRef:
+			// Resolve locator name to CSS selector
+			if selector, ok := sr.runner.spec.Locators[a.Path]; ok {
+				resolved = append(resolved, selector)
+			} else {
+				// Not a locator — pass the name as-is (could be a variable)
+				resolved = append(resolved, a.Path)
+			}
+		default:
+			resolved = append(resolved, exprToValue(arg))
+		}
+	}
+	return json.Marshal(resolved)
 }
 
 func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error) {
