@@ -14,6 +14,7 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/parser"
 	protoResolver "github.com/bamsammich/speclang/v2/pkg/proto"
 	"github.com/bamsammich/speclang/v2/pkg/runner"
+	"github.com/bamsammich/speclang/v2/pkg/validator"
 	playwright "github.com/playwright-community/playwright-go"
 )
 
@@ -38,6 +39,15 @@ func main() {
 	}
 }
 
+func validateSpec(spec *parser.Spec) int {
+	errs := validator.Validate(spec)
+	if len(errs) > 0 {
+		fmt.Fprint(os.Stderr, validator.FormatErrors(errs))
+		return 1
+	}
+	return 0
+}
+
 func runParse(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: specrun parse <spec-file>")
@@ -49,6 +59,10 @@ func runParse(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
+	}
+
+	if code := validateSpec(spec); code != 0 {
+		return code
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -105,6 +119,10 @@ func runGenerate(args []string) int {
 		return 1
 	}
 
+	if code := validateSpec(spec); code != 0 {
+		return code
+	}
+
 	var scopeDef *parser.Scope
 	for _, s := range spec.Scopes {
 		if s.Name == *scope {
@@ -154,6 +172,10 @@ func runVerify(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
+	}
+
+	if code := validateSpec(spec); code != 0 {
+		return code
 	}
 
 	config := resolveTargetConfig(spec.Target)
