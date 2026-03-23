@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/bamsammich/speclang/v2/pkg/parser"
@@ -703,6 +704,67 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 	errs := Validate(spec)
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (plugin assertions skipped), got: %v", errs)
+	}
+}
+
+func TestValidate_MultipleErrors(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "count", Type: parser.TypeExpr{Name: "int"}},
+						{Name: "name", Type: parser.TypeExpr{Name: "string"}},
+					},
+					Output: []*parser.Field{
+						{Name: "result", Type: parser.TypeExpr{Name: "int"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "bad",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{Path: "count", Value: parser.LiteralString{Value: "wrong"}},
+								// name is missing
+							},
+						},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Target: "typo", Expected: parser.LiteralInt{Value: 0}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) < 3 {
+		t.Fatalf("expected at least 3 errors (type mismatch + missing field + bad then target), got %d: %v", len(errs), errs)
+	}
+}
+
+func TestFormatErrors(t *testing.T) {
+	errs := []error{
+		fmt.Errorf("scope %q, contract input %q: unknown type %q", "orders", "items", "Itme"),
+		fmt.Errorf("scope %q, scenario %q, field %q: expected int, got string literal", "orders", "smoke", "count"),
+		fmt.Errorf("scope %q, scenario %q: missing required field %q", "orders", "smoke", "name"),
+		fmt.Errorf("scope %q, scenario %q: then target %q does not match any output field", "transfer", "basic", "balnce"),
+	}
+
+	output := FormatErrors(errs)
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
+	if !contains(output, "orders") || !contains(output, "transfer") {
+		t.Error("expected hierarchical output grouped by scope")
+	}
+	if !contains(output, "validation errors:") {
+		t.Error("expected header line")
 	}
 }
 

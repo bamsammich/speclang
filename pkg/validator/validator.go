@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
@@ -289,6 +290,108 @@ func exprTypeName(expr parser.Expr) string {
 	default:
 		return fmt.Sprintf("%T", expr)
 	}
+}
+
+// FormatErrors formats validation errors in a hierarchical display
+// grouped by scope, then by context (contract/scenario).
+func FormatErrors(errs []error) string {
+	if len(errs) == 0 {
+		return ""
+	}
+
+	type scopeErrors struct {
+		contract      []string
+		scenarios     map[string][]string
+		scenarioOrder []string
+	}
+	scopes := make(map[string]*scopeErrors)
+	var scopeOrder []string
+	var ungrouped []string
+
+	for _, err := range errs {
+		msg := err.Error()
+		scopeName, rest, ok := extractScope(msg)
+		if !ok {
+			ungrouped = append(ungrouped, msg)
+			continue
+		}
+		se, exists := scopes[scopeName]
+		if !exists {
+			se = &scopeErrors{scenarios: make(map[string][]string)}
+			scopes[scopeName] = se
+			scopeOrder = append(scopeOrder, scopeName)
+		}
+
+		scenarioName, detail, ok := extractScenario(rest)
+		if ok {
+			if _, seen := se.scenarios[scenarioName]; !seen {
+				se.scenarioOrder = append(se.scenarioOrder, scenarioName)
+			}
+			se.scenarios[scenarioName] = append(se.scenarios[scenarioName], detail)
+		} else {
+			se.contract = append(se.contract, rest)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("validation errors:\n")
+
+	for _, name := range scopeOrder {
+		se := scopes[name]
+		fmt.Fprintf(&b, "\n  scope %s:\n", name)
+		if len(se.contract) > 0 {
+			b.WriteString("    contract:\n")
+			for _, msg := range se.contract {
+				fmt.Fprintf(&b, "      - %s\n", msg)
+			}
+		}
+		for _, scName := range se.scenarioOrder {
+			msgs := se.scenarios[scName]
+			fmt.Fprintf(&b, "    scenario %s:\n", scName)
+			for _, msg := range msgs {
+				fmt.Fprintf(&b, "      - %s\n", msg)
+			}
+		}
+	}
+
+	for _, msg := range ungrouped {
+		fmt.Fprintf(&b, "  - %s\n", msg)
+	}
+
+	return b.String()
+}
+
+// extractScope parses 'scope "name", rest' from an error message.
+func extractScope(msg string) (scope, rest string, ok bool) {
+	const prefix = "scope \""
+	if !strings.HasPrefix(msg, prefix) {
+		return "", "", false
+	}
+	msg = msg[len(prefix):]
+	idx := strings.Index(msg, "\"")
+	if idx < 0 {
+		return "", "", false
+	}
+	scope = msg[:idx]
+	rest = strings.TrimLeft(msg[idx+1:], ", ")
+	return scope, rest, true
+}
+
+// extractScenario parses 'scenario "name", rest' from the remainder.
+func extractScenario(msg string) (scenario, rest string, ok bool) {
+	const prefix = "scenario \""
+	if !strings.HasPrefix(msg, prefix) {
+		return "", "", false
+	}
+	msg = msg[len(prefix):]
+	idx := strings.Index(msg, "\"")
+	if idx < 0 {
+		return "", "", false
+	}
+	scenario = msg[:idx]
+	rest = strings.TrimLeft(msg[idx+1:], ", :")
+	rest = strings.TrimSpace(rest)
+	return scenario, rest, true
 }
 
 func (v *validator) validateTypeExpr(te parser.TypeExpr, context string) {
