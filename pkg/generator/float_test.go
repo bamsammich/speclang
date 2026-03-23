@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 func TestGenerateFloat(t *testing.T) {

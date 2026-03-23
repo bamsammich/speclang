@@ -6,7 +6,7 @@
 package openapi
 
 import (
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Resolver implements parser.ImportResolver for OpenAPI 3.x specs.

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/bamsammich/speclang/pkg/adapter"
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	pw "github.com/playwright-community/playwright-go"
 )
 

@@ -3,7 +3,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 func TestParseTransferSpec(t *testing.T) {

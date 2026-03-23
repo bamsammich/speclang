@@ -8,7 +8,7 @@ import (
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
 	"strings"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Generator produces random valid inputs from a contract and model definitions.

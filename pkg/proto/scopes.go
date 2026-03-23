@@ -5,7 +5,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
 )
 

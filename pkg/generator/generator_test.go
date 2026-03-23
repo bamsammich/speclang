@@ -3,7 +3,7 @@ package generator
 import (
 	"testing"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 func transferContract() (*parser.Contract, []*parser.Model) {
