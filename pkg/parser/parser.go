@@ -1216,7 +1216,7 @@ func (p *parser) parseArrayLiteral() (Expr, error) {
 	p.advance() // consume [
 	arr := ArrayLiteral{}
 
-	for p.peek().Type != TokenRBracket {
+	for p.peek().Type != TokenRBracket && p.peek().Type != TokenEOF {
 		elem, err := p.parseExpr()
 		if err != nil {
 			return nil, err

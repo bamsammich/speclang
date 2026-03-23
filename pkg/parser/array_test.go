@@ -327,3 +327,24 @@ spec Test {
 		t.Errorf("expected 3 elements (trailing comma), got %d", len(arr.Elements))
 	}
 }
+
+func TestParseArrayLiteral_Unterminated(t *testing.T) {
+	_, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given { items: [1, 2 }
+      then { ok: true }
+    }
+  }
+}
+`)
+	if err == nil {
+		t.Fatal("expected parse error for unterminated array")
+	}
+}
