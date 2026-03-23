@@ -22,6 +22,7 @@ func Validate(spec *parser.Spec) []error {
 	for _, scope := range spec.Scopes {
 		v.scope = scope.Name
 		v.validateContract(scope)
+		v.validateScenarios(scope)
 	}
 
 	return v.errs
@@ -54,6 +55,158 @@ func (v *validator) validateContract(scope *parser.Scope) {
 	}
 	for _, f := range scope.Contract.Output {
 		v.validateTypeExpr(f.Type, fmt.Sprintf("scope %q, contract output %q", v.scope, f.Name))
+	}
+}
+
+func (v *validator) validateScenarios(scope *parser.Scope) {
+	if scope.Contract == nil {
+		return
+	}
+	inputFields := buildFieldMap(scope.Contract.Input)
+
+	for _, sc := range scope.Scenarios {
+		v.validateGivenBlock(sc, inputFields)
+	}
+}
+
+func buildFieldMap(fields []*parser.Field) map[string]*parser.Field {
+	m := make(map[string]*parser.Field, len(fields))
+	for _, f := range fields {
+		m[f.Name] = f
+	}
+	return m
+}
+
+func (v *validator) validateGivenBlock(sc *parser.Scenario, inputFields map[string]*parser.Field) {
+	if sc.Given == nil {
+		return
+	}
+
+	for _, step := range sc.Given.Steps {
+		assign, ok := step.(*parser.Assignment)
+		if !ok {
+			continue
+		}
+
+		fieldName := topLevelField(assign.Path)
+		field, ok := inputFields[fieldName]
+		if !ok {
+			continue
+		}
+
+		v.checkExprType(assign.Value, field.Type,
+			fmt.Sprintf("scope %q, scenario %q, field %q", v.scope, sc.Name, assign.Path))
+	}
+}
+
+func topLevelField(path string) string {
+	for i, c := range path {
+		if c == '.' {
+			return path[:i]
+		}
+	}
+	return path
+}
+
+func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context string) {
+	// LiteralNull is valid only for optional types
+	if _, isNull := expr.(parser.LiteralNull); isNull {
+		if !te.Optional {
+			v.errorf("%s: null is not valid for non-optional type %s", context, typeName(te))
+		}
+		return
+	}
+
+	switch te.Name {
+	case "int":
+		if _, ok := expr.(parser.LiteralInt); !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected int, got %s", context, exprTypeName(expr))
+			}
+		}
+	case "float":
+		switch expr.(type) {
+		case parser.LiteralFloat, parser.LiteralInt:
+			// ok — accept int literals for float fields
+		default:
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected float, got %s", context, exprTypeName(expr))
+			}
+		}
+	case "string":
+		if _, ok := expr.(parser.LiteralString); !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected string, got %s", context, exprTypeName(expr))
+			}
+		}
+	case "bool":
+		if _, ok := expr.(parser.LiteralBool); !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected bool, got %s", context, exprTypeName(expr))
+			}
+		}
+	case "array":
+		if _, ok := expr.(parser.ArrayLiteral); !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected array, got %s", context, exprTypeName(expr))
+			}
+		}
+	default:
+		// Model type — expect ObjectLiteral
+		if _, ok := expr.(parser.ObjectLiteral); !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
+			}
+		}
+	}
+}
+
+// isNonLiteral returns true for expressions that can't be statically type-checked.
+func isNonLiteral(expr parser.Expr) bool {
+	switch expr.(type) {
+	case parser.FieldRef, parser.BinaryOp, parser.UnaryOp,
+		parser.EnvRef, parser.LenExpr, parser.RegexLiteral:
+		return true
+	}
+	return false
+}
+
+func typeName(te parser.TypeExpr) string {
+	switch te.Name {
+	case "array":
+		if te.ElemType != nil {
+			return "[]" + typeName(*te.ElemType)
+		}
+		return "[]unknown"
+	case "map":
+		return "map"
+	default:
+		name := te.Name
+		if te.Optional {
+			name += "?"
+		}
+		return name
+	}
+}
+
+func exprTypeName(expr parser.Expr) string {
+	switch expr.(type) {
+	case parser.LiteralInt:
+		return "int literal"
+	case parser.LiteralFloat:
+		return "float literal"
+	case parser.LiteralString:
+		return "string literal"
+	case parser.LiteralBool:
+		return "bool literal"
+	case parser.LiteralNull:
+		return "null"
+	case parser.ArrayLiteral:
+		return "array literal"
+	case parser.ObjectLiteral:
+		return "object literal"
+	default:
+		return fmt.Sprintf("%T", expr)
 	}
 }
 
