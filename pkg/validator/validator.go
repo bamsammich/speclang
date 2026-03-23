@@ -82,6 +82,16 @@ func (v *validator) validateGivenBlock(sc *parser.Scenario, inputFields map[stri
 		return
 	}
 
+	// Check if given block contains any calls — if so, skip completeness
+	hasCalls := false
+	for _, step := range sc.Given.Steps {
+		if _, ok := step.(*parser.Call); ok {
+			hasCalls = true
+			break
+		}
+	}
+
+	// Type-check assignments
 	for _, step := range sc.Given.Steps {
 		assign, ok := step.(*parser.Assignment)
 		if !ok {
@@ -96,6 +106,23 @@ func (v *validator) validateGivenBlock(sc *parser.Scenario, inputFields map[stri
 
 		v.checkExprType(assign.Value, field.Type,
 			fmt.Sprintf("scope %q, scenario %q, field %q", v.scope, sc.Name, assign.Path))
+	}
+
+	// Completeness check: all required fields must be assigned
+	// Skip for given blocks with action calls (e.g., Playwright flows)
+	if !hasCalls {
+		assigned := make(map[string]bool)
+		for _, step := range sc.Given.Steps {
+			if a, ok := step.(*parser.Assignment); ok {
+				assigned[topLevelField(a.Path)] = true
+			}
+		}
+		for name, f := range inputFields {
+			if !f.Type.Optional && !assigned[name] {
+				v.errorf("scope %q, scenario %q: missing required field %q",
+					v.scope, sc.Name, name)
+			}
+		}
 	}
 }
 

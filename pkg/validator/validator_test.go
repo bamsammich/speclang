@@ -473,6 +473,106 @@ func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
 	}
 }
 
+func TestValidate_GivenMissingRequiredField(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "string"}},
+						{Name: "to", Type: parser.TypeExpr{Name: "string"}},
+						{Name: "note", Type: parser.TypeExpr{Name: "string", Optional: true}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{Path: "from", Value: parser.LiteralString{Value: "alice"}},
+								// "to" is missing and required
+								// "note" is missing but optional — should not error
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for missing 'to', got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "to") {
+		t.Errorf("expected error about 'to', got: %v", errs[0])
+	}
+}
+
+func TestValidate_GivenWithCallsSkipsCompleteness(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "playwright",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "username", Type: parser.TypeExpr{Name: "string"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "ui_flow",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Call{Namespace: "playwright", Method: "fill"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (given with calls skips completeness), got: %v", errs)
+	}
+}
+
+func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "generative",
+						When: &parser.Block{
+							Predicates: []parser.Expr{
+								parser.BinaryOp{Left: parser.FieldRef{Path: "amount"}, Op: ">", Right: parser.LiteralInt{Value: 0}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (when scenario skips completeness), got: %v", errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
