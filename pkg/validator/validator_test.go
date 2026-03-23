@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/bamsammich/speclang/v2/pkg/parser"
@@ -769,10 +770,5 @@ func TestFormatErrors(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
 }

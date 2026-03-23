@@ -36,7 +36,7 @@ Six checks, in dependency order:
 
 4. **Object field checking** — each field in an `ObjectLiteral` is checked against the referenced model's fields: field names must exist in the model, and values must match the model field's type. Extra fields are errors; missing fields are not errors (partial objects may be valid).
 
-5. **Given completeness** — every required (non-optional) contract input field must have an assignment in `given` blocks that use concrete values only (no calls). Skipped for `when`-predicate scenarios.
+5. **Given completeness** — every required (non-optional) contract input field must have an assignment in `given` blocks. Skipped for `when`-predicate scenarios and for `given` blocks containing action calls (e.g., Playwright flows where values are filled via actions, not assignments).
 
 6. **Then field validation** — every path assertion target in `then` blocks must correspond to a contract output field (or a dot-path into one).
 
