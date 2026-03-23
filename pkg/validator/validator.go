@@ -11,6 +11,7 @@ import (
 var primitives = map[string]bool{
 	"int": true, "string": true, "bool": true,
 	"float": true, "bytes": true, "array": true, "map": true,
+	"any": true,
 }
 
 // Validate performs post-parse semantic validation on a spec.
