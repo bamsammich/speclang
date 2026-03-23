@@ -573,6 +573,139 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 	}
 }
 
+func TestValidate_ThenUnknownField(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+					},
+					Output: []*parser.Field{
+						{Name: "result", Type: parser.TypeExpr{Name: "int"}},
+						{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+							},
+						},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Target: "result", Expected: parser.LiteralInt{Value: 42}},
+								{Target: "typo_field", Expected: parser.LiteralInt{Value: 0}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown then target, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "typo_field") {
+		t.Errorf("expected error about 'typo_field', got: %v", errs[0])
+	}
+}
+
+func TestValidate_ThenDotPathValid(t *testing.T) {
+	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Account", Fields: []*parser.Field{
+				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+					},
+					Output: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+						{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "from",
+									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+									}},
+								},
+							},
+						},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Target: "from.balance", Expected: parser.LiteralInt{Value: 70}},
+								{Target: "error", Expected: parser.LiteralNull{}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got: %v", errs)
+	}
+}
+
+func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "playwright",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "ui",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+							},
+						},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Target: "welcome", Plugin: "playwright", Property: "visible", Expected: parser.LiteralBool{Value: true}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (plugin assertions skipped), got: %v", errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

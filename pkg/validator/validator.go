@@ -66,6 +66,32 @@ func (v *validator) validateScenarios(scope *parser.Scope) {
 
 	for _, sc := range scope.Scenarios {
 		v.validateGivenBlock(sc, inputFields)
+		v.validateThenBlock(sc, scope)
+	}
+}
+
+func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) {
+	if sc.Then == nil || scope.Contract == nil {
+		return
+	}
+
+	outputFields := buildFieldMap(scope.Contract.Output)
+
+	for _, a := range sc.Then.Assertions {
+		// Skip plugin assertions (e.g., welcome@playwright.visible)
+		if a.Plugin != "" {
+			continue
+		}
+		// Skip expression assertions (invariant-style, no Target)
+		if a.Target == "" {
+			continue
+		}
+
+		fieldName := topLevelField(a.Target)
+		if _, ok := outputFields[fieldName]; !ok {
+			v.errorf("scope %q, scenario %q: then target %q does not match any output field",
+				v.scope, sc.Name, a.Target)
+		}
 	}
 }
 
