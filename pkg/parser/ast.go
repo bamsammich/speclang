@@ -176,6 +176,10 @@ type ObjField struct {
 	Key   string `json:"key"`
 }
 
+type ArrayLiteral struct {
+	Elements []Expr `json:"elements,omitempty"`
+}
+
 type LenExpr struct {
 	Arg Expr `json:"arg"`
 }
@@ -193,6 +197,7 @@ func (FieldRef) exprNode()      {}
 func (BinaryOp) exprNode()      {}
 func (UnaryOp) exprNode()       {}
 func (ObjectLiteral) exprNode() {}
+func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
 func (LenExpr) exprNode()       {}
 func (RegexLiteral) exprNode()  {}

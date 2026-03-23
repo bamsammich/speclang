@@ -108,6 +108,52 @@ spec Test {
 	}
 }
 
+func TestParseArrayLiteral(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given {
+        items: [1, 2, 3]
+      }
+      then {
+        ok: true
+      }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc := spec.Scopes[0].Scenarios[0]
+	a, ok := sc.Given.Steps[0].(*Assignment)
+	if !ok {
+		t.Fatalf("expected *Assignment, got %T", sc.Given.Steps[0])
+	}
+	arr, ok := a.Value.(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
+	}
+	if len(arr.Elements) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(arr.Elements))
+	}
+	for i, want := range []int{1, 2, 3} {
+		lit, ok := arr.Elements[i].(LiteralInt)
+		if !ok {
+			t.Fatalf("elements[%d]: expected LiteralInt, got %T", i, arr.Elements[i])
+		}
+		if lit.Value != want {
+			t.Errorf("elements[%d] = %d, want %d", i, lit.Value, want)
+		}
+	}
+}
+
 func TestParseLenExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
