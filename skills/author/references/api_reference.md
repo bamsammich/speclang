@@ -272,7 +272,29 @@ Generates models from `message` definitions and scopes from unary `rpc` methods.
 
 Unsupported types (array, float, enum, bytes, map) are skipped with a warning in both importers. Imported scopes have config and contracts populated but no invariants or scenarios — those are hand-authored.
 
-## Available Plugins
+## Validation
+
+Specs are automatically validated after parsing, before generation and verification begin. Validation checks:
+
+- **Model resolution**: All model references exist and are well-defined
+- **Type checking**: Literal values match their declared types (e.g., assigning a string to an `int` field)
+- **Array element types**: All elements in array literals match the array's element type
+- **Object field validation**: Object literals contain only declared fields with matching types
+- **Given completeness**: All required contract input fields are assigned in `given` blocks
+- **Then field validation**: All fields in `then` blocks are valid model fields or locator assertions
+
+**Validation failures are hard errors:** They cause `specrun` to exit with code 1 and print detailed messages. Verification does not proceed if validation fails — the user sees validation errors first.
+
+Example error output:
+
+```
+error validating spec:
+  scope transfer / scenario success:
+    given: required field "to" not assigned
+    error: type mismatch: expected int, got string "pending"
+```
+
+Error messages are hierarchical: `scope / scenario` or `scope / invariant` for context, then the specific error.
 
 ### `use http`
 

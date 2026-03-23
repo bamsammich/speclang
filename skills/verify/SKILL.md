@@ -15,6 +15,8 @@ Run `specrun verify` to confirm the implementation satisfies its spec before mer
 
 ## Process
 
+Specs are validated automatically before verification runs. Validation checks model resolution, type correctness, and field completeness. If validation fails, `specrun` exits with code 1 and prints validation errors — verification does not proceed. Fix the spec and run verify again.
+
 ### 1. Find the spec files
 
 ```bash
