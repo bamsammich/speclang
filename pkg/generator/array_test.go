@@ -112,3 +112,61 @@ func TestEvalLen(t *testing.T) {
 		t.Errorf("len(meta) = %v, want 2", val)
 	}
 }
+
+func TestEvalArrayLiteral(t *testing.T) {
+	ctx := &evalCtx{input: map[string]any{}}
+
+	// Simple array
+	val, ok := ctx.eval(parser.ArrayLiteral{
+		Elements: []parser.Expr{
+			parser.LiteralInt{Value: 1},
+			parser.LiteralInt{Value: 2},
+			parser.LiteralInt{Value: 3},
+		},
+	})
+	if !ok {
+		t.Fatal("eval returned not ok")
+	}
+	arr, ok := val.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", val)
+	}
+	if len(arr) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(arr))
+	}
+	for i, want := range []int{1, 2, 3} {
+		if arr[i] != want {
+			t.Errorf("arr[%d] = %v, want %d", i, arr[i], want)
+		}
+	}
+
+	// Empty array
+	val, ok = ctx.eval(parser.ArrayLiteral{})
+	if !ok {
+		t.Fatal("eval empty array returned not ok")
+	}
+	arr = val.([]any)
+	if len(arr) != 0 {
+		t.Errorf("expected 0 elements, got %d", len(arr))
+	}
+
+	// Nested array of objects
+	val, ok = ctx.eval(parser.ArrayLiteral{
+		Elements: []parser.Expr{
+			parser.ObjectLiteral{Fields: []*parser.ObjField{
+				{Key: "name", Value: parser.LiteralString{Value: "a"}},
+			}},
+		},
+	})
+	if !ok {
+		t.Fatal("eval nested returned not ok")
+	}
+	arr = val.([]any)
+	inner, ok := arr[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", arr[0])
+	}
+	if inner["name"] != "a" {
+		t.Errorf("inner[name] = %v, want 'a'", inner["name"])
+	}
+}
