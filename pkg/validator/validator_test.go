@@ -340,6 +340,139 @@ func TestValidate_NestedArrays(t *testing.T) {
 	}
 }
 
+func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
+	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Account", Fields: []*parser.Field{
+				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "from",
+									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+										{Key: "email", Value: parser.LiteralString{Value: "alice@test.com"}},
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown field email, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "email") {
+		t.Errorf("expected error about 'email', got: %v", errs[0])
+	}
+}
+
+func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
+	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Account", Fields: []*parser.Field{
+				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "from",
+									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+										{Key: "balance", Value: parser.LiteralString{Value: "not_an_int"}},
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for balance type mismatch, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
+	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Account", Fields: []*parser.Field{
+				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "from",
+									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got: %v", errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
