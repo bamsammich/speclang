@@ -3,7 +3,7 @@ package generator
 import (
 	"encoding/base64"
 
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Shrink attempts to find a minimal counterexample by shrinking each field

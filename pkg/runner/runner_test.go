@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bamsammich/speclang/pkg/adapter"
-	"github.com/bamsammich/speclang/pkg/parser"
-	"github.com/bamsammich/speclang/pkg/runner"
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/runner"
 )
 
 func transferHandler(w http.ResponseWriter, r *http.Request) {

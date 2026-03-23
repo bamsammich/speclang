@@ -8,12 +8,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bamsammich/speclang/pkg/adapter"
-	"github.com/bamsammich/speclang/pkg/generator"
-	"github.com/bamsammich/speclang/pkg/openapi"
-	"github.com/bamsammich/speclang/pkg/parser"
-	protoResolver "github.com/bamsammich/speclang/pkg/proto"
-	"github.com/bamsammich/speclang/pkg/runner"
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
+	"github.com/bamsammich/speclang/v2/pkg/generator"
+	"github.com/bamsammich/speclang/v2/pkg/openapi"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
+	protoResolver "github.com/bamsammich/speclang/v2/pkg/proto"
+	"github.com/bamsammich/speclang/v2/pkg/runner"
 	playwright "github.com/playwright-community/playwright-go"
 )
 

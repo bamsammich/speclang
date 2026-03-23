@@ -3,7 +3,7 @@ package plugin
 import (
 	"fmt"
 
-	"github.com/bamsammich/speclang/pkg/adapter"
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
 )
 
 // Registry maps plugin names to their adapters.

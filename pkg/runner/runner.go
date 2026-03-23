@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bamsammich/speclang/pkg/adapter"
-	"github.com/bamsammich/speclang/pkg/generator"
-	"github.com/bamsammich/speclang/pkg/parser"
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
+	"github.com/bamsammich/speclang/v2/pkg/generator"
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Result captures the outcome of a verification run.
