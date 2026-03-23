@@ -185,6 +185,161 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 	}
 }
 
+func TestValidate_ArrayElementTypeMismatch(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "tags", Type: parser.TypeExpr{
+							Name:     "array",
+							ElemType: &parser.TypeExpr{Name: "int"},
+						}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "tags",
+									Value: parser.ArrayLiteral{
+										Elements: []parser.Expr{
+											parser.LiteralInt{Value: 1},
+											parser.LiteralString{Value: "oops"},
+											parser.LiteralInt{Value: 3},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for string in []int, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
+	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Item", Fields: []*parser.Field{
+				{Name: "name", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "price", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "items", Type: parser.TypeExpr{
+							Name:     "array",
+							ElemType: &parser.TypeExpr{Name: "Item"},
+						}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "items",
+									Value: parser.ArrayLiteral{
+										Elements: []parser.Expr{
+											parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "name", Value: parser.LiteralString{Value: "widget"}},
+												{Key: "price", Value: parser.LiteralInt{Value: 100}},
+											}},
+											parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "name", Value: parser.LiteralString{Value: "gadget"}},
+												{Key: "colour", Value: parser.LiteralString{Value: "red"}},
+											}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) == 0 {
+		t.Fatal("expected errors for unknown field 'colour'")
+	}
+	foundColour := false
+	for _, e := range errs {
+		if contains(e.Error(), "colour") {
+			foundColour = true
+		}
+	}
+	if !foundColour {
+		t.Errorf("expected error about unknown field 'colour', got: %v", errs)
+	}
+}
+
+func TestValidate_NestedArrays(t *testing.T) {
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{
+			{
+				Name: "test",
+				Use:  "http",
+				Contract: &parser.Contract{
+					Input: []*parser.Field{
+						{Name: "matrix", Type: parser.TypeExpr{
+							Name: "array",
+							ElemType: &parser.TypeExpr{
+								Name:     "array",
+								ElemType: &parser.TypeExpr{Name: "int"},
+							},
+						}},
+					},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "smoke",
+						Given: &parser.Block{
+							Steps: []parser.GivenStep{
+								&parser.Assignment{
+									Path: "matrix",
+									Value: parser.ArrayLiteral{
+										Elements: []parser.Expr{
+											parser.ArrayLiteral{Elements: []parser.Expr{
+												parser.LiteralInt{Value: 1},
+											}},
+											parser.ArrayLiteral{Elements: []parser.Expr{
+												parser.LiteralString{Value: "bad"},
+											}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for string in nested [][]int, got %d: %v", len(errs), errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

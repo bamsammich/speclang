@@ -146,17 +146,45 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 			}
 		}
 	case "array":
-		if _, ok := expr.(parser.ArrayLiteral); !ok {
+		arr, ok := expr.(parser.ArrayLiteral)
+		if !ok {
 			if !isNonLiteral(expr) {
 				v.errorf("%s: expected array, got %s", context, exprTypeName(expr))
+			}
+			return
+		}
+		if te.ElemType != nil {
+			for i, elem := range arr.Elements {
+				v.checkExprType(elem, *te.ElemType,
+					fmt.Sprintf("%s[%d]", context, i))
 			}
 		}
 	default:
 		// Model type — expect ObjectLiteral
-		if _, ok := expr.(parser.ObjectLiteral); !ok {
+		obj, ok := expr.(parser.ObjectLiteral)
+		if !ok {
 			if !isNonLiteral(expr) {
 				v.errorf("%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
 			}
+			return
+		}
+		// Validate object fields against model
+		model, ok := v.models[te.Name]
+		if !ok {
+			return // unknown model — already reported by validateContract
+		}
+		modelFields := make(map[string]*parser.Field, len(model.Fields))
+		for _, f := range model.Fields {
+			modelFields[f.Name] = f
+		}
+		for _, of := range obj.Fields {
+			mf, ok := modelFields[of.Key]
+			if !ok {
+				v.errorf("%s: unknown field %q in model %s", context, of.Key, te.Name)
+				continue
+			}
+			v.checkExprType(of.Value, mf.Type,
+				fmt.Sprintf("%s.%s", context, of.Key))
 		}
 	}
 }
