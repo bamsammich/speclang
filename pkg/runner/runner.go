@@ -744,6 +744,12 @@ func exprToValue(expr parser.Expr) any {
 			m[f.Key] = exprToValue(f.Value)
 		}
 		return m
+	case parser.ArrayLiteral:
+		result := make([]any, len(e.Elements))
+		for i, elem := range e.Elements {
+			result[i] = exprToValue(elem)
+		}
+		return result
 	default:
 		return nil
 	}
