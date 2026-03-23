@@ -279,6 +279,16 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 			m[f.Key] = v
 		}
 		return m, true
+	case parser.ArrayLiteral:
+		result := make([]any, len(e.Elements))
+		for i, elem := range e.Elements {
+			v, ok := c.eval(elem)
+			if !ok {
+				return nil, false
+			}
+			result[i] = v
+		}
+		return result, true
 	case parser.LenExpr:
 		val, ok := c.eval(e.Arg)
 		if !ok {

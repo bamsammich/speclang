@@ -1094,6 +1094,9 @@ func (p *parser) parseAtom() (Expr, error) {
 	case TokenLBrace:
 		return p.parseObjectLiteral()
 
+	case TokenLBracket:
+		return p.parseArrayLiteral()
+
 	case TokenLParen:
 		p.advance() // consume (
 		expr, err := p.parseExpr()
@@ -1206,4 +1209,26 @@ func (p *parser) parseObjectLiteral() (Expr, error) {
 		return nil, err
 	}
 	return obj, nil
+}
+
+// parseArrayLiteral parses: [ expr, expr, ... ]
+func (p *parser) parseArrayLiteral() (Expr, error) {
+	p.advance() // consume [
+	arr := ArrayLiteral{}
+
+	for p.peek().Type != TokenRBracket && p.peek().Type != TokenEOF {
+		elem, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		arr.Elements = append(arr.Elements, elem)
+		if p.peek().Type == TokenComma {
+			p.advance()
+		}
+	}
+
+	if _, err := p.expect(TokenRBracket); err != nil {
+		return nil, err
+	}
+	return arr, nil
 }

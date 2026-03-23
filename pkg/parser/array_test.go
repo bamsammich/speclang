@@ -108,6 +108,52 @@ spec Test {
 	}
 }
 
+func TestParseArrayLiteral(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given {
+        items: [1, 2, 3]
+      }
+      then {
+        ok: true
+      }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc := spec.Scopes[0].Scenarios[0]
+	a, ok := sc.Given.Steps[0].(*Assignment)
+	if !ok {
+		t.Fatalf("expected *Assignment, got %T", sc.Given.Steps[0])
+	}
+	arr, ok := a.Value.(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
+	}
+	if len(arr.Elements) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(arr.Elements))
+	}
+	for i, want := range []int{1, 2, 3} {
+		lit, ok := arr.Elements[i].(LiteralInt)
+		if !ok {
+			t.Fatalf("elements[%d]: expected LiteralInt, got %T", i, arr.Elements[i])
+		}
+		if lit.Value != want {
+			t.Errorf("elements[%d] = %d, want %d", i, lit.Value, want)
+		}
+	}
+}
+
 func TestParseLenExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
@@ -143,5 +189,162 @@ spec Test {
 	}
 	if fieldRef.Path != "items" {
 		t.Errorf("len arg path = %q, want 'items'", fieldRef.Path)
+	}
+}
+
+func TestParseArrayLiteral_Empty(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given { items: [] }
+      then { ok: true }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	arr, ok := a.Value.(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
+	}
+	if len(arr.Elements) != 0 {
+		t.Errorf("expected 0 elements, got %d", len(arr.Elements))
+	}
+}
+
+func TestParseArrayLiteral_Nested(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { matrix: [][]int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given { matrix: [[1, 2], [3, 4]] }
+      then { ok: true }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	arr, ok := a.Value.(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
+	}
+	if len(arr.Elements) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr.Elements))
+	}
+	inner, ok := arr.Elements[0].(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected nested ArrayLiteral, got %T", arr.Elements[0])
+	}
+	if len(inner.Elements) != 2 {
+		t.Errorf("expected 2 inner elements, got %d", len(inner.Elements))
+	}
+}
+
+func TestParseArrayLiteral_Objects(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  model Item {
+    name: string
+    price: int
+  }
+  scope test {
+    use http
+    contract {
+      input { items: []Item }
+      output { total: int }
+    }
+    scenario smoke {
+      given {
+        items: [
+          { name: "widget", price: 100 },
+          { name: "gadget", price: 200 }
+        ]
+      }
+      then { total: 300 }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	arr, ok := a.Value.(ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
+	}
+	if len(arr.Elements) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr.Elements))
+	}
+	obj, ok := arr.Elements[0].(ObjectLiteral)
+	if !ok {
+		t.Fatalf("expected ObjectLiteral, got %T", arr.Elements[0])
+	}
+	if len(obj.Fields) != 2 {
+		t.Errorf("expected 2 fields, got %d", len(obj.Fields))
+	}
+}
+
+func TestParseArrayLiteral_TrailingComma(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given { items: [1, 2, 3,] }
+      then { ok: true }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	arr := a.Value.(ArrayLiteral)
+	if len(arr.Elements) != 3 {
+		t.Errorf("expected 3 elements (trailing comma), got %d", len(arr.Elements))
+	}
+}
+
+func TestParseArrayLiteral_Unterminated(t *testing.T) {
+	_, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { items: []int }
+      output { ok: bool }
+    }
+    scenario smoke {
+      given { items: [1, 2 }
+      then { ok: true }
+    }
+  }
+}
+`)
+	if err == nil {
+		t.Fatal("expected parse error for unterminated array")
 	}
 }

@@ -80,6 +80,7 @@ spec <Name> {
 - **Field references**: `from.balance`, `output.error`
 - **Environment**: `env(VAR)`, `env(VAR, "default")`
 - **Objects**: `{ id: "alice", balance: 100 }`
+- **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
 - **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
 - **Functions**: `len(expr)` — returns length of array, map, or string
 
@@ -222,6 +223,20 @@ scope login {
     then {
       welcome@playwright.visible: true
     }
+  }
+}
+```
+
+Array literals can be used in `given` blocks to assign to array fields:
+
+```
+scenario process_batch {
+  given {
+    ids: [1, 2, 3]
+    names: ["alice", "bob", "charlie"]
+  }
+  then {
+    count: 3
   }
 }
 ```
