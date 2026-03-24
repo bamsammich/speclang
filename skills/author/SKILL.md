@@ -89,6 +89,18 @@ invariant conservation {
 }
 ```
 
+Use `all()` and `any()` to assert over array elements:
+
+```
+invariant all_items_valid {
+  all(output.items, item => item.status != "error")
+}
+
+invariant has_primary {
+  any(output.items, item => item.primary == true)
+}
+```
+
 For UI specs, invariants over visible state are also useful:
 
 ```

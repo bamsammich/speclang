@@ -1150,18 +1150,22 @@ func (p *parser) parseAtom() (Expr, error) {
 		return p.parseIfExpr()
 
 	default:
-		// Built-in functions: len(expr), exists(expr), has_key(expr, key)
-		if tok.Type == TokenIdent && tok.Value == "len" {
-			return p.parseLenExpr()
-		}
-		if tok.Type == TokenIdent && tok.Value == "contains" {
-			return p.parseContainsExpr()
-		}
-		if tok.Type == TokenIdent && tok.Value == "exists" {
-			return p.parseExistsExpr()
-		}
-		if tok.Type == TokenIdent && tok.Value == "has_key" {
-			return p.parseHasKeyExpr()
+		// Built-in functions
+		if tok.Type == TokenIdent {
+			switch tok.Value {
+			case "len":
+				return p.parseLenExpr()
+			case "all":
+				return p.parseQuantifierExpr("all")
+			case "any":
+				return p.parseQuantifierExpr("any")
+			case "contains":
+				return p.parseContainsExpr()
+			case "exists":
+				return p.parseExistsExpr()
+			case "has_key":
+				return p.parseHasKeyExpr()
+			}
 		}
 		if isIdentLike(tok.Type) {
 			return p.parseFieldRefExpr()
@@ -1199,6 +1203,45 @@ func (p *parser) parseLenExpr() (Expr, error) {
 		return nil, err
 	}
 	return LenExpr{Arg: arg}, nil
+}
+
+// parseQuantifierExpr parses: all(expr, ident => expr) or any(expr, ident => expr)
+// The "=>" arrow is lexed as TokenAssign followed by TokenGt.
+func (p *parser) parseQuantifierExpr(name string) (Expr, error) {
+	p.advance() // consume "all" or "any"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arrayExpr, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return nil, err
+	}
+	boundVar, err := p.expectIdent()
+	if err != nil {
+		return nil, err
+	}
+	// Expect "=>" as two tokens: = then >
+	if _, err := p.expect(TokenAssign); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenGt); err != nil {
+		return nil, err
+	}
+	predicate, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+
+	if name == "all" {
+		return AllExpr{Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
+	}
+	return AnyExpr{Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
 }
 
 // parseContainsExpr parses: contains(haystack, needle)

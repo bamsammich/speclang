@@ -32,4 +32,16 @@ scope verify_pass {
       invariants_passed: 3
     }
   }
+
+  # Every scope in the verify JSON has a non-empty name.
+  invariant all_scopes_have_names {
+    when exit_code == 0:
+      all(output.scopes, s => s.name != "")
+  }
+
+  # Every check across all scopes passes.
+  invariant all_checks_pass {
+    when exit_code == 0:
+      all(output.scopes, s => all(s.checks, c => c.passed == true))
+  }
 }

@@ -185,6 +185,20 @@ type LenExpr struct {
 	Arg Expr `json:"arg"`
 }
 
+// AllExpr represents all(array, elem => predicate) — true if predicate holds for every element.
+type AllExpr struct {
+	Array     Expr   `json:"array"`     // expression evaluating to an array
+	BoundVar  string `json:"bound_var"` // loop variable name
+	Predicate Expr   `json:"predicate"` // boolean expression evaluated per element
+}
+
+// AnyExpr represents any(array, elem => predicate) — true if predicate holds for at least one element.
+type AnyExpr struct {
+	Array     Expr   `json:"array"`     // expression evaluating to an array
+	BoundVar  string `json:"bound_var"` // loop variable name
+	Predicate Expr   `json:"predicate"` // boolean expression evaluated per element
+}
+
 type ContainsExpr struct {
 	Haystack Expr `json:"haystack"`
 	Needle   Expr `json:"needle"`
@@ -221,6 +235,8 @@ func (ObjectLiteral) exprNode() {}
 func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
 func (LenExpr) exprNode()       {}
+func (AllExpr) exprNode()       {}
+func (AnyExpr) exprNode()       {}
 func (ContainsExpr) exprNode()  {}
 func (ExistsExpr) exprNode()    {}
 func (HasKeyExpr) exprNode()    {}
