@@ -19,6 +19,7 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 - **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level. Each scope independently declares which plugin drives it.
 - **Namespaced calls**: Plugin methods are called as `plugin.method()` (e.g., `playwright.fill(locator, value)`)
 - **Assertion syntax in `then` blocks**: `locator@plugin.property: expected` (e.g., `error_msg@playwright.visible: true`)
+- **Error pseudo-field**: `error` in `then` blocks asserts against action errors when `error` is NOT a contract output field. When an adapter action returns `{ok: false}`, the error string is captured and assertable via `then { error: "expected message" }`. Use `error: null` to assert no error occurred.
 - **Three scenario types** (ascending verification strength):
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
@@ -175,6 +176,31 @@ This protocol applies to **external** adapters (subprocess communication). **Bui
 ```json
 {"ok": false, "error": "element not found"}
 ```
+
+### Error Pseudo-Field
+
+`error` is a special pseudo-field in `then` blocks that asserts against adapter action errors. It activates only when `error` is NOT declared in the scope's contract output fields. When `error` IS a contract output field, it behaves as a normal field assertion.
+
+When an adapter's `Action()` returns `{ok: false, error: "..."}`, the error string is captured instead of failing the test. The `then` block can then assert on it:
+
+```
+then {
+  error: "element not found"     # expect this specific error
+}
+```
+
+```
+then {
+  error: null                     # expect no error
+}
+```
+
+Behavior:
+- If `error` is asserted and the action fails, the error string is compared against the expected value.
+- If `error` is asserted as `null` and no error occurred, the assertion passes.
+- If `error` is asserted but no error occurred, the assertion fails.
+- If an action fails but `error` is NOT asserted in `then`, the test fails as before (backward compatible).
+- If `error` is declared in the contract's output fields, it's treated as a regular output field — not the pseudo-field.
 
 ### Anti-Gaming Properties
 
