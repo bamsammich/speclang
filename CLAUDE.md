@@ -29,6 +29,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC
 - **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks with opaque `config` blocks
 - **Counterexample shrinking**: Binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively)
+- **Target services**: `services` block in `target` declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups. Container lifecycle: pre-flight cleanup, health checks (HTTP or TCP), signal handling, `--keep-services` flag to leave containers running for debugging, `--no-services` to skip lifecycle (used in subprocess invocations)
 
 ### Language Features
 
@@ -139,6 +140,10 @@ speclang/
 │   │   ├── http.go       # built-in HTTP adapter
 │   │   ├── process.go    # built-in process adapter (subprocess execution)
 │   │   └── playwright.go # built-in Playwright adapter (compiled into specrun)
+│   ├── infra/            # Docker/compose service lifecycle management
+│   │   ├── infra.go      # ServiceManager interface and types
+│   │   ├── docker.go     # Docker SDK container management
+│   │   └── compose.go    # docker compose CLI integration
 │   ├── openapi/          # OpenAPI import resolver
 │   │   ├── openapi.go    # Resolver implementing ImportResolver
 │   │   ├── document.go   # OpenAPI doc loading via kin-openapi
@@ -175,7 +180,8 @@ speclang/
 │   ├── generate.spec     # generator constraint satisfaction
 │   ├── verify.spec       # verify_pass scope
 │   ├── verify_fail.spec  # verify_fail scope (broken implementation detection)
-│   └── shrinking.spec    # shrinking scope (counterexample minimality)
+│   ├── shrinking.spec    # shrinking scope (counterexample minimality)
+│   └── services.spec     # service lifecycle, service ref parsing, validation
 └── testdata/
     ├── include/          # multi-file include test fixtures
     │   ├── basic/        # root includes models + scopes
@@ -199,6 +205,7 @@ speclang/
 - `net/http` for built-in HTTP adapter
 - `os/exec` for built-in process adapter
 - `math/rand/v2` for input generation
+- `github.com/docker/docker` for container lifecycle management (services feature)
 
 ## Commands
 
@@ -210,6 +217,8 @@ go test ./...                                                   # run all tests
 ./specrun generate examples/transfer.spec --scope transfer      # generate one input as JSON
 ./specrun verify examples/transfer.spec --json                  # verify with JSON output
 ./specrun verify specs/speclang.spec                            # self-verification
+./specrun verify spec.spec --keep-services                      # keep containers running after verify
+./specrun verify spec.spec --no-services                        # skip container lifecycle management
 ./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 
@@ -217,7 +226,7 @@ go test ./...                                                   # run all tests
 
 Speclang verifies itself with its own specs via `specs/speclang.spec`. See [docs/self-verification.md](docs/self-verification.md) for details.
 
-The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior:
+The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior. The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `target` block — these containers are managed automatically during verification when Docker is available:
 
 - **parse_valid** — parser accepts valid specs and produces expected AST structure
 - **parse_invalid** — parser rejects malformed specs with exit code 1
@@ -229,6 +238,9 @@ The self-verification spec uses the process adapter to invoke `specrun` subcomma
 - **verify_pass** — `specrun verify` passes correct implementations
 - **verify_fail** — `specrun verify` detects incorrect implementations
 - **shrinking** — counterexample shrinking produces minimal values
+- **verify_service_lifecycle** — services start, health-check, and respond correctly
+- **parse_service_ref** — `service(name)` expressions parse correctly
+- **invalid_service_ref** — unknown service references are rejected
 
 Run self-verification:
 ```bash
