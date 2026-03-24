@@ -60,7 +60,7 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 		Headless: playwright.Bool(headless),
 	})
 	if err != nil {
-		a.pw.Stop() //nolint:errcheck
+		a.pw.Stop() //nolint:errcheck // best-effort cleanup during error path, original error is more important
 		return fmt.Errorf(
 			"launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers",
 			err,
@@ -70,8 +70,8 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 
 	page, err := browser.NewPage()
 	if err != nil {
-		browser.Close() //nolint:errcheck
-		a.pw.Stop()     //nolint:errcheck
+		browser.Close() //nolint:errcheck // best-effort cleanup during error path
+		a.pw.Stop()     //nolint:errcheck // best-effort cleanup during error path
 		return fmt.Errorf("creating page: %w", err)
 	}
 	a.page = page

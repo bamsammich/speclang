@@ -416,7 +416,7 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 
 		if _, err := sr.executeInput(input); err != nil {
 			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck
+				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
 			}
 			return CheckResult{}, err
 		}
@@ -424,7 +424,7 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 		// If action returned {ok: false} but scenario doesn't assert on error, fail.
 		if sr.lastActionError != "" && !expectsError {
 			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck
+				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
 			}
 			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
@@ -433,19 +433,19 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 
 		if sc.Then == nil {
 			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck
+				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
 			}
 			continue
 		}
 
 		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
 			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck
+				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
 			}
 			return CheckResult{}, err
 		} else if f != nil {
 			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck
+				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
 			}
 			f = sr.shrinkFailure(f, sc.Then)
 			check.Passed = false

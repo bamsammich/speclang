@@ -363,7 +363,7 @@ func createSingleAdapter(
 
 func closeAdapters(adapters map[string]adapter.Adapter) {
 	for _, adp := range adapters {
-		adp.Close() //nolint:errcheck
+		adp.Close() //nolint:errcheck // best-effort cleanup at program exit
 	}
 }
 
