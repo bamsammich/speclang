@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -208,12 +209,39 @@ func (dm *DockerManager) buildImage(ctx context.Context, svc ServiceDef) error {
 	}
 	defer resp.Body.Close()
 
-	// Must drain the response body for the build to complete.
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return fmt.Errorf("reading build output: %w", err)
-	}
+	// Drain the response body and check for build errors embedded in the
+	// JSON stream. The Docker API reports build failures as {"error": ...}
+	// messages rather than as HTTP-level errors.
+	return drainBuildOutput(resp.Body)
+}
 
-	return nil
+// buildOutputMsg represents a single message in the Docker build output stream.
+type buildOutputMsg struct {
+	Error string `json:"error"`
+}
+
+// drainBuildOutput reads all Docker build output messages and returns the
+// first error encountered.
+func drainBuildOutput(r io.Reader) error {
+	decoder := json.NewDecoder(r)
+	for {
+		var msg buildOutputMsg
+		if err := decoder.Decode(&msg); err == io.EOF {
+			return nil
+		} else if err != nil {
+			// Non-JSON output or partial read — not a build error.
+			// Drain remaining bytes and return.
+			io.Copy(io.Discard, decoder.Buffered()) //nolint:errcheck // best-effort drain
+			io.Copy(io.Discard, r)                  //nolint:errcheck // best-effort drain
+			return nil
+		}
+		if msg.Error != "" {
+			// Drain remaining output before returning.
+			io.Copy(io.Discard, decoder.Buffered()) //nolint:errcheck // best-effort drain
+			io.Copy(io.Discard, r)                  //nolint:errcheck // best-effort drain
+			return fmt.Errorf("docker build: %s", msg.Error)
+		}
+	}
 }
 
 func (dm *DockerManager) pullImage(ctx context.Context, imgRef string) error {
@@ -374,14 +402,19 @@ func generateRunID() (string, error) {
 // ancestor of buildDir, it is used as the context so that the Dockerfile can
 // access the full module tree. Otherwise buildDir itself is the context.
 func resolveBuildContext(buildDir string) (contextDir, dockerfilePath string) {
-	moduleRoot := findModuleRoot(buildDir)
-	if moduleRoot == "" {
+	absBuild, err := filepath.Abs(buildDir)
+	if err != nil {
 		return buildDir, defaultDockerfile
 	}
 
-	rel, err := filepath.Rel(moduleRoot, buildDir)
+	moduleRoot := findModuleRoot(absBuild)
+	if moduleRoot == "" {
+		return absBuild, defaultDockerfile
+	}
+
+	rel, err := filepath.Rel(moduleRoot, absBuild)
 	if err != nil {
-		return buildDir, defaultDockerfile
+		return absBuild, defaultDockerfile
 	}
 
 	return moduleRoot, filepath.ToSlash(filepath.Join(rel, defaultDockerfile))
