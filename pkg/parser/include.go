@@ -26,7 +26,12 @@ func lexFile(path string) ([]Token, error) {
 // dir is the directory of the file being processed (for relative path resolution).
 // filePath is the absolute path of the current file (for circular detection).
 // seen tracks files currently in the include chain (ancestors only).
-func resolveIncludes(tokens []Token, dir string, filePath string, seen map[string]bool) ([]Token, error) {
+func resolveIncludes(
+	tokens []Token,
+	dir string,
+	filePath string,
+	seen map[string]bool,
+) ([]Token, error) {
 	if seen == nil {
 		seen = make(map[string]bool)
 	}

@@ -15,12 +15,12 @@ type Spec struct {
 // Use declares which plugin adapter handles this scope's execution.
 // The Config block is opaque key-value pairs interpreted by the adapter.
 type Scope struct {
-	Name       string              `json:"name"`
-	Use        string              `json:"use"`                  // plugin binding (e.g. "http", "playwright")
-	Config     map[string]Expr     `json:"config,omitempty"`     // opaque key-value pairs, interpreted by adapter
-	Contract   *Contract           `json:"contract,omitempty"`
-	Invariants []*Invariant        `json:"invariants,omitempty"`
-	Scenarios  []*Scenario         `json:"scenarios,omitempty"`
+	Name       string          `json:"name"`
+	Use        string          `json:"use"`              // plugin binding (e.g. "http", "playwright")
+	Config     map[string]Expr `json:"config,omitempty"` // opaque key-value pairs, interpreted by adapter
+	Contract   *Contract       `json:"contract,omitempty"`
+	Invariants []*Invariant    `json:"invariants,omitempty"`
+	Scenarios  []*Scenario     `json:"scenarios,omitempty"`
 }
 
 // Target holds configuration for the system under test.
@@ -43,12 +43,12 @@ type Field struct {
 
 // TypeExpr represents a type in the spec language.
 type TypeExpr struct {
-	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", "enum", or model name
-	ElemType *TypeExpr `json:"elem_type,omitempty"`     // element type for arrays
-	KeyType  *TypeExpr `json:"key_type,omitempty"`      // key type for maps
-	ValType  *TypeExpr `json:"val_type,omitempty"`      // value type for maps
-	Variants []string  `json:"variants,omitempty"`      // enum variants (for enum type)
-	Optional bool      `json:"optional,omitempty"`      // trailing ?
+	Name     string    `json:"name"`                // "int", "string", "bool", "float", "bytes", "array", "map", "enum", or model name
+	ElemType *TypeExpr `json:"elem_type,omitempty"` // element type for arrays
+	KeyType  *TypeExpr `json:"key_type,omitempty"`  // key type for maps
+	ValType  *TypeExpr `json:"val_type,omitempty"`  // value type for maps
+	Variants []string  `json:"variants,omitempty"`  // enum variants (for enum type)
+	Optional bool      `json:"optional,omitempty"`  // trailing ?
 }
 
 // Contract defines the input/output boundary of the system under test.
@@ -209,8 +209,8 @@ type ExistsExpr struct {
 }
 
 type HasKeyExpr struct {
-	Arg Expr   `json:"arg"`
-	Key Expr   `json:"key"`
+	Arg Expr `json:"arg"`
+	Key Expr `json:"key"`
 }
 
 type RegexLiteral struct {

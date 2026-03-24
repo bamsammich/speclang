@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	pw "github.com/playwright-community/playwright-go"
+
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
 )
 
 const testLoginPage = `<!DOCTYPE html>
@@ -156,7 +157,10 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 			t.Fatalf("assert text: %v", err)
 		}
 		if !resp.OK {
-			t.Errorf("welcome text mismatch: expected 'Welcome, alice', got %s", string(resp.Actual))
+			t.Errorf(
+				"welcome text mismatch: expected 'Welcome, alice', got %s",
+				string(resp.Actual),
+			)
 		}
 	})
 

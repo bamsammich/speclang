@@ -56,7 +56,12 @@ func schemaRefToField(name string, ref *openapi3.SchemaRef, optional bool) *pars
 	if ref.Ref != "" {
 		modelName := refName(ref.Ref)
 		if modelName == "" {
-			fmt.Fprintf(os.Stderr, "warning: unsupported $ref %q for field %q, skipping\n", ref.Ref, name)
+			fmt.Fprintf(
+				os.Stderr,
+				"warning: unsupported $ref %q for field %q, skipping\n",
+				ref.Ref,
+				name,
+			)
 			return nil
 		}
 		return &parser.Field{
@@ -72,7 +77,12 @@ func schemaRefToField(name string, ref *openapi3.SchemaRef, optional bool) *pars
 
 	typeExpr, ok := mapType(sch)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "warning: unsupported type %q for field %q, skipping\n", sch.Type.Slice(), name)
+		fmt.Fprintf(
+			os.Stderr,
+			"warning: unsupported type %q for field %q, skipping\n",
+			sch.Type.Slice(),
+			name,
+		)
 		return nil
 	}
 	typeExpr.Optional = optional

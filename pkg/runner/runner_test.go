@@ -128,8 +128,8 @@ func TestRelationalAssertions(t *testing.T) {
 						{
 							Target: "sum",
 							Expected: parser.BinaryOp{
-								Left: parser.FieldRef{Path: "a"},
-								Op:   "+",
+								Left:  parser.FieldRef{Path: "a"},
+								Op:    "+",
 								Right: parser.FieldRef{Path: "b"},
 							},
 						},
@@ -186,7 +186,12 @@ func (m *mockAdapter) Action(name string, args json.RawMessage) (*adapter.Respon
 	m.actionCalls = append(m.actionCalls, actionCall{Name: name, Args: args})
 	return &adapter.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 }
-func (m *mockAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
+
+func (m *mockAdapter) Assert(
+	property string,
+	locator string,
+	expected json.RawMessage,
+) (*adapter.Response, error) {
 	m.assertCalls = append(m.assertCalls, assertCall{
 		Property: property,
 		Locator:  locator,
@@ -317,7 +322,10 @@ func TestGivenStepExecution(t *testing.T) {
 							},
 						},
 						// user: "alice"
-						&parser.Assignment{Path: "user", Value: parser.LiteralString{Value: "alice"}},
+						&parser.Assignment{
+							Path:  "user",
+							Value: parser.LiteralString{Value: "alice"},
+						},
 						// playwright.click(submit)
 						&parser.Call{
 							Namespace: "playwright",
@@ -426,7 +434,10 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 							},
 						},
 						// name: "widget" (for assertion evaluation)
-						&parser.Assignment{Path: "name", Value: parser.LiteralString{Value: "widget"}},
+						&parser.Assignment{
+							Path:  "name",
+							Value: parser.LiteralString{Value: "widget"},
+						},
 					},
 				},
 				Then: &parser.Block{
@@ -603,7 +614,12 @@ func (f *failingAdapter) Init(config map[string]string) error { return nil }
 func (f *failingAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
 	return &adapter.Response{OK: false, Error: f.errorMsg}, nil
 }
-func (f *failingAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
+
+func (f *failingAdapter) Assert(
+	property string,
+	locator string,
+	expected json.RawMessage,
+) (*adapter.Response, error) {
 	return &adapter.Response{OK: true, Actual: expected}, nil
 }
 func (f *failingAdapter) Close() error { return nil }

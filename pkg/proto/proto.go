@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bamsammich/speclang/v2/pkg/parser"
 	protoparser "github.com/yoheimuta/go-protoparser/v4"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
+
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Resolver implements parser.ImportResolver for protobuf files.

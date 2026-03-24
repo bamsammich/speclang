@@ -49,7 +49,10 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 
 	pw, err := playwright.Run()
 	if err != nil {
-		return fmt.Errorf("starting playwright: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
+		return fmt.Errorf(
+			"starting playwright: %w\n\nHint: run 'specrun install playwright' to install browsers",
+			err,
+		)
 	}
 	a.pw = pw
 
@@ -58,14 +61,17 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 	})
 	if err != nil {
 		a.pw.Stop() //nolint:errcheck
-		return fmt.Errorf("launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
+		return fmt.Errorf(
+			"launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers",
+			err,
+		)
 	}
 	a.browser = browser
 
 	page, err := browser.NewPage()
 	if err != nil {
-		browser.Close()     //nolint:errcheck
-		a.pw.Stop()         //nolint:errcheck
+		browser.Close() //nolint:errcheck
+		a.pw.Stop()     //nolint:errcheck
 		return fmt.Errorf("creating page: %w", err)
 	}
 	a.page = page
@@ -142,7 +148,10 @@ func (a *PlaywrightAdapter) Assert(
 		actual, err = loc.Count()
 	case strings.HasPrefix(property, "attribute."):
 		attrName := strings.TrimPrefix(property, "attribute.")
-		actual, err = loc.GetAttribute(attrName, playwright.LocatorGetAttributeOptions{Timeout: &timeout})
+		actual, err = loc.GetAttribute(
+			attrName,
+			playwright.LocatorGetAttributeOptions{Timeout: &timeout},
+		)
 	default:
 		return nil, fmt.Errorf("unknown playwright assertion property %q", property)
 	}
@@ -267,9 +276,10 @@ func (a *PlaywrightAdapter) doType(args []json.RawMessage) (*Response, error) {
 	if err := json.Unmarshal(args[1], &value); err != nil {
 		return nil, fmt.Errorf("parsing value: %w", err)
 	}
-	if err := a.page.Locator(selector).PressSequentially(value, playwright.LocatorPressSequentiallyOptions{
-		Timeout: &a.timeout,
-	}); err != nil {
+	if err := a.page.Locator(selector).
+		PressSequentially(value, playwright.LocatorPressSequentiallyOptions{
+			Timeout: &a.timeout,
+		}); err != nil {
 		return &Response{OK: false, Error: err.Error()}, nil
 	}
 	return &Response{OK: true}, nil

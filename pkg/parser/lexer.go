@@ -71,21 +71,21 @@ const (
 	TokenQuestion // ?
 
 	// Operators
-	TokenEq     // ==
-	TokenNeq    // !=
-	TokenGt     // >
-	TokenLt     // <
-	TokenGte    // >=
-	TokenLte    // <=
-	TokenPlus   // +
-	TokenMinus  // -
+	TokenEq      // ==
+	TokenNeq     // !=
+	TokenGt      // >
+	TokenLt      // <
+	TokenGte     // >=
+	TokenLte     // <=
+	TokenPlus    // +
+	TokenMinus   // -
 	TokenStar    // *
 	TokenSlash   // /
 	TokenPercent // %
 	TokenAnd     // &&
-	TokenOr     // ||
-	TokenNot    // !
-	TokenAssign // =
+	TokenOr      // ||
+	TokenNot     // !
+	TokenAssign  // =
 
 	// Special
 	TokenComment

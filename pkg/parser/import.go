@@ -28,7 +28,10 @@ func (p *parser) parseImport() (*importResult, error) {
 	// Read adapter name identifier (e.g., "openapi")
 	adapterTok := p.peek()
 	if adapterTok.Type != TokenIdent {
-		return nil, p.errAt(adapterTok, fmt.Sprintf("expected import adapter name, got %s", adapterTok.Type))
+		return nil, p.errAt(
+			adapterTok,
+			fmt.Sprintf("expected import adapter name, got %s", adapterTok.Type),
+		)
 	}
 	p.advance()
 
@@ -46,7 +49,10 @@ func (p *parser) parseImport() (*importResult, error) {
 
 	// Look up resolver
 	if p.imports == nil {
-		return nil, p.errAt(importTok, fmt.Sprintf("no import resolvers registered (for %q)", adapterTok.Value))
+		return nil, p.errAt(
+			importTok,
+			fmt.Sprintf("no import resolvers registered (for %q)", adapterTok.Value),
+		)
 	}
 	resolver, ok := p.imports[adapterTok.Value]
 	if !ok {
@@ -66,7 +72,10 @@ func (p *parser) parseImport() (*importResult, error) {
 
 	models, scopes, err := resolver.Resolve(resolved)
 	if err != nil {
-		return nil, p.errAt(pathTok, fmt.Sprintf("import %s(%q): %v", adapterTok.Value, relPath, err))
+		return nil, p.errAt(
+			pathTok,
+			fmt.Sprintf("import %s(%q): %v", adapterTok.Value, relPath, err),
+		)
 	}
 
 	return &importResult{Models: models, Scopes: scopes}, nil

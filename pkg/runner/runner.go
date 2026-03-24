@@ -40,7 +40,7 @@ type ScopeResult struct {
 // CheckResult captures the outcome of a single scenario or invariant.
 type CheckResult struct {
 	Name      string   `json:"name"`
-	Kind      string   `json:"kind"`               // "scenario" or "invariant"
+	Kind      string   `json:"kind"` // "scenario" or "invariant"
 	Passed    bool     `json:"passed"`
 	InputsRun int      `json:"inputs_run"`          // 1 for given-scenarios, N for when/invariants
 	FailedAt  int      `json:"failed_at,omitempty"` // which input number failed (0 if passed)
@@ -354,7 +354,12 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			}
 			if !resp.OK {
 				sr.lastActionError = resp.Error
-				return input, fmt.Errorf("action %s.%s failed: %s", s.Namespace, s.Method, resp.Error)
+				return input, fmt.Errorf(
+					"action %s.%s failed: %s",
+					s.Namespace,
+					s.Method,
+					resp.Error,
+				)
 			}
 		}
 	}
@@ -624,12 +629,15 @@ func (sr *scopeRunner) checkErrorAssertion(
 			return nil // pass
 		}
 		return &Failure{
-			Name:        name,
-			Scope:       sr.scope,
-			Input:       input,
-			Expected:    "null",
-			Actual:      fmt.Sprintf("%q", sr.lastActionError),
-			Description: fmt.Sprintf("assertion \"error\" failed: expected no error, got %q", sr.lastActionError),
+			Name:     name,
+			Scope:    sr.scope,
+			Input:    input,
+			Expected: "null",
+			Actual:   fmt.Sprintf("%q", sr.lastActionError),
+			Description: fmt.Sprintf(
+				"assertion \"error\" failed: expected no error, got %q",
+				sr.lastActionError,
+			),
 		}
 	}
 
@@ -638,12 +646,15 @@ func (sr *scopeRunner) checkErrorAssertion(
 
 	if sr.lastActionError == "" {
 		return &Failure{
-			Name:        name,
-			Scope:       sr.scope,
-			Input:       input,
-			Expected:    string(expectedJSON),
-			Actual:      `""`,
-			Description: fmt.Sprintf("assertion \"error\" failed: expected error %s, but no error occurred", string(expectedJSON)),
+			Name:     name,
+			Scope:    sr.scope,
+			Input:    input,
+			Expected: string(expectedJSON),
+			Actual:   `""`,
+			Description: fmt.Sprintf(
+				"assertion \"error\" failed: expected error %s, but no error occurred",
+				string(expectedJSON),
+			),
 		}
 	}
 
@@ -652,12 +663,16 @@ func (sr *scopeRunner) checkErrorAssertion(
 	}
 
 	return &Failure{
-		Name:        name,
-		Scope:       sr.scope,
-		Input:       input,
-		Expected:    string(expectedJSON),
-		Actual:      string(actualJSON),
-		Description: fmt.Sprintf("assertion \"error\" failed: expected %s, got %s", string(expectedJSON), string(actualJSON)),
+		Name:     name,
+		Scope:    sr.scope,
+		Input:    input,
+		Expected: string(expectedJSON),
+		Actual:   string(actualJSON),
+		Description: fmt.Sprintf(
+			"assertion \"error\" failed: expected %s, got %s",
+			string(expectedJSON),
+			string(actualJSON),
+		),
 	}
 }
 

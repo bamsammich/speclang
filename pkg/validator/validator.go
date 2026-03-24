@@ -220,7 +220,12 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 			}
 		}
 		if !found {
-			v.errorf("%s: %q is not a valid enum variant (expected one of %v)", context, str.Value, te.Variants)
+			v.errorf(
+				"%s: %q is not a valid enum variant (expected one of %v)",
+				context,
+				str.Value,
+				te.Variants,
+			)
 		}
 	case "array":
 		arr, ok := expr.(parser.ArrayLiteral)

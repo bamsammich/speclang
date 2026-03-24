@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	playwright "github.com/playwright-community/playwright-go"
+
 	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	"github.com/bamsammich/speclang/v2/pkg/generator"
 	"github.com/bamsammich/speclang/v2/pkg/openapi"
@@ -15,7 +17,6 @@ import (
 	protoResolver "github.com/bamsammich/speclang/v2/pkg/proto"
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 	"github.com/bamsammich/speclang/v2/pkg/validator"
-	playwright "github.com/playwright-community/playwright-go"
 )
 
 func main() {
@@ -311,7 +312,10 @@ func collectPlugins(spec *parser.Spec) []string {
 	return plugins
 }
 
-func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[string]adapter.Adapter, error) {
+func createAdapters(
+	spec *parser.Spec,
+	targetConfig map[string]string,
+) (map[string]adapter.Adapter, error) {
 	plugins := collectPlugins(spec)
 	if len(plugins) == 0 {
 		return nil, errors.New("no scopes declare a 'use' directive")
@@ -329,7 +333,10 @@ func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[stri
 	return adapters, nil
 }
 
-func createSingleAdapter(pluginName string, targetConfig map[string]string) (adapter.Adapter, error) {
+func createSingleAdapter(
+	pluginName string,
+	targetConfig map[string]string,
+) (adapter.Adapter, error) {
 	switch pluginName {
 	case "http":
 		adp := adapter.NewHTTPAdapter()

@@ -1015,19 +1015,19 @@ func infixPrec(typ TokenType) int {
 }
 
 var opStrings = map[TokenType]string{
-	TokenEq:    "==",
-	TokenNeq:   "!=",
-	TokenGt:    ">",
-	TokenLt:    "<",
-	TokenGte:   ">=",
-	TokenLte:   "<=",
-	TokenPlus:  "+",
-	TokenMinus: "-",
+	TokenEq:      "==",
+	TokenNeq:     "!=",
+	TokenGt:      ">",
+	TokenLt:      "<",
+	TokenGte:     ">=",
+	TokenLte:     "<=",
+	TokenPlus:    "+",
+	TokenMinus:   "-",
 	TokenStar:    "*",
 	TokenSlash:   "/",
 	TokenPercent: "%",
 	TokenAnd:     "&&",
-	TokenOr:    "||",
+	TokenOr:      "||",
 }
 
 // opString returns the string representation of an operator token.

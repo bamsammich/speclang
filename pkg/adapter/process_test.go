@@ -52,7 +52,11 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !stdoutResp.OK {
-		t.Fatalf("stdout assertion failed: %s (actual: %s)", stdoutResp.Error, string(stdoutResp.Actual))
+		t.Fatalf(
+			"stdout assertion failed: %s (actual: %s)",
+			stdoutResp.Error,
+			string(stdoutResp.Actual),
+		)
 	}
 }
 
