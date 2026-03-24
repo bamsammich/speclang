@@ -234,7 +234,10 @@ func TestSanitizeScopeName(t *testing.T) {
 			t.Parallel()
 			got := sanitizeScopeName(tt.method, tt.path)
 			if got != tt.want {
-				t.Errorf("sanitizeScopeName(%q, %q) = %q, want %q", tt.method, tt.path, got, tt.want)
+				t.Errorf(
+					"sanitizeScopeName(%q, %q) = %q, want %q",
+					tt.method, tt.path, got, tt.want,
+				)
 			}
 		})
 	}
