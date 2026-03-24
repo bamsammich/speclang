@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 
+	"github.com/fatih/color"
 	playwright "github.com/playwright-community/playwright-go"
+	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	"github.com/bamsammich/speclang/v2/pkg/generator"
@@ -24,25 +24,166 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/validator"
 )
 
+var (
+	colorGreen = color.New(color.FgGreen)
+	colorRed   = color.New(color.FgRed)
+	colorBold  = color.New(color.Bold)
+	colorDim   = color.New(color.FgHiBlack)
+)
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: specrun verify <spec-file> [flags]")
+	app := &cli.Command{
+		Name:  "specrun",
+		Usage: "specification verification runtime",
+		Commands: []*cli.Command{
+			parseCmd(),
+			generateCmd(),
+			verifyCmd(),
+			installCmd(),
+		},
+		CommandNotFound: func(_ context.Context, _ *cli.Command, name string) {
+			//nolint:gosec // CLI writing to stderr, not a web response
+			fmt.Fprintf(os.Stderr, "unknown command: %s\n", name)
+			os.Exit(1) //nolint:revive // intentional exit for unknown command
+		},
+		ExitErrHandler: func(_ context.Context, _ *cli.Command, err error) {
+			if err == nil {
+				return
+			}
+			if exitErr, ok := err.(cli.ExitCoder); ok {
+				if msg := exitErr.Error(); msg != "" {
+					fmt.Fprintln(os.Stderr, msg)
+				}
+				os.Exit(exitErr.ExitCode())
+			}
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		},
+	}
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		os.Exit(1)
 	}
+}
 
-	switch os.Args[1] {
-	case "parse":
-		os.Exit(runParse(os.Args[2:]))
-	case "generate":
-		os.Exit(runGenerate(os.Args[2:]))
-	case "verify":
-		os.Exit(runVerify(os.Args[2:]))
-	case "install":
-		os.Exit(runInstall(os.Args[2:]))
-	default:
-		//nolint:gosec // CLI writing to stderr, not a web response
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-		os.Exit(1)
+func parseCmd() *cli.Command {
+	return &cli.Command{
+		Name:            "parse",
+		Usage:           "parse a spec file and output AST as JSON",
+		ArgsUsage:       "<spec-file>",
+		HideHelpCommand: true,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			specFile := cmd.Args().First()
+			if specFile == "" {
+				return cli.Exit("usage: specrun parse <spec-file>", 1)
+			}
+			code := runParse(specFile)
+			if code != 0 {
+				return cli.Exit("", code)
+			}
+			return nil
+		},
+	}
+}
+
+func generateCmd() *cli.Command {
+	return &cli.Command{
+		Name:            "generate",
+		Usage:           "generate test input for a scope",
+		ArgsUsage:       "<spec-file>",
+		HideHelpCommand: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "scope",
+				Usage:    "scope name to generate input for",
+				Required: true,
+			},
+			&cli.Uint64Flag{
+				Name:  "seed",
+				Usage: "random seed",
+				Value: 42,
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			specFile := cmd.Args().First()
+			if specFile == "" {
+				return cli.Exit("usage: specrun generate <spec-file> --scope <name> [--seed N]", 1)
+			}
+			code := runGenerate(specFile, cmd.String("scope"), cmd.Uint64("seed"))
+			if code != 0 {
+				return cli.Exit("", code)
+			}
+			return nil
+		},
+	}
+}
+
+func verifyCmd() *cli.Command {
+	return &cli.Command{
+		Name:            "verify",
+		Usage:           "verify a spec against a target",
+		ArgsUsage:       "<spec-file>",
+		HideHelpCommand: true,
+		Flags: []cli.Flag{
+			&cli.Uint64Flag{
+				Name:  "seed",
+				Usage: "random seed for input generation",
+				Value: 42,
+			},
+			&cli.IntFlag{
+				Name:  "iterations",
+				Usage: "inputs per when-scenario and invariant",
+				Value: 100,
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "output results as JSON",
+			},
+			&cli.BoolFlag{
+				Name:  "keep-services",
+				Usage: "keep containers running after verification",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			specFile := cmd.Args().First()
+			if specFile == "" {
+				return cli.Exit(
+					"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services]",
+					1,
+				)
+			}
+			opts := &verifyOpts{
+				specFile:     specFile,
+				seed:         cmd.Uint64("seed"),
+				iterations:   cmd.Int("iterations"),
+				jsonOutput:   cmd.Bool("json"),
+				keepServices: cmd.Bool("keep-services"),
+			}
+			code := runVerify(opts)
+			if code != 0 {
+				return cli.Exit("", code)
+			}
+			return nil
+		},
+	}
+}
+
+func installCmd() *cli.Command {
+	return &cli.Command{
+		Name:            "install",
+		Usage:           "install plugin dependencies",
+		ArgsUsage:       "<plugin>",
+		HideHelpCommand: true,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			plugin := cmd.Args().First()
+			if plugin == "" {
+				return cli.Exit("usage: specrun install <plugin>\n  supported: playwright", 1)
+			}
+			code := runInstall(plugin)
+			if code != 0 {
+				return cli.Exit("", code)
+			}
+			return nil
+		},
 	}
 }
 
@@ -56,13 +197,7 @@ func validateSpec(spec *parser.Spec) int {
 	return 0
 }
 
-func runParse(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: specrun parse <spec-file>")
-		return 1
-	}
-	specFile := args[0]
-
+func runParse(specFile string) int {
 	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
@@ -82,45 +217,7 @@ func runParse(args []string) int {
 	return 0
 }
 
-// splitFlagsAndPositional separates flag arguments from positional arguments.
-// Flags (args starting with "-") and their values are collected into flagArgs;
-// the first non-flag arg is returned as the positional arg. This allows flags
-// to appear before or after the positional argument.
-func splitFlagsAndPositional(args []string) (flagArgs []string, positional string) {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if !strings.HasPrefix(a, "-") {
-			if positional == "" {
-				positional = a
-			}
-			continue
-		}
-		flagArgs = append(flagArgs, a)
-		if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			i++
-			flagArgs = append(flagArgs, args[i])
-		}
-	}
-	return flagArgs, positional
-}
-
-func runGenerate(args []string) int {
-	fs := flag.NewFlagSet("generate", flag.ContinueOnError)
-	scope := fs.String("scope", "", "scope name to generate input for")
-	seed := fs.Uint64("seed", 42, "random seed")
-
-	flagArgs, specFile := splitFlagsAndPositional(args)
-
-	if err := fs.Parse(flagArgs); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
-	}
-
-	if specFile == "" || *scope == "" {
-		fmt.Fprintln(os.Stderr, "usage: specrun generate <spec-file> --scope <name> [--seed N]")
-		return 1
-	}
-
+func runGenerate(specFile, scope string, seed uint64) int {
 	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
@@ -133,17 +230,17 @@ func runGenerate(args []string) int {
 
 	var scopeDef *parser.Scope
 	for _, s := range spec.Scopes {
-		if s.Name == *scope {
+		if s.Name == scope {
 			scopeDef = s
 			break
 		}
 	}
 	if scopeDef == nil {
-		fmt.Fprintf(os.Stderr, "scope %q not found\n", *scope)
+		fmt.Fprintf(os.Stderr, "scope %q not found\n", scope)
 		return 1
 	}
 
-	gen := generator.New(scopeDef.Contract, spec.Models, *seed)
+	gen := generator.New(scopeDef.Contract, spec.Models, seed)
 	input, err := gen.GenerateInput()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "generation error: %v\n", err)
@@ -166,73 +263,9 @@ type verifyOpts struct {
 	iterations   int
 	jsonOutput   bool
 	keepServices bool
-	noServices   bool
 }
 
-func parseVerifyOpts(args []string) (*verifyOpts, error) {
-	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
-	opts := &verifyOpts{}
-	fs.Uint64Var(&opts.seed, "seed", 42, "random seed for input generation")
-	fs.IntVar(&opts.iterations, "iterations", 100, "inputs per when-scenario and invariant")
-	fs.BoolVar(&opts.jsonOutput, "json", false, "output results as JSON")
-	fs.BoolVar(
-		&opts.keepServices, "keep-services", false, "keep containers running after verification",
-	)
-	fs.BoolVar(&opts.noServices, "no-services", false, "skip service lifecycle management")
-
-	flagArgs, specFile := splitVerifyArgs(fs, args)
-	if err := fs.Parse(flagArgs); err != nil {
-		return nil, err
-	}
-	if specFile == "" {
-		return nil, errors.New(
-			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services] [--no-services]",
-		)
-	}
-	opts.specFile = specFile
-	return opts, nil
-}
-
-// splitVerifyArgs separates flags from the positional spec file argument.
-// Unlike splitFlagsAndPositional, this uses the FlagSet definition to correctly
-// identify boolean flags that don't consume a following argument.
-func splitVerifyArgs(fs *flag.FlagSet, args []string) (flagArgs []string, positional string) {
-	boolFlags := make(map[string]bool)
-	fs.VisitAll(func(f *flag.Flag) {
-		if _, ok := f.Value.(interface{ IsBoolFlag() bool }); ok {
-			boolFlags[f.Name] = true
-		}
-	})
-
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if !strings.HasPrefix(a, "-") {
-			if positional == "" {
-				positional = a
-			}
-			continue
-		}
-		flagArgs = append(flagArgs, a)
-		// If flag has no "=" value and is NOT a bool flag, consume the next arg as its value.
-		name := strings.TrimLeft(a, "-")
-		if eqIdx := strings.Index(name, "="); eqIdx >= 0 {
-			continue // value is inline
-		}
-		if !boolFlags[name] && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			i++
-			flagArgs = append(flagArgs, args[i])
-		}
-	}
-	return flagArgs, positional
-}
-
-func runVerify(args []string) int {
-	opts, err := parseVerifyOpts(args)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-
+func runVerify(opts *verifyOpts) int {
 	spec, err := parser.ParseFileWithImports(opts.specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
@@ -268,8 +301,8 @@ func runVerify(args []string) int {
 	r.SetN(opts.iterations)
 
 	if !opts.jsonOutput {
-		fmt.Printf("verifying %s (%s) with seed=%d, iterations=%d\n\n",
-			opts.specFile, spec.Name, opts.seed, opts.iterations)
+		colorBold.Printf("Verifying %s", spec.Name)
+		colorDim.Printf(" (seed=%d, iterations=%d)\n\n", opts.seed, opts.iterations)
 	}
 
 	return runAndReport(r, opts.jsonOutput)
@@ -299,15 +332,23 @@ func runAndReport(r *runner.Runner, jsonOutput bool) int {
 	return 0
 }
 
+// logProgress writes a dim progress message to stderr when not in JSON mode.
+func logProgress(jsonOutput bool, format string, args ...any) {
+	if !jsonOutput {
+		colorDim.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
+// Skipped when SPECRUN_NO_SERVICES=1 is set in the environment.
 func startServices(
 	ctx context.Context,
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
-	if opts.noServices {
+	if os.Getenv("SPECRUN_NO_SERVICES") == "1" {
 		return nil, nil, nil
 	}
 	cfg := buildInfraConfig(spec, opts.specFile)
@@ -324,9 +365,18 @@ func startServices(
 		fmt.Fprintf(os.Stderr, "warning: cleanup failed: %v\n", cleanupErr)
 	}
 
+	logProgress(opts.jsonOutput, "Starting services...\n")
+
 	services, err := manager.Start(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
+	}
+
+	// Propagate to child processes so nested specrun invocations skip service management.
+	os.Setenv("SPECRUN_NO_SERVICES", "1") //nolint:errcheck // env propagation is best-effort
+
+	for _, svc := range services {
+		logProgress(opts.jsonOutput, "  %s ready on port %d\n", svc.Name, svc.Port)
 	}
 
 	// Register signal handler for graceful shutdown.
@@ -339,21 +389,30 @@ func startServices(
 		os.Exit(1)                         //nolint:revive // intentional exit on interrupt
 	}()
 
-	var cleanup func()
-	if !opts.keepServices {
-		cleanup = func() {
-			if stopErr := manager.Stop(ctx); stopErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to stop services: %v\n", stopErr)
-			}
-		}
-	}
+	cleanup := makeCleanup(ctx, manager, opts)
 
 	return services, cleanup, nil
 }
 
+// makeCleanup returns a function that stops services with progress messages,
+// or nil if --keep-services is set.
+func makeCleanup(ctx context.Context, manager infra.ServiceManager, opts *verifyOpts) func() {
+	if opts.keepServices {
+		return nil
+	}
+	return func() {
+		logProgress(opts.jsonOutput, "\nStopping services... ")
+		if stopErr := manager.Stop(ctx); stopErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to stop services: %v\n", stopErr)
+		} else {
+			logProgress(opts.jsonOutput, "done\n")
+		}
+	}
+}
+
 func printResults(res *runner.Result) {
 	for _, scope := range res.Scopes {
-		fmt.Printf("  scope %s:\n", scope.Name)
+		colorBold.Printf("  scope %s:\n", scope.Name)
 		for _, check := range scope.Checks {
 			if check.Passed {
 				printPassedCheck(check)
@@ -364,16 +423,21 @@ func printResults(res *runner.Result) {
 		fmt.Println()
 	}
 
-	fmt.Printf("Scenarios:  %d/%d passed\n", res.ScenariosPassed, res.ScenariosRun)
-	fmt.Printf("Invariants: %d/%d passed\n", res.InvariantsPassed, res.InvariantsChecked)
+	allPass := len(res.Failures) == 0
+	summaryColor := colorGreen
+	if !allPass {
+		summaryColor = colorRed
+	}
+	summaryColor.Printf("Scenarios:  %d/%d passed\n", res.ScenariosPassed, res.ScenariosRun)
+	summaryColor.Printf("Invariants: %d/%d passed\n", res.InvariantsPassed, res.InvariantsChecked)
 }
 
 func printPassedCheck(check runner.CheckResult) {
-	if check.InputsRun <= 1 {
-		fmt.Printf("    ✓ %s %s\n", check.Kind, check.Name)
-	} else {
-		fmt.Printf("    ✓ %s %s (%d inputs)\n", check.Kind, check.Name, check.InputsRun)
+	colorGreen.Printf("    \u2713 %s %s", check.Kind, check.Name)
+	if check.InputsRun > 1 {
+		colorDim.Printf(" (%d inputs)", check.InputsRun)
 	}
+	fmt.Println()
 }
 
 func printFailedCheck(check runner.CheckResult) {
@@ -382,10 +446,12 @@ func printFailedCheck(check runner.CheckResult) {
 		suffix = ", shrunk"
 	}
 	if check.InputsRun <= 1 {
-		fmt.Printf("    ✗ %s %s (failed%s)\n", check.Kind, check.Name, suffix)
+		colorRed.Printf("    \u2717 %s %s", check.Kind, check.Name)
+		fmt.Printf(" (failed%s)\n", suffix)
 	} else {
-		fmt.Printf("    ✗ %s %s (failed on input %d/%d%s)\n",
-			check.Kind, check.Name, check.FailedAt, check.InputsRun, suffix)
+		colorRed.Printf("    \u2717 %s %s", check.Kind, check.Name)
+		fmt.Printf(" (failed on input %d/%d%s)\n",
+			check.FailedAt, check.InputsRun, suffix)
 	}
 
 	if check.Failure == nil {
@@ -406,14 +472,8 @@ func printFailedCheck(check runner.CheckResult) {
 	}
 }
 
-func runInstall(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: specrun install <plugin>")
-		fmt.Fprintln(os.Stderr, "  supported: playwright")
-		return 1
-	}
-
-	switch args[0] {
+func runInstall(plugin string) int {
+	switch plugin {
 	case "playwright":
 		fmt.Println("Installing Playwright browsers (chromium)...")
 		err := playwright.Install(&playwright.RunOptions{
@@ -427,7 +487,7 @@ func runInstall(args []string) int {
 		return 0
 	default:
 		//nolint:gosec // CLI writing to stderr, not a web response
-		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", args[0])
+		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", plugin)
 		return 1
 	}
 }
@@ -538,7 +598,7 @@ func resolveExprToString(
 }
 
 // resolveServiceURL finds the URL for a named service. It checks running
-// services first, then falls back to the declared port (for --no-services mode).
+// services first, then falls back to the declared port (for SPECRUN_NO_SERVICES=1 mode).
 func resolveServiceURL(
 	name string,
 	target *parser.Target,

@@ -99,7 +99,7 @@ APP_URL=http://localhost:8080 specrun verify transfer.spec
 Sample output on success:
 
 ```
-verifying transfer.spec (TransferAPI) with seed=42, iterations=100
+Verifying TransferAPI (seed=42, iterations=100)
 
   scope transfer:
     ✓ scenario success

@@ -208,7 +208,7 @@ After writing the spec, tell the user how to verify it:
 specrun verify path/to/spec.spec
 ```
 
-If the spec declares `services` in the `target` block, Docker must be available on the host. The containers will be managed automatically by `specrun verify`. If Docker is unavailable, the user must start the servers manually and use `--no-services`.
+If the spec declares `services` in the `target` block, Docker must be available on the host. The containers will be managed automatically by `specrun verify`. If Docker is unavailable, the user must start the servers manually and set `SPECRUN_NO_SERVICES=1`.
 
 If the spec needs a running server or binary without services, mention the setup required. For `playwright` specs, the user also needs:
 

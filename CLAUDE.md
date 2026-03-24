@@ -29,7 +29,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC
 - **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks with opaque `config` blocks
 - **Counterexample shrinking**: Binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively)
-- **Target services**: `services` block in `target` declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups. Container lifecycle: pre-flight cleanup, health checks (HTTP or TCP), signal handling, `--keep-services` flag to leave containers running for debugging, `--no-services` to skip lifecycle (used in subprocess invocations)
+- **Target services**: `services` block in `target` declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups. Container lifecycle: pre-flight cleanup, health checks (HTTP or TCP), signal handling, `--keep-services` flag to leave containers running for debugging, `SPECRUN_NO_SERVICES=1` env var to skip lifecycle (propagated automatically to subprocess invocations)
 
 ### Language Features
 
@@ -218,7 +218,7 @@ go test ./...                                                   # run all tests
 ./specrun verify examples/transfer.spec --json                  # verify with JSON output
 ./specrun verify specs/speclang.spec                            # self-verification
 ./specrun verify spec.spec --keep-services                      # keep containers running after verify
-./specrun verify spec.spec --no-services                        # skip container lifecycle management
+SPECRUN_NO_SERVICES=1 ./specrun verify spec.spec                 # skip container lifecycle management
 ./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 

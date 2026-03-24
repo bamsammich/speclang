@@ -74,7 +74,7 @@ APP_URL=http://localhost:8080 specrun verify examples/transfer.spec
 ```
 
 ```
-verifying examples/transfer.spec (AccountAPI) with seed=42, iterations=100
+Verifying AccountAPI (seed=42, iterations=100)
 
   scope transfer:
     ✓ scenario success
