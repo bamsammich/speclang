@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
+	"syscall"
 
 	playwright "github.com/playwright-community/playwright-go"
 
 	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	"github.com/bamsammich/speclang/v2/pkg/generator"
+	"github.com/bamsammich/speclang/v2/pkg/infra"
 	"github.com/bamsammich/speclang/v2/pkg/openapi"
 	"github.com/bamsammich/speclang/v2/pkg/parser"
 	protoresolver "github.com/bamsammich/speclang/v2/pkg/proto"
@@ -154,24 +159,44 @@ func runGenerate(args []string) int {
 	return 0
 }
 
-func runVerify(args []string) int {
+// verifyOpts holds parsed flags for the verify command.
+type verifyOpts struct {
+	specFile     string
+	seed         uint64
+	iterations   int
+	jsonOutput   bool
+	keepServices bool
+}
+
+func parseVerifyOpts(args []string) (*verifyOpts, error) {
 	fs := flag.NewFlagSet("verify", flag.ExitOnError)
-	seed := fs.Uint64("seed", 42, "random seed for input generation")
-	iterations := fs.Int("iterations", 100, "inputs per when-scenario and invariant")
-	jsonOutput := fs.Bool("json", false, "output results as JSON")
+	opts := &verifyOpts{}
+	fs.Uint64Var(&opts.seed, "seed", 42, "random seed for input generation")
+	fs.IntVar(&opts.iterations, "iterations", 100, "inputs per when-scenario and invariant")
+	fs.BoolVar(&opts.jsonOutput, "json", false, "output results as JSON")
+	fs.BoolVar(
+		&opts.keepServices, "keep-services", false, "keep containers running after verification",
+	)
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return nil, err
 	}
-
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr,
-			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json]")
+		return nil, errors.New(
+			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services]",
+		)
+	}
+	opts.specFile = fs.Arg(0)
+	return opts, nil
+}
+
+func runVerify(args []string) int {
+	opts, err := parseVerifyOpts(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	specFile := fs.Arg(0)
 
-	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
+	spec, err := parser.ParseFileWithImports(opts.specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
@@ -181,7 +206,19 @@ func runVerify(args []string) int {
 		return code
 	}
 
-	config := resolveTargetConfig(spec.Target)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runningServices, cleanup, err := startServices(ctx, spec, opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	config := resolveTargetConfig(spec.Target, runningServices)
 
 	adapters, err := createAdapters(spec, config)
 	if err != nil {
@@ -190,21 +227,25 @@ func runVerify(args []string) int {
 	}
 	defer closeAdapters(adapters)
 
-	r := runner.New(spec, adapters, *seed)
-	r.SetN(*iterations)
+	r := runner.New(spec, adapters, opts.seed)
+	r.SetN(opts.iterations)
 
-	if !*jsonOutput {
+	if !opts.jsonOutput {
 		fmt.Printf("verifying %s (%s) with seed=%d, iterations=%d\n\n",
-			specFile, spec.Name, *seed, *iterations)
+			opts.specFile, spec.Name, opts.seed, opts.iterations)
 	}
 
+	return runAndReport(r, opts.jsonOutput)
+}
+
+func runAndReport(r *runner.Runner, jsonOutput bool) int {
 	res, err := r.Verify()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "verification error: %v\n", err)
 		return 1
 	}
 
-	if *jsonOutput {
+	if jsonOutput {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(res); err != nil {
@@ -219,6 +260,55 @@ func runVerify(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// startServices builds infra config, starts services if declared, and returns
+// running services and a cleanup function. The cleanup function is nil when
+// no services are running or --keep-services is set.
+func startServices(
+	ctx context.Context,
+	spec *parser.Spec,
+	opts *verifyOpts,
+) ([]infra.RunningService, func(), error) {
+	cfg := buildInfraConfig(spec, opts.specFile)
+	manager, err := infra.NewManager(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("service manager init error: %w", err)
+	}
+	if manager == nil {
+		return nil, nil, nil
+	}
+
+	// Pre-flight orphan removal.
+	if cleanupErr := manager.Cleanup(ctx); cleanupErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: cleanup failed: %v\n", cleanupErr)
+	}
+
+	services, err := manager.Start(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("service start error: %w", err)
+	}
+
+	// Register signal handler for graceful shutdown.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Fprintln(os.Stderr, "\ninterrupted, cleaning up services...")
+		manager.Stop(context.Background()) //nolint:errcheck // best-effort on signal
+		os.Exit(1)                         //nolint:revive // intentional exit on interrupt
+	}()
+
+	var cleanup func()
+	if !opts.keepServices {
+		cleanup = func() {
+			if stopErr := manager.Stop(ctx); stopErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to stop services: %v\n", stopErr)
+			}
+		}
+	}
+
+	return services, cleanup, nil
 }
 
 func printResults(res *runner.Result) {
@@ -373,18 +463,18 @@ func closeAdapters(adapters map[string]adapter.Adapter) {
 	}
 }
 
-func resolveTargetConfig(target *parser.Target) map[string]string {
+func resolveTargetConfig(target *parser.Target, services []infra.RunningService) map[string]string {
 	config := make(map[string]string)
 	if target == nil {
 		return config
 	}
 	for key, expr := range target.Fields {
-		config[key] = resolveExprToString(expr)
+		config[key] = resolveExprToString(expr, services)
 	}
 	return config
 }
 
-func resolveExprToString(expr parser.Expr) string {
+func resolveExprToString(expr parser.Expr, services []infra.RunningService) string {
 	switch e := expr.(type) {
 	case parser.LiteralString:
 		return e.Value
@@ -393,9 +483,73 @@ func resolveExprToString(expr parser.Expr) string {
 			return val
 		}
 		return e.Default
+	case parser.ServiceRef:
+		for _, svc := range services {
+			if svc.Name == e.Name {
+				return svc.URL
+			}
+		}
+		return "" // service not running
 	default:
 		return fmt.Sprintf("%v", e)
 	}
+}
+
+// buildInfraConfig constructs an infra.Config from the spec's target block.
+func buildInfraConfig(spec *parser.Spec, specFile string) infra.Config {
+	specDir := filepath.Dir(specFile)
+	cfg := infra.Config{
+		SpecName: spec.Name,
+		SpecDir:  specDir,
+	}
+	if spec.Target == nil {
+		return cfg
+	}
+	cfg.ComposePath = resolveRelPath(specDir, spec.Target.Compose)
+	for _, svc := range spec.Target.Services {
+		cfg.Services = append(cfg.Services, convertServiceDef(specDir, svc))
+	}
+	return cfg
+}
+
+// convertServiceDef converts a parsed Service into an infra.ServiceDef,
+// resolving relative paths and copying maps to avoid aliasing the AST.
+func convertServiceDef(specDir string, svc *parser.Service) infra.ServiceDef {
+	def := infra.ServiceDef{
+		Name:   svc.Name,
+		Build:  resolveRelPath(specDir, svc.Build),
+		Image:  svc.Image,
+		Port:   svc.Port,
+		Health: svc.Health,
+		Env:    copyMap(svc.Env),
+	}
+	if len(svc.Volumes) > 0 {
+		def.Volumes = make(map[string]string, len(svc.Volumes))
+		for host, container := range svc.Volumes {
+			def.Volumes[resolveRelPath(specDir, host)] = container
+		}
+	}
+	return def
+}
+
+// resolveRelPath resolves p relative to base if p is non-empty and not absolute.
+func resolveRelPath(base, p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(base, p)
+}
+
+// copyMap returns a shallow copy of m, or nil if m is empty.
+func copyMap(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // defaultImports returns the built-in import registry with all supported adapters.
