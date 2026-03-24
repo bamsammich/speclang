@@ -86,6 +86,8 @@ spec <Name> {
 - **Functions**:
   - `len(expr)` — returns length of array, map, or string
   - `contains(haystack, needle)` — returns `bool`. String haystack + string needle: substring check. `[]any` haystack + any needle: element membership check.
+  - `exists(expr)` — returns `true` if the path resolves to a value (including `null`), `false` if the path doesn't exist
+  - `has_key(expr, "key")` — returns `true` if the map contains the specified key, `false` otherwise
 
 ## Comments
 

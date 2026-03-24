@@ -29,6 +29,8 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 - **Built-in functions**:
   - `len(expr)` — returns length of string, array, or map
   - `contains(haystack, needle)` — returns `bool`. String haystack + string needle performs substring check; `[]any` haystack + any needle performs element membership check.
+  - `exists(expr)` — returns `true` if path resolves to a value (including `null`), `false` if path doesn't exist
+  - `has_key(expr, "key")` — returns `true` if map contains the specified key
 
 ### Spec File Structure
 

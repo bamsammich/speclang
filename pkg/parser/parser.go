@@ -1147,13 +1147,18 @@ func (p *parser) parseAtom() (Expr, error) {
 		return expr, nil
 
 	default:
-		// len(expr) built-in function
+		// Built-in functions: len(expr), exists(expr), has_key(expr, key)
 		if tok.Type == TokenIdent && tok.Value == "len" {
 			return p.parseLenExpr()
 		}
-		// contains(haystack, needle) built-in function
 		if tok.Type == TokenIdent && tok.Value == "contains" {
 			return p.parseContainsExpr()
+		}
+		if tok.Type == TokenIdent && tok.Value == "exists" {
+			return p.parseExistsExpr()
+		}
+		if tok.Type == TokenIdent && tok.Value == "has_key" {
+			return p.parseHasKeyExpr()
 		}
 		if isIdentLike(tok.Type) {
 			return p.parseFieldRefExpr()
@@ -1214,6 +1219,45 @@ func (p *parser) parseContainsExpr() (Expr, error) {
 		return nil, err
 	}
 	return ContainsExpr{Haystack: haystack, Needle: needle}, nil
+}
+
+// parseExistsExpr parses: exists(expr)
+func (p *parser) parseExistsExpr() (Expr, error) {
+	p.advance() // consume "exists"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arg, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ExistsExpr{Arg: arg}, nil
+}
+
+// parseHasKeyExpr parses: has_key(expr, key)
+func (p *parser) parseHasKeyExpr() (Expr, error) {
+	p.advance() // consume "has_key"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arg, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return nil, err
+	}
+	key, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return HasKeyExpr{Arg: arg, Key: key}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")

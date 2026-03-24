@@ -336,6 +336,32 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		default:
 			return nil, false
 		}
+	case parser.ExistsExpr:
+		val, ok := c.eval(e.Arg)
+		if !ok {
+			return false, true
+		}
+		_ = val
+		return true, true
+	case parser.HasKeyExpr:
+		obj, ok := c.eval(e.Arg)
+		if !ok {
+			return false, true
+		}
+		key, kok := c.eval(e.Key)
+		if !kok {
+			return nil, false
+		}
+		keyStr, isStr := key.(string)
+		if !isStr {
+			return nil, false
+		}
+		m, isMap := obj.(map[string]any)
+		if !isMap {
+			return false, true
+		}
+		_, exists := m[keyStr]
+		return exists, true
 	case parser.UnaryOp:
 		return c.evalUnary(e)
 	default:

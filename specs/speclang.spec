@@ -15,4 +15,5 @@ spec Speclang {
   include "cli_flags.spec"
   include "adapters.spec"
   include "enum.spec"
+  include "exists.spec"
 }
