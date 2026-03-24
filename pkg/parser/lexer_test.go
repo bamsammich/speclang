@@ -171,18 +171,3 @@ func findTokenValue(tokens []Token, typ TokenType, value string) int {
 	return -1
 }
 
-func findTokenSeq(tokens []Token, types ...TokenType) int {
-	for i := 0; i <= len(tokens)-len(types); i++ {
-		match := true
-		for j, typ := range types {
-			if tokens[i+j].Type != typ {
-				match = false
-				break
-			}
-		}
-		if match {
-			return i
-		}
-	}
-	return -1
-}

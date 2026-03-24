@@ -916,5 +916,4 @@ func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
 	if !found {
 		t.Error("expected validation error for 'nonexistent' field")
 	}
-	_ = fmt.Sprintf("test") // keep fmt import
 }

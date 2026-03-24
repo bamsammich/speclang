@@ -904,12 +904,3 @@ func exprToValue(expr parser.Expr) any {
 	}
 }
 
-// exprToJSON marshals an AST expression to JSON.
-func exprToJSON(expr parser.Expr) (json.RawMessage, error) {
-	v := exprToValue(expr)
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	return json.RawMessage(b), nil
-}
