@@ -329,7 +329,8 @@ speclang/
 │   ├── parse.spec        # parse_valid + parse_invalid scopes
 │   ├── generate.spec     # generator constraint satisfaction
 │   ├── verify.spec       # verify_pass scope
-│   └── verify_fail.spec  # verify_fail scope (broken implementation detection)
+│   ├── verify_fail.spec  # verify_fail scope (broken implementation detection)
+│   └── shrinking.spec    # shrinking scope (counterexample minimality)
 └── testdata/
     ├── include/          # multi-file include test fixtures
     │   ├── basic/        # root includes models + scopes
@@ -342,6 +343,7 @@ speclang/
         ├── minimal.spec
         ├── invalid_unterminated.spec
         ├── broken_transfer.spec
+        ├── broken_transfer_invariant_only.spec
         └── broken_server/main.go
 ```
 
@@ -495,6 +497,7 @@ The self-verification spec uses the process adapter to invoke `specrun` subcomma
 - **generate** — verifies the generator produces constraint-satisfying outputs across seeds
 - **verify_pass** — verifies that `specrun verify` passes correct implementations
 - **verify_fail** — verifies that `specrun verify` detects incorrect implementations
+- **shrinking** — verifies that counterexample shrinking produces minimal values (ints near boundary, empty strings, zero balances)
 
 Run self-verification:
 ```bash
