@@ -40,6 +40,11 @@ jobs:
           go run ./testdata/self/http_server &
           sleep 1
 
+      - name: Start services test server
+        run: |
+          PORT=9090 go run ./testdata/self/http_server &
+          sleep 1
+
       # SPECRUN_NO_SERVICES=1 skips container lifecycle because servers are started manually above.
       # When Docker is available, `specrun verify` can manage containers automatically
       # via the services block in target — no manual server startup needed.
