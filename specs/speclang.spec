@@ -12,4 +12,5 @@ spec Speclang {
   include "verify_fail.spec"
   include "types.spec"
   include "generate_types.spec"
+  include "cli_flags.spec"
 }
