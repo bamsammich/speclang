@@ -47,3 +47,24 @@ scope parse_service_ref {
     }
   }
 }
+
+scope invalid_service_ref {
+  use process
+  config {
+    args: "parse testdata/self/invalid_service_ref.spec"
+  }
+
+  contract {
+    input {}
+    output {
+      exit_code: int
+    }
+  }
+
+  scenario rejects_unknown_service {
+    given {}
+    then {
+      exit_code: 1
+    }
+  }
+}
