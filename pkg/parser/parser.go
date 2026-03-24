@@ -1129,6 +1129,9 @@ func (p *parser) parseAtom() (Expr, error) {
 	case TokenEnv:
 		return p.parseEnvRef()
 
+	case TokenService:
+		return p.parseServiceRef()
+
 	case TokenLBrace:
 		return p.parseObjectLiteral()
 
@@ -1393,6 +1396,22 @@ func (p *parser) parseEnvRef() (Expr, error) {
 		return nil, err
 	}
 	return ref, nil
+}
+
+// parseServiceRef parses: service(name)
+func (p *parser) parseServiceRef() (Expr, error) {
+	p.advance() // consume "service"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	name, err := p.expectIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ServiceRef{Name: name.Value}, nil
 }
 
 // parseObjectLiteral parses: { key: value, ... }
