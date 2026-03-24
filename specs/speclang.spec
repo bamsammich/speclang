@@ -9,6 +9,7 @@ spec Speclang {
   include "parse.spec"
   include "generate.spec"
   include "verify.spec"
+  include "verify_fail.spec"
   include "types.spec"
   include "generate_types.spec"
 }

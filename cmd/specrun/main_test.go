@@ -247,10 +247,14 @@ func TestSelfVerification_Parse(t *testing.T) {
 	srv := startTransferServer(t)
 	defer srv.Close()
 
+	brokenSrv := startBrokenTransferServer(t)
+	defer brokenSrv.Close()
+
 	cmd := exec.Command(bin, "verify", "--json", "--iterations", "10", specFile)
 	cmd.Env = append(os.Environ(),
 		"SPECRUN_BIN="+bin,
 		"APP_URL="+srv.URL,
+		"BROKEN_APP_URL="+brokenSrv.URL,
 	)
 	// Set working dir to project root so relative paths in specs resolve correctly.
 	cmd.Dir = projectRoot
@@ -308,6 +312,51 @@ func TestVerify_HumanOutput(t *testing.T) {
 	if !strings.Contains(output, "Scenarios:  3/3 passed") {
 		t.Errorf("missing scenario summary:\n%s", output)
 	}
+}
+
+// startBrokenTransferServer returns a test server that credits the to-account
+// but never debits the from-account (conservation invariant violation).
+func startBrokenTransferServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			From struct {
+				ID      string `json:"id"`
+				Balance int    `json:"balance"`
+			} `json:"from"`
+			To struct {
+				ID      string `json:"id"`
+				Balance int    `json:"balance"`
+			} `json:"to"`
+			Amount int `json:"amount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := map[string]any{
+			"from":  map[string]any{"id": req.From.ID, "balance": req.From.Balance},
+			"to":    map[string]any{"id": req.To.ID, "balance": req.To.Balance},
+			"error": nil,
+		}
+		switch {
+		case req.Amount <= 0:
+			resp["error"] = "invalid_amount"
+		case req.Amount > req.From.Balance:
+			resp["error"] = "insufficient_funds"
+		default:
+			// BUG: only credits to-account, does NOT debit from-account
+			resp["to"] = map[string]any{
+				"id": req.To.ID, "balance": req.To.Balance + req.Amount,
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+	return httptest.NewServer(mux)
 }
 
 func startTransferServer(t *testing.T) *httptest.Server {
