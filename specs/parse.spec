@@ -57,6 +57,17 @@ scope parse_valid {
     }
   }
 
+  # Verifies that contains() built-in function parses in invariant expressions.
+  scenario contains_function {
+    given {
+      file: "testdata/self/contains.spec"
+    }
+    then {
+      exit_code: 0
+      name: "ContainsTest"
+    }
+  }
+
   # Verifies that playwright spec syntax (locators, @assertions, mixed given) parses.
   scenario playwright_spec {
     given {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
+	"reflect"
 	"strings"
 
 	"github.com/bamsammich/speclang/v2/pkg/parser"
@@ -301,6 +302,32 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 			return len(v), true
 		case string:
 			return len(v), true
+		default:
+			return nil, false
+		}
+	case parser.ContainsExpr:
+		haystack, ok := c.eval(e.Haystack)
+		if !ok {
+			return nil, false
+		}
+		needle, ok := c.eval(e.Needle)
+		if !ok {
+			return nil, false
+		}
+		switch h := haystack.(type) {
+		case string:
+			n, ok := needle.(string)
+			if !ok {
+				return nil, false
+			}
+			return strings.Contains(h, n), true
+		case []any:
+			for _, elem := range h {
+				if reflect.DeepEqual(elem, needle) {
+					return true, true
+				}
+			}
+			return false, true
 		default:
 			return nil, false
 		}

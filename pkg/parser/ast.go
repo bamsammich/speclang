@@ -184,6 +184,11 @@ type LenExpr struct {
 	Arg Expr `json:"arg"`
 }
 
+type ContainsExpr struct {
+	Haystack Expr `json:"haystack"`
+	Needle   Expr `json:"needle"`
+}
+
 type RegexLiteral struct {
 	Pattern string `json:"pattern"`
 }
@@ -200,4 +205,5 @@ func (ObjectLiteral) exprNode() {}
 func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
 func (LenExpr) exprNode()       {}
+func (ContainsExpr) exprNode()  {}
 func (RegexLiteral) exprNode()  {}

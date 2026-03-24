@@ -26,6 +26,9 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC.
 - **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks. Each scope has an opaque `config` block for plugin-specific settings (e.g., HTTP path/method). The parser is agnostic to config semantics.
 - **Counterexample shrinking**: When a failure is found, the runtime performs binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively) to produce minimal counterexamples.
+- **Built-in functions**:
+  - `len(expr)` — returns length of string, array, or map
+  - `contains(haystack, needle)` — returns `bool`. String haystack + string needle performs substring check; `[]any` haystack + any needle performs element membership check.
 
 ### Spec File Structure
 

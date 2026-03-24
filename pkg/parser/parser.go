@@ -1120,6 +1120,10 @@ func (p *parser) parseAtom() (Expr, error) {
 		if tok.Type == TokenIdent && tok.Value == "len" {
 			return p.parseLenExpr()
 		}
+		// contains(haystack, needle) built-in function
+		if tok.Type == TokenIdent && tok.Value == "contains" {
+			return p.parseContainsExpr()
+		}
 		if isIdentLike(tok.Type) {
 			return p.parseFieldRefExpr()
 		}
@@ -1156,6 +1160,29 @@ func (p *parser) parseLenExpr() (Expr, error) {
 		return nil, err
 	}
 	return LenExpr{Arg: arg}, nil
+}
+
+// parseContainsExpr parses: contains(haystack, needle)
+func (p *parser) parseContainsExpr() (Expr, error) {
+	p.advance() // consume "contains"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	haystack, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return nil, err
+	}
+	needle, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ContainsExpr{Haystack: haystack, Needle: needle}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")

@@ -328,6 +328,73 @@ spec Test {
 	}
 }
 
+func TestParseContainsExpr(t *testing.T) {
+	spec, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input {
+        msg: string
+      }
+      output {
+        ok: bool
+      }
+    }
+    invariant has_error {
+      contains(msg, "error")
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inv := spec.Scopes[0].Invariants[0]
+	if len(inv.Assertions) != 1 {
+		t.Fatalf("expected 1 assertion, got %d", len(inv.Assertions))
+	}
+	containsExpr, ok := inv.Assertions[0].Expr.(ContainsExpr)
+	if !ok {
+		t.Fatalf("assertion expr type = %T, want ContainsExpr", inv.Assertions[0].Expr)
+	}
+	haystack, ok := containsExpr.Haystack.(FieldRef)
+	if !ok {
+		t.Fatalf("haystack type = %T, want FieldRef", containsExpr.Haystack)
+	}
+	if haystack.Path != "msg" {
+		t.Errorf("haystack path = %q, want 'msg'", haystack.Path)
+	}
+	needle, ok := containsExpr.Needle.(LiteralString)
+	if !ok {
+		t.Fatalf("needle type = %T, want LiteralString", containsExpr.Needle)
+	}
+	if needle.Value != "error" {
+		t.Errorf("needle value = %q, want 'error'", needle.Value)
+	}
+}
+
+func TestParseContainsExpr_MissingComma(t *testing.T) {
+	_, err := Parse(`
+spec Test {
+  scope test {
+    use http
+    contract {
+      input { msg: string }
+      output { ok: bool }
+    }
+    invariant bad {
+      contains(msg "error")
+    }
+  }
+}
+`)
+	if err == nil {
+		t.Fatal("expected parse error for contains() missing comma")
+	}
+}
+
 func TestParseArrayLiteral_Unterminated(t *testing.T) {
 	_, err := Parse(`
 spec Test {
