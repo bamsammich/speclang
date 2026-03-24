@@ -266,7 +266,7 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 func isNonLiteral(expr parser.Expr) bool {
 	switch expr.(type) {
 	case parser.FieldRef, parser.BinaryOp, parser.UnaryOp,
-		parser.EnvRef, parser.LenExpr, parser.ContainsExpr, parser.RegexLiteral:
+		parser.EnvRef, parser.LenExpr, parser.ContainsExpr, parser.ExistsExpr, parser.HasKeyExpr, parser.RegexLiteral:
 		return true
 	}
 	return false

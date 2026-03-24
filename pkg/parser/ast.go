@@ -190,6 +190,15 @@ type ContainsExpr struct {
 	Needle   Expr `json:"needle"`
 }
 
+type ExistsExpr struct {
+	Arg Expr `json:"arg"`
+}
+
+type HasKeyExpr struct {
+	Arg Expr   `json:"arg"`
+	Key Expr   `json:"key"`
+}
+
 type RegexLiteral struct {
 	Pattern string `json:"pattern"`
 }
@@ -207,4 +216,6 @@ func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
 func (LenExpr) exprNode()       {}
 func (ContainsExpr) exprNode()  {}
+func (ExistsExpr) exprNode()    {}
+func (HasKeyExpr) exprNode()    {}
 func (RegexLiteral) exprNode()  {}
