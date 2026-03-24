@@ -40,14 +40,20 @@ jobs:
           go run ./testdata/self/http_server &
           sleep 1
 
-      # Self-verification uses --no-services because servers are started manually above.
+      - name: Start services test server
+        run: |
+          PORT=9090 go run ./testdata/self/http_server &
+          sleep 1
+
+      # SPECRUN_NO_SERVICES=1 skips container lifecycle because servers are started manually above.
       # When Docker is available, `specrun verify` can manage containers automatically
       # via the services block in target — no manual server startup needed.
       - name: Self-verification
-        run: >-
-          SPECRUN_BIN=./specrun
-          APP_URL=http://localhost:8080
-          BROKEN_APP_URL=http://localhost:8081
-          HTTP_TEST_URL=http://localhost:8082
-          ECHO_TOOL_BIN=./echo_tool
-          ./specrun verify specs/speclang.spec --no-services
+        env:
+          SPECRUN_NO_SERVICES: "1"
+          SPECRUN_BIN: ./specrun
+          APP_URL: http://localhost:8080
+          BROKEN_APP_URL: http://localhost:8081
+          HTTP_TEST_URL: http://localhost:8082
+          ECHO_TOOL_BIN: ./echo_tool
+        run: ./specrun verify specs/speclang.spec

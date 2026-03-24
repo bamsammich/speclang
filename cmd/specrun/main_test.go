@@ -37,6 +37,42 @@ func specrunBin(t *testing.T) string {
 	return bin
 }
 
+func TestHelp_RootCommand(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+	cmd := exec.Command(bin, "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--help failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	for _, want := range []string{"parse", "generate", "verify", "install"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("--help missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHelp_VerifyCommand(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+	cmd := exec.Command(bin, "verify", "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify --help failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	for _, want := range []string{"--seed", "--iterations", "--json", "--keep-services"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("verify --help missing %q:\n%s", want, output)
+		}
+	}
+	// --no-services should NOT appear (it's now an env var)
+	if strings.Contains(output, "--no-services") {
+		t.Errorf("verify --help should not contain --no-services:\n%s", output)
+	}
+}
+
 func TestParse_ValidSpec(t *testing.T) {
 	bin := specrunBin(t)
 
@@ -263,8 +299,21 @@ func TestSelfVerification_Parse(t *testing.T) {
 
 	echoToolBin := buildEchoTool(t)
 
+	// With SPECRUN_NO_SERVICES=1, service(name) expressions in child specs fall
+	// back to http://localhost:<declared-port>. Start fixed-port servers matching
+	// the declared ports so these child specrun processes can connect.
+	fixedTransfer := startFixedPortServer(t, ":8080", srv.Config.Handler)
+	defer fixedTransfer.Close()
+	fixedBroken := startFixedPortServer(t, ":8081", brokenSrv.Config.Handler)
+	defer fixedBroken.Close()
+	fixedHTTP := startFixedPortServer(t, ":8082", httpTestSrv.Config.Handler)
+	defer fixedHTTP.Close()
+	fixedServices := startFixedPortServer(t, ":9090", httpTestSrv.Config.Handler)
+	defer fixedServices.Close()
+
 	cmd := exec.Command(bin, "verify", "--json", "--iterations", "10", specFile)
 	cmd.Env = append(os.Environ(),
+		"SPECRUN_NO_SERVICES=1",
 		"SPECRUN_BIN="+bin,
 		"APP_URL="+srv.URL,
 		"BROKEN_APP_URL="+brokenSrv.URL,
@@ -483,6 +532,20 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 	})
 
 	return httptest.NewServer(mux)
+}
+
+// startFixedPortServer starts an HTTP server on a fixed address with the given
+// handler. Used with SPECRUN_NO_SERVICES=1, where service(name) expressions
+// fall back to the declared port and need a real server there.
+func startFixedPortServer(t *testing.T, addr string, handler http.Handler) *http.Server {
+	t.Helper()
+	srv := &http.Server{Addr: addr, Handler: handler}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			t.Logf("fixed port server %s error: %v", addr, err)
+		}
+	}()
+	return srv
 }
 
 func startTransferServer(t *testing.T) *httptest.Server {
