@@ -304,6 +304,8 @@ For HTTP APIs. Scope config uses `path` and `method`. Target uses `base_url`.
 
 For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Target uses `command`. Scope config uses `args`.
 
+Dot-paths in `then` blocks support numeric array indexing. `stdout.items.0.name` accesses the first element of the `items` array in the parsed JSON response, then its `name` field. Out-of-range indices produce an assertion failure. This also applies to the `http` adapter when asserting against JSON response bodies.
+
 ### `use playwright`
 
 For browser UI testing. Controls a real browser via Playwright. Target uses `base_url`, `headless` (default `"true"`), and `timeout` (milliseconds, default `"5000"`). Scope config uses `url` (the page path to navigate to).
