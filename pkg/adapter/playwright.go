@@ -13,12 +13,12 @@ import (
 
 // PlaywrightAdapter implements browser automation via playwright-go.
 type PlaywrightAdapter struct {
-	pw      *playwright.Playwright
 	browser playwright.Browser
 	page    playwright.Page
-	pages   []playwright.Page // tracked for cleanup
+	pw      *playwright.Playwright
 	baseURL string
-	timeout float64 // milliseconds
+	pages   []playwright.Page
+	timeout float64
 }
 
 func NewPlaywrightAdapter() *PlaywrightAdapter {

@@ -188,15 +188,15 @@ type LenExpr struct {
 // AllExpr represents all(array, elem => predicate) — true if predicate holds for every element.
 type AllExpr struct {
 	Array     Expr   `json:"array"`     // expression evaluating to an array
-	BoundVar  string `json:"bound_var"` // loop variable name
 	Predicate Expr   `json:"predicate"` // boolean expression evaluated per element
+	BoundVar  string `json:"bound_var"` // loop variable name
 }
 
 // AnyExpr represents any(array, elem => predicate) — true if predicate holds for at least one element.
 type AnyExpr struct {
 	Array     Expr   `json:"array"`     // expression evaluating to an array
-	BoundVar  string `json:"bound_var"` // loop variable name
 	Predicate Expr   `json:"predicate"` // boolean expression evaluated per element
+	BoundVar  string `json:"bound_var"` // loop variable name
 }
 
 type ContainsExpr struct {

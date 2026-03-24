@@ -32,8 +32,8 @@ func Validate(spec *parser.Spec) []error {
 
 type validator struct {
 	models map[string]*parser.Model
-	errs   []error
 	scope  string
+	errs   []error
 }
 
 func buildModelRegistry(models []*parser.Model) map[string]*parser.Model {

@@ -9,8 +9,8 @@ import (
 // Token represents a lexical token.
 type Token struct {
 	Value string
-	Type  TokenType
 	File  string
+	Type  TokenType
 	Line  int
 	Col   int
 }

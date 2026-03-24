@@ -57,9 +57,9 @@ func Parse(source string) (*Spec, error) {
 }
 
 type parser struct {
-	tokens  []Token
 	imports ImportRegistry
-	fileDir string // directory of the spec file, for relative path resolution
+	fileDir string
+	tokens  []Token
 	pos     int
 }
 

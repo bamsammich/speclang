@@ -39,12 +39,12 @@ type ScopeResult struct {
 
 // CheckResult captures the outcome of a single scenario or invariant.
 type CheckResult struct {
+	Failure   *Failure `json:"failure,omitempty"`
 	Name      string   `json:"name"`
 	Kind      string   `json:"kind"` // "scenario" or "invariant"
-	Passed    bool     `json:"passed"`
 	InputsRun int      `json:"inputs_run"`          // 1 for given-scenarios, N for when/invariants
 	FailedAt  int      `json:"failed_at,omitempty"` // which input number failed (0 if passed)
-	Failure   *Failure `json:"failure,omitempty"`
+	Passed    bool     `json:"passed"`
 }
 
 // Runner orchestrates spec verification.

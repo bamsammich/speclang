@@ -10,9 +10,9 @@ import (
 
 // mockResolver implements ImportResolver for testing.
 type mockResolver struct {
+	err    error
 	models []*Model
 	scopes []*Scope
-	err    error
 }
 
 func (m *mockResolver) Resolve(absPath string) ([]*Model, []*Scope, error) {
