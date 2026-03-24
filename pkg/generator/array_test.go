@@ -10,7 +10,13 @@ func TestGenerateArray(t *testing.T) {
 	g := New(
 		&parser.Contract{
 			Input: []*parser.Field{
-				{Name: "tags", Type: parser.TypeExpr{Name: "array", ElemType: &parser.TypeExpr{Name: "string"}}},
+				{
+					Name: "tags",
+					Type: parser.TypeExpr{
+						Name:     "array",
+						ElemType: &parser.TypeExpr{Name: "string"},
+					},
+				},
 			},
 		},
 		nil, 42,
@@ -69,7 +75,14 @@ func TestLenConstraint(t *testing.T) {
 	g := New(
 		&parser.Contract{
 			Input: []*parser.Field{
-				{Name: "items", Type: parser.TypeExpr{Name: "array", ElemType: &parser.TypeExpr{Name: "int"}}, Constraint: constraint},
+				{
+					Name: "items",
+					Type: parser.TypeExpr{
+						Name:     "array",
+						ElemType: &parser.TypeExpr{Name: "int"},
+					},
+					Constraint: constraint,
+				},
 			},
 		},
 		nil, 42,

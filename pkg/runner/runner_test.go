@@ -11,6 +11,13 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 )
 
+// writeJSON encodes v as JSON to w, falling back to a 500 error if encoding fails.
+func writeJSON(w http.ResponseWriter, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func transferHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		From struct {
@@ -128,8 +135,8 @@ func TestRelationalAssertions(t *testing.T) {
 						{
 							Target: "sum",
 							Expected: parser.BinaryOp{
-								Left: parser.FieldRef{Path: "a"},
-								Op:   "+",
+								Left:  parser.FieldRef{Path: "a"},
+								Op:    "+",
 								Right: parser.FieldRef{Path: "b"},
 							},
 						},
@@ -142,9 +149,15 @@ func TestRelationalAssertions(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]int
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]int{"sum": req["a"] + req["b"]})
+		if err := json.NewEncoder(w).
+			Encode(map[string]int{"sum": req["a"] + req["b"]}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -186,7 +199,12 @@ func (m *mockAdapter) Action(name string, args json.RawMessage) (*adapter.Respon
 	m.actionCalls = append(m.actionCalls, actionCall{Name: name, Args: args})
 	return &adapter.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 }
-func (m *mockAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
+
+func (m *mockAdapter) Assert(
+	property string,
+	locator string,
+	expected json.RawMessage,
+) (*adapter.Response, error) {
 	m.assertCalls = append(m.assertCalls, assertCall{
 		Property: property,
 		Locator:  locator,
@@ -317,7 +335,10 @@ func TestGivenStepExecution(t *testing.T) {
 							},
 						},
 						// user: "alice"
-						&parser.Assignment{Path: "user", Value: parser.LiteralString{Value: "alice"}},
+						&parser.Assignment{
+							Path:  "user",
+							Value: parser.LiteralString{Value: "alice"},
+						},
 						// playwright.click(submit)
 						&parser.Call{
 							Namespace: "playwright",
@@ -359,7 +380,9 @@ func TestGivenStepExecution(t *testing.T) {
 		t.Errorf("action 0: name = %q, want 'fill'", mock.actionCalls[0].Name)
 	}
 	var fillArgs []any
-	json.Unmarshal(mock.actionCalls[0].Args, &fillArgs)
+	if err := json.Unmarshal(mock.actionCalls[0].Args, &fillArgs); err != nil {
+		t.Fatalf("unmarshal fill args: %v", err)
+	}
 	if len(fillArgs) != 2 {
 		t.Fatalf("fill: expected 2 args, got %d", len(fillArgs))
 	}
@@ -375,7 +398,9 @@ func TestGivenStepExecution(t *testing.T) {
 		t.Errorf("action 1: name = %q, want 'click'", mock.actionCalls[1].Name)
 	}
 	var clickArgs []any
-	json.Unmarshal(mock.actionCalls[1].Args, &clickArgs)
+	if err := json.Unmarshal(mock.actionCalls[1].Args, &clickArgs); err != nil {
+		t.Fatalf("unmarshal click args: %v", err)
+	}
 	if len(clickArgs) != 1 || clickArgs[0] != "[data-testid=submit]" {
 		t.Errorf("click args = %v, want [[data-testid=submit]]", clickArgs)
 	}
@@ -426,7 +451,10 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 							},
 						},
 						// name: "widget" (for assertion evaluation)
-						&parser.Assignment{Path: "name", Value: parser.LiteralString{Value: "widget"}},
+						&parser.Assignment{
+							Path:  "name",
+							Value: parser.LiteralString{Value: "widget"},
+						},
 					},
 				},
 				Then: &parser.Block{
@@ -444,20 +472,29 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		created = map[string]any{"id": 1, "name": body["name"]}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
-		json.NewEncoder(w).Encode(created)
+		if err := json.NewEncoder(w).Encode(created); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
 		if created == nil {
 			w.WriteHeader(404)
-			w.Write([]byte(`{"error":"not_found"}`))
+			if _, err := w.Write([]byte(`{"error":"not_found"}`)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(created)
+		if err := json.NewEncoder(w).Encode(created); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -524,7 +561,7 @@ func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/echo-headers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"auth": r.Header.Get("Authorization"),
 		})
 	})
@@ -603,7 +640,12 @@ func (f *failingAdapter) Init(config map[string]string) error { return nil }
 func (f *failingAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
 	return &adapter.Response{OK: false, Error: f.errorMsg}, nil
 }
-func (f *failingAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
+
+func (f *failingAdapter) Assert(
+	property string,
+	locator string,
+	expected json.RawMessage,
+) (*adapter.Response, error) {
 	return &adapter.Response{OK: true, Actual: expected}, nil
 }
 func (f *failingAdapter) Close() error { return nil }
@@ -972,7 +1014,7 @@ func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /transfer", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"error": "invalid_amount"})
+		writeJSON(w, map[string]any{"error": "invalid_amount"})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

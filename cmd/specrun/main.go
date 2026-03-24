@@ -8,14 +8,15 @@ import (
 	"os"
 	"strings"
 
+	playwright "github.com/playwright-community/playwright-go"
+
 	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	"github.com/bamsammich/speclang/v2/pkg/generator"
 	"github.com/bamsammich/speclang/v2/pkg/openapi"
 	"github.com/bamsammich/speclang/v2/pkg/parser"
-	protoResolver "github.com/bamsammich/speclang/v2/pkg/proto"
+	protoresolver "github.com/bamsammich/speclang/v2/pkg/proto"
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 	"github.com/bamsammich/speclang/v2/pkg/validator"
-	playwright "github.com/playwright-community/playwright-go"
 )
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	case "install":
 		os.Exit(runInstall(os.Args[2:]))
 	default:
+		//nolint:gosec // CLI writing to stderr, not a web response
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
 	}
@@ -42,6 +44,7 @@ func main() {
 func validateSpec(spec *parser.Spec) int {
 	errs := validator.Validate(spec)
 	if len(errs) > 0 {
+		//nolint:gosec // CLI writing to stderr, not a web response
 		fmt.Fprint(os.Stderr, validator.FormatErrors(errs))
 		return 1
 	}
@@ -293,6 +296,7 @@ func runInstall(args []string) int {
 		fmt.Println("Playwright browsers installed successfully.")
 		return 0
 	default:
+		//nolint:gosec // CLI writing to stderr, not a web response
 		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", args[0])
 		return 1
 	}
@@ -311,7 +315,10 @@ func collectPlugins(spec *parser.Spec) []string {
 	return plugins
 }
 
-func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[string]adapter.Adapter, error) {
+func createAdapters(
+	spec *parser.Spec,
+	targetConfig map[string]string,
+) (map[string]adapter.Adapter, error) {
 	plugins := collectPlugins(spec)
 	if len(plugins) == 0 {
 		return nil, errors.New("no scopes declare a 'use' directive")
@@ -329,7 +336,10 @@ func createAdapters(spec *parser.Spec, targetConfig map[string]string) (map[stri
 	return adapters, nil
 }
 
-func createSingleAdapter(pluginName string, targetConfig map[string]string) (adapter.Adapter, error) {
+func createSingleAdapter(
+	pluginName string,
+	targetConfig map[string]string,
+) (adapter.Adapter, error) {
 	switch pluginName {
 	case "http":
 		adp := adapter.NewHTTPAdapter()
@@ -356,7 +366,7 @@ func createSingleAdapter(pluginName string, targetConfig map[string]string) (ada
 
 func closeAdapters(adapters map[string]adapter.Adapter) {
 	for _, adp := range adapters {
-		adp.Close() //nolint:errcheck
+		adp.Close() //nolint:errcheck // best-effort cleanup at program exit
 	}
 }
 
@@ -389,6 +399,6 @@ func resolveExprToString(expr parser.Expr) string {
 func defaultImports() parser.ImportRegistry {
 	return parser.ImportRegistry{
 		"openapi": &openapi.Resolver{},
-		"proto":   &protoResolver.Resolver{},
+		"proto":   &protoresolver.Resolver{},
 	}
 }

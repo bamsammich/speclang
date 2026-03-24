@@ -49,7 +49,8 @@ spec Test {
 		t.Errorf("nested type = %q, want 'array'", fields[2].Type.Name)
 	}
 	inner := fields[2].Type.ElemType
-	if inner == nil || inner.Name != "array" || inner.ElemType == nil || inner.ElemType.Name != "int" {
+	if inner == nil || inner.Name != "array" || inner.ElemType == nil ||
+		inner.ElemType.Name != "int" {
 		t.Error("nested should be array of array of int")
 	}
 

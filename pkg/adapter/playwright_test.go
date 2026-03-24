@@ -7,9 +7,20 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/pkg/adapter"
 	pw "github.com/playwright-community/playwright-go"
+
+	"github.com/bamsammich/speclang/v2/pkg/adapter"
 )
+
+// mustMarshal is a test helper that marshals v to JSON, failing the test on error.
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	return b
+}
 
 const testLoginPage = `<!DOCTYPE html>
 <html>
@@ -55,11 +66,11 @@ func skipIfNoBrowsers(t *testing.T) {
 		Headless: pw.Bool(true),
 	})
 	if err != nil {
-		instance.Stop() //nolint:errcheck
+		instance.Stop() //nolint:errcheck // best-effort cleanup before skip
 		t.Skipf("chromium not installed (run 'specrun install playwright'): %v", err)
 	}
-	browser.Close() //nolint:errcheck
-	instance.Stop() //nolint:errcheck
+	browser.Close() //nolint:errcheck // best-effort cleanup in probe
+	instance.Stop() //nolint:errcheck // best-effort cleanup in probe
 }
 
 func startTestServer(t *testing.T) string {
@@ -75,7 +86,7 @@ func startTestServer(t *testing.T) string {
 		t.Fatalf("starting test server: %v", err)
 	}
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(listener) //nolint:errcheck
+	go srv.Serve(listener) //nolint:errcheck // server lifecycle managed by t.Cleanup
 	t.Cleanup(func() { srv.Close() })
 
 	return fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
@@ -98,7 +109,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 	t.Run("goto and fill and click", func(t *testing.T) {
 		// Navigate to login page.
-		gotoArgs, _ := json.Marshal([]string{"/login"})
+		gotoArgs := mustMarshal(t, []string{"/login"})
 		resp, err := adp.Action("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto: %v", err)
@@ -108,7 +119,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Fill username.
-		fillUser, _ := json.Marshal([]string{"[data-testid=username]", "alice"})
+		fillUser := mustMarshal(t, []string{"[data-testid=username]", "alice"})
 		resp, err = adp.Action("fill", fillUser)
 		if err != nil {
 			t.Fatalf("fill username: %v", err)
@@ -118,7 +129,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Fill password.
-		fillPass, _ := json.Marshal([]string{"[data-testid=password]", "secret"})
+		fillPass := mustMarshal(t, []string{"[data-testid=password]", "secret"})
 		resp, err = adp.Action("fill", fillPass)
 		if err != nil {
 			t.Fatalf("fill password: %v", err)
@@ -128,7 +139,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Click submit.
-		clickArgs, _ := json.Marshal([]string{"[data-testid=submit]"})
+		clickArgs := mustMarshal(t, []string{"[data-testid=submit]"})
 		resp, err = adp.Action("click", clickArgs)
 		if err != nil {
 			t.Fatalf("click: %v", err)
@@ -139,7 +150,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	})
 
 	t.Run("assert visible", func(t *testing.T) {
-		expected, _ := json.Marshal(true)
+		expected := mustMarshal(t, true)
 		resp, err := adp.Assert("visible", "[data-testid=welcome]", expected)
 		if err != nil {
 			t.Fatalf("assert visible: %v", err)
@@ -150,18 +161,21 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	})
 
 	t.Run("assert text", func(t *testing.T) {
-		expected, _ := json.Marshal("Welcome, alice")
+		expected := mustMarshal(t, "Welcome, alice")
 		resp, err := adp.Assert("text", "[data-testid=welcome]", expected)
 		if err != nil {
 			t.Fatalf("assert text: %v", err)
 		}
 		if !resp.OK {
-			t.Errorf("welcome text mismatch: expected 'Welcome, alice', got %s", string(resp.Actual))
+			t.Errorf(
+				"welcome text mismatch: expected 'Welcome, alice', got %s",
+				string(resp.Actual),
+			)
 		}
 	})
 
 	t.Run("assert value", func(t *testing.T) {
-		expected, _ := json.Marshal("alice")
+		expected := mustMarshal(t, "alice")
 		resp, err := adp.Assert("value", "[data-testid=username]", expected)
 		if err != nil {
 			t.Fatalf("assert value: %v", err)
@@ -172,7 +186,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	})
 
 	t.Run("assert not visible", func(t *testing.T) {
-		expected, _ := json.Marshal(false)
+		expected := mustMarshal(t, false)
 		resp, err := adp.Assert("visible", "[data-testid=error]", expected)
 		if err != nil {
 			t.Fatalf("assert not visible: %v", err)
@@ -191,7 +205,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 			t.Fatalf("new_page failed: %s", resp.Error)
 		}
 
-		gotoArgs, _ := json.Marshal([]string{"/login"})
+		gotoArgs := mustMarshal(t, []string{"/login"})
 		resp, err = adp.Action("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto on new page: %v", err)
@@ -209,7 +223,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// After closing the new page, the original page should still work.
-		expected, _ := json.Marshal(true)
+		expected := mustMarshal(t, true)
 		resp, err = adp.Assert("visible", "[data-testid=welcome]", expected)
 		if err != nil {
 			t.Fatalf("assert after close_page: %v", err)
@@ -221,7 +235,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 	t.Run("resize viewport", func(t *testing.T) {
 		// Resize to mobile.
-		resizeArgs, _ := json.Marshal([]int{375, 812})
+		resizeArgs := mustMarshal(t, []int{375, 812})
 		resp, err := adp.Action("resize", resizeArgs)
 		if err != nil {
 			t.Fatalf("resize: %v", err)
@@ -231,7 +245,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Page should still work at mobile size.
-		gotoArgs, _ := json.Marshal([]string{"/login"})
+		gotoArgs := mustMarshal(t, []string{"/login"})
 		resp, err = adp.Action("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto after resize: %v", err)
@@ -241,7 +255,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Resize back to desktop.
-		resizeArgs, _ = json.Marshal([]int{1920, 1080})
+		resizeArgs = mustMarshal(t, []int{1920, 1080})
 		resp, err = adp.Action("resize", resizeArgs)
 		if err != nil {
 			t.Fatalf("resize back: %v", err)
@@ -253,20 +267,28 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 	t.Run("failed login shows error", func(t *testing.T) {
 		// Navigate fresh.
-		gotoArgs, _ := json.Marshal([]string{"/login"})
-		adp.Action("goto", gotoArgs) //nolint:errcheck
+		gotoArgs := mustMarshal(t, []string{"/login"})
+		if _, err := adp.Action("goto", gotoArgs); err != nil {
+			t.Fatalf("goto: %v", err)
+		}
 
-		fillUser, _ := json.Marshal([]string{"[data-testid=username]", "bob"})
-		adp.Action("fill", fillUser) //nolint:errcheck
+		fillUser := mustMarshal(t, []string{"[data-testid=username]", "bob"})
+		if _, err := adp.Action("fill", fillUser); err != nil {
+			t.Fatalf("fill username: %v", err)
+		}
 
-		fillPass, _ := json.Marshal([]string{"[data-testid=password]", "wrong"})
-		adp.Action("fill", fillPass) //nolint:errcheck
+		fillPass := mustMarshal(t, []string{"[data-testid=password]", "wrong"})
+		if _, err := adp.Action("fill", fillPass); err != nil {
+			t.Fatalf("fill password: %v", err)
+		}
 
-		clickArgs, _ := json.Marshal([]string{"[data-testid=submit]"})
-		adp.Action("click", clickArgs) //nolint:errcheck
+		clickArgs := mustMarshal(t, []string{"[data-testid=submit]"})
+		if _, err := adp.Action("click", clickArgs); err != nil {
+			t.Fatalf("click: %v", err)
+		}
 
 		// Error should be visible.
-		expected, _ := json.Marshal(true)
+		expected := mustMarshal(t, true)
 		resp, err := adp.Assert("visible", "[data-testid=error]", expected)
 		if err != nil {
 			t.Fatalf("assert error visible: %v", err)
@@ -276,7 +298,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Error text.
-		expectedText, _ := json.Marshal("Invalid credentials")
+		expectedText := mustMarshal(t, "Invalid credentials")
 		resp, err = adp.Assert("text", "[data-testid=error]", expectedText)
 		if err != nil {
 			t.Fatalf("assert error text: %v", err)

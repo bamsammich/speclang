@@ -8,56 +8,56 @@ func TestLexFloat(t *testing.T) {
 	tests := []struct {
 		input  string
 		tokens []struct {
-			typ TokenType
 			val string
+			typ TokenType
 		}
 	}{
 		{
 			"3.14",
 			[]struct {
-				typ TokenType
 				val string
+				typ TokenType
 			}{
-				{TokenFloat, "3.14"},
+				{"3.14", TokenFloat},
 			},
 		},
 		{
 			"3.",
 			[]struct {
-				typ TokenType
 				val string
+				typ TokenType
 			}{
-				{TokenInt, "3"},
-				{TokenDot, "."},
+				{"3", TokenInt},
+				{".", TokenDot},
 			},
 		},
 		{
 			"3.field",
 			[]struct {
-				typ TokenType
 				val string
+				typ TokenType
 			}{
-				{TokenInt, "3"},
-				{TokenDot, "."},
-				{TokenIdent, "field"},
+				{"3", TokenInt},
+				{".", TokenDot},
+				{"field", TokenIdent},
 			},
 		},
 		{
 			"0.5",
 			[]struct {
-				typ TokenType
 				val string
+				typ TokenType
 			}{
-				{TokenFloat, "0.5"},
+				{"0.5", TokenFloat},
 			},
 		},
 		{
 			"100.001",
 			[]struct {
-				typ TokenType
 				val string
+				typ TokenType
 			}{
-				{TokenFloat, "100.001"},
+				{"100.001", TokenFloat},
 			},
 		},
 	}

@@ -196,7 +196,12 @@ func TestLexIfElseKeywords(t *testing.T) {
 	}
 
 	// Expect: If, Then, Else, EOF
-	expected := []parser.TokenType{parser.TokenIf, parser.TokenThen, parser.TokenElse, parser.TokenEOF}
+	expected := []parser.TokenType{
+		parser.TokenIf,
+		parser.TokenThen,
+		parser.TokenElse,
+		parser.TokenEOF,
+	}
 	if len(tokens) != len(expected) {
 		t.Fatalf("expected %d tokens, got %d", len(expected), len(tokens))
 	}

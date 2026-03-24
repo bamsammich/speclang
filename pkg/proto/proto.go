@@ -8,16 +8,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bamsammich/speclang/v2/pkg/parser"
 	protoparser "github.com/yoheimuta/go-protoparser/v4"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
+
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // Resolver implements parser.ImportResolver for protobuf files.
 type Resolver struct{}
 
 // Resolve reads a .proto file and returns speclang models and scopes.
-func (r *Resolver) Resolve(absPath string) ([]*parser.Model, []*parser.Scope, error) {
+func (*Resolver) Resolve(absPath string) ([]*parser.Model, []*parser.Scope, error) {
 	proto, err := parseProtoFile(absPath)
 	if err != nil {
 		return nil, nil, err

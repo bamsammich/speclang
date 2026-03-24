@@ -5,8 +5,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/bamsammich/speclang/v2/pkg/parser"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
+
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // convertServices extracts RPC methods from proto services and converts

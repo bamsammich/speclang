@@ -26,7 +26,12 @@ func lexFile(path string) ([]Token, error) {
 // dir is the directory of the file being processed (for relative path resolution).
 // filePath is the absolute path of the current file (for circular detection).
 // seen tracks files currently in the include chain (ancestors only).
-func resolveIncludes(tokens []Token, dir string, filePath string, seen map[string]bool) ([]Token, error) {
+func resolveIncludes(
+	tokens []Token,
+	dir string,
+	filePath string,
+	seen map[string]bool,
+) ([]Token, error) {
 	if seen == nil {
 		seen = make(map[string]bool)
 	}
@@ -43,53 +48,61 @@ func resolveIncludes(tokens []Token, dir string, filePath string, seen map[strin
 			continue
 		}
 
-		// Consume include + string path
-		includeTok := tokens[i]
-		i++
-		if i >= len(tokens) || tokens[i].Type != TokenString {
-			return nil, fmt.Errorf("%s:%d:%d: include requires a string path",
-				includeTok.File, includeTok.Line, includeTok.Col)
-		}
-		relPath := tokens[i].Value
-
-		// Resolve relative to the including file's directory
-		absInclude, err := filepath.Abs(filepath.Join(dir, relPath))
-		if err != nil {
-			return nil, fmt.Errorf("%s:%d:%d: resolving include path %q: %w",
-				includeTok.File, includeTok.Line, includeTok.Col, relPath, err)
-		}
-
-		// Circular detection
-		if seen[absInclude] {
-			return nil, fmt.Errorf("%s:%d:%d: circular include detected: %s",
-				includeTok.File, includeTok.Line, includeTok.Col, absInclude)
-		}
-
-		// Lex the included file
-		included, err := lexFile(absInclude)
-		if err != nil {
-			return nil, fmt.Errorf("%s:%d:%d: %w",
-				includeTok.File, includeTok.Line, includeTok.Col, err)
-		}
-
-		// Recursively resolve includes in the included file
-		resolved, err := resolveIncludes(included, filepath.Dir(absInclude), absInclude, seen)
+		resolved, newIdx, err := processInclude(tokens, i, dir, seen)
 		if err != nil {
 			return nil, err
 		}
-
-		// Strip the trailing EOF from the included file's resolved tokens
-		// (each resolveIncludes call appends its own EOF; we only want one at the end)
-		if len(resolved) > 0 && resolved[len(resolved)-1].Type == TokenEOF {
-			resolved = resolved[:len(resolved)-1]
-		}
-
+		i = newIdx
 		result = append(result, resolved...)
 	}
 
 	// Add EOF at the end
 	result = append(result, Token{Type: TokenEOF, File: filePath})
 	return result, nil
+}
+
+// processInclude handles a single include directive: validates the path token,
+// resolves the file, lexes it, and recursively resolves nested includes.
+// Returns the resolved tokens (with trailing EOF stripped) and the updated
+// token index pointing at the path token.
+func processInclude(tokens []Token, i int, dir string, seen map[string]bool) ([]Token, int, error) {
+	includeTok := tokens[i]
+	i++
+	if i >= len(tokens) ||
+		tokens[i].Type != TokenString { //nolint:gosec // bounds check on left side of || guards the access
+		return nil, i, fmt.Errorf("%s:%d:%d: include requires a string path",
+			includeTok.File, includeTok.Line, includeTok.Col)
+	}
+	relPath := tokens[i].Value //nolint:gosec // i is bounds-checked on line above
+
+	absInclude, err := filepath.Abs(filepath.Join(dir, relPath))
+	if err != nil {
+		return nil, i, fmt.Errorf("%s:%d:%d: resolving include path %q: %w",
+			includeTok.File, includeTok.Line, includeTok.Col, relPath, err)
+	}
+
+	if seen[absInclude] {
+		return nil, i, fmt.Errorf("%s:%d:%d: circular include detected: %s",
+			includeTok.File, includeTok.Line, includeTok.Col, absInclude)
+	}
+
+	included, err := lexFile(absInclude)
+	if err != nil {
+		return nil, i, fmt.Errorf("%s:%d:%d: %w",
+			includeTok.File, includeTok.Line, includeTok.Col, err)
+	}
+
+	resolved, err := resolveIncludes(included, filepath.Dir(absInclude), absInclude, seen)
+	if err != nil {
+		return nil, i, err
+	}
+
+	// Strip the trailing EOF (each resolveIncludes call appends its own)
+	if len(resolved) > 0 && resolved[len(resolved)-1].Type == TokenEOF {
+		resolved = resolved[:len(resolved)-1]
+	}
+
+	return resolved, i, nil
 }
 
 // validateNoDuplicates checks that model names and scope names are unique.

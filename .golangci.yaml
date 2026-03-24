@@ -102,6 +102,12 @@ linters:
           - ireturn # AST expression parser must return Expr interface by design
         path: pkg/parser/
       - linters:
+          - ireturn # OpenAPI importer constructs AST Expr nodes by design
+        path: pkg/openapi/
+      - linters:
+          - ireturn # protobuf importer constructs AST Expr nodes by design
+        path: pkg/proto/
+      - linters:
           - ireturn # plugin registry must return Adapter interface by design
         path: pkg/plugin/
       - linters:

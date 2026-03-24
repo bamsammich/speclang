@@ -74,6 +74,10 @@ spec Test {
 	}
 	a := spec.Scopes[0].Scenarios[0].Then.Assertions[0]
 	if a.Target != "y" || a.Plugin != "" || a.Property != "" {
-		t.Errorf("path assertion should have empty Plugin/Property, got Plugin=%q Property=%q", a.Plugin, a.Property)
+		t.Errorf(
+			"path assertion should have empty Plugin/Property, got Plugin=%q Property=%q",
+			a.Plugin,
+			a.Property,
+		)
 	}
 }
