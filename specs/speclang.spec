@@ -14,5 +14,7 @@ spec Speclang {
   include "generate_types.spec"
   include "cli_flags.spec"
   include "adapters.spec"
+  include "enum.spec"
+  include "exists.spec"
   include "error_assertions.spec"
 }

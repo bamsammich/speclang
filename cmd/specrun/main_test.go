@@ -447,6 +447,33 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 			"content_type": r.Header.Get("Content-Type"),
 		})
 	})
+
+	// Multi-step workflow endpoints
+	var createdResource map[string]any
+
+	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		createdResource = map[string]any{"id": 1, "name": body["name"]}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(createdResource)
+	})
+
+	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
+		if createdResource == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]any{"error": "not_found"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(createdResource)
+	})
+
 	return httptest.NewServer(mux)
 }
 

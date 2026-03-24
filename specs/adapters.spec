@@ -24,8 +24,8 @@ scope verify_http_adapter {
     }
     then {
       exit_code: 0
-      scenarios_run: 6
-      scenarios_passed: 6
+      scenarios_run: 8
+      scenarios_passed: 8
     }
   }
 }

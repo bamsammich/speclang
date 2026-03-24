@@ -77,8 +77,10 @@ const (
 	TokenLte    // <=
 	TokenPlus   // +
 	TokenMinus  // -
-	TokenStar   // *
-	TokenAnd    // &&
+	TokenStar    // *
+	TokenSlash   // /
+	TokenPercent // %
+	TokenAnd     // &&
 	TokenOr     // ||
 	TokenNot    // !
 	TokenAssign // =
@@ -135,6 +137,8 @@ var tokenNames = map[TokenType]string{
 	TokenPlus:      "Plus",
 	TokenMinus:     "Minus",
 	TokenStar:      "Star",
+	TokenSlash:     "Slash",
+	TokenPercent:   "Percent",
 	TokenAnd:       "And",
 	TokenOr:        "Or",
 	TokenNot:       "Not",
@@ -192,6 +196,8 @@ var singleCharTokens = map[rune]TokenType{
 	'+': TokenPlus,
 	'-': TokenMinus,
 	'*': TokenStar,
+	'/': TokenSlash,
+	'%': TokenPercent,
 }
 
 type lexer struct {

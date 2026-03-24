@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
+	"reflect"
 	"strings"
 
 	"github.com/bamsammich/speclang/v2/pkg/parser"
@@ -134,6 +135,11 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 	case "map":
 		if t.KeyType != nil && t.ValType != nil {
 			return g.generateMap(rng, *t.ValType)
+		}
+		return nil
+	case "enum":
+		if len(t.Variants) > 0 {
+			return t.Variants[rng.IntN(len(t.Variants))]
 		}
 		return nil
 	default:
@@ -304,6 +310,58 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		default:
 			return nil, false
 		}
+	case parser.ContainsExpr:
+		haystack, ok := c.eval(e.Haystack)
+		if !ok {
+			return nil, false
+		}
+		needle, ok := c.eval(e.Needle)
+		if !ok {
+			return nil, false
+		}
+		switch h := haystack.(type) {
+		case string:
+			n, ok := needle.(string)
+			if !ok {
+				return nil, false
+			}
+			return strings.Contains(h, n), true
+		case []any:
+			for _, elem := range h {
+				if reflect.DeepEqual(elem, needle) {
+					return true, true
+				}
+			}
+			return false, true
+		default:
+			return nil, false
+		}
+	case parser.ExistsExpr:
+		val, ok := c.eval(e.Arg)
+		if !ok {
+			return false, true
+		}
+		_ = val
+		return true, true
+	case parser.HasKeyExpr:
+		obj, ok := c.eval(e.Arg)
+		if !ok {
+			return false, true
+		}
+		key, kok := c.eval(e.Key)
+		if !kok {
+			return nil, false
+		}
+		keyStr, isStr := key.(string)
+		if !isStr {
+			return nil, false
+		}
+		m, isMap := obj.(map[string]any)
+		if !isMap {
+			return false, true
+		}
+		_, exists := m[keyStr]
+		return exists, true
 	case parser.UnaryOp:
 		return c.evalUnary(e)
 	default:
@@ -408,12 +466,16 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 		return evalBoolOp(op, left, right)
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
-	case "<", "<=", ">", ">=", "+", "-", "*":
+	case "<", "<=", ">", ">=", "+", "-", "*", "/", "%":
 		// If both sides are native int, use int arithmetic (avoids float precision issues).
 		ln, lok := left.(int)
 		rn, rok := right.(int)
 		if lok && rok {
 			return evalIntOp(op, ln, rn)
+		}
+		// Modulo is only defined for integers.
+		if op == "%" {
+			return nil, false
 		}
 		// Otherwise try float arithmetic (handles float64 from JSON and float type).
 		lf, lfok := toFloat(left)
@@ -471,6 +533,16 @@ func evalIntOp(op string, l, r int) (any, bool) {
 		return l - r, true
 	case "*":
 		return l * r, true
+	case "/":
+		if r == 0 {
+			return nil, false
+		}
+		return l / r, true
+	case "%":
+		if r == 0 {
+			return nil, false
+		}
+		return l % r, true
 	default:
 		return nil, false
 	}
@@ -492,6 +564,11 @@ func evalFloatOp(op string, l, r float64) (any, bool) {
 		return l - r, true
 	case "*":
 		return l * r, true
+	case "/":
+		if r == 0 {
+			return nil, false
+		}
+		return l / r, true
 	default:
 		return nil, false
 	}

@@ -530,6 +530,35 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 		return TypeExpr{Name: "map", KeyType: &keyType, ValType: &valType}, nil
 	}
 
+	// Enum type: enum("val1", "val2", ...)
+	if name.Value == "enum" && p.peek().Type == TokenLParen {
+		p.advance() // consume (
+		var variants []string
+		for p.peek().Type != TokenRParen {
+			if len(variants) > 0 {
+				if _, err := p.expect(TokenComma); err != nil {
+					return TypeExpr{}, err
+				}
+				// Allow trailing comma
+				if p.peek().Type == TokenRParen {
+					break
+				}
+			}
+			tok, err := p.expect(TokenString)
+			if err != nil {
+				return TypeExpr{}, p.errAt(p.peek(), "enum variants must be string literals")
+			}
+			variants = append(variants, tok.Value)
+		}
+		if _, err := p.expect(TokenRParen); err != nil {
+			return TypeExpr{}, err
+		}
+		if len(variants) == 0 {
+			return TypeExpr{}, p.errAt(name, "enum type requires at least one variant")
+		}
+		return TypeExpr{Name: "enum", Variants: variants}, nil
+	}
+
 	return TypeExpr{Name: name.Value}, nil
 }
 
@@ -978,7 +1007,7 @@ func infixPrec(typ TokenType) int {
 		return precComparison
 	case TokenPlus, TokenMinus:
 		return precAdditive
-	case TokenStar:
+	case TokenStar, TokenSlash, TokenPercent:
 		return precMultiply
 	default:
 		return precNone
@@ -994,8 +1023,10 @@ var opStrings = map[TokenType]string{
 	TokenLte:   "<=",
 	TokenPlus:  "+",
 	TokenMinus: "-",
-	TokenStar:  "*",
-	TokenAnd:   "&&",
+	TokenStar:    "*",
+	TokenSlash:   "/",
+	TokenPercent: "%",
+	TokenAnd:     "&&",
 	TokenOr:    "||",
 }
 
@@ -1116,9 +1147,18 @@ func (p *parser) parseAtom() (Expr, error) {
 		return expr, nil
 
 	default:
-		// len(expr) built-in function
+		// Built-in functions: len(expr), exists(expr), has_key(expr, key)
 		if tok.Type == TokenIdent && tok.Value == "len" {
 			return p.parseLenExpr()
+		}
+		if tok.Type == TokenIdent && tok.Value == "contains" {
+			return p.parseContainsExpr()
+		}
+		if tok.Type == TokenIdent && tok.Value == "exists" {
+			return p.parseExistsExpr()
+		}
+		if tok.Type == TokenIdent && tok.Value == "has_key" {
+			return p.parseHasKeyExpr()
 		}
 		if isIdentLike(tok.Type) {
 			return p.parseFieldRefExpr()
@@ -1156,6 +1196,68 @@ func (p *parser) parseLenExpr() (Expr, error) {
 		return nil, err
 	}
 	return LenExpr{Arg: arg}, nil
+}
+
+// parseContainsExpr parses: contains(haystack, needle)
+func (p *parser) parseContainsExpr() (Expr, error) {
+	p.advance() // consume "contains"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	haystack, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return nil, err
+	}
+	needle, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ContainsExpr{Haystack: haystack, Needle: needle}, nil
+}
+
+// parseExistsExpr parses: exists(expr)
+func (p *parser) parseExistsExpr() (Expr, error) {
+	p.advance() // consume "exists"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arg, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ExistsExpr{Arg: arg}, nil
+}
+
+// parseHasKeyExpr parses: has_key(expr, key)
+func (p *parser) parseHasKeyExpr() (Expr, error) {
+	p.advance() // consume "has_key"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	arg, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return nil, err
+	}
+	key, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return HasKeyExpr{Arg: arg, Key: key}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")

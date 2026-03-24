@@ -43,10 +43,11 @@ type Field struct {
 
 // TypeExpr represents a type in the spec language.
 type TypeExpr struct {
-	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", or model name
+	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", "enum", or model name
 	ElemType *TypeExpr `json:"elem_type,omitempty"`     // element type for arrays
 	KeyType  *TypeExpr `json:"key_type,omitempty"`      // key type for maps
 	ValType  *TypeExpr `json:"val_type,omitempty"`      // value type for maps
+	Variants []string  `json:"variants,omitempty"`      // enum variants (for enum type)
 	Optional bool      `json:"optional,omitempty"`      // trailing ?
 }
 
@@ -159,7 +160,7 @@ type EnvRef struct {
 type BinaryOp struct {
 	Left  Expr   `json:"left,omitempty"`
 	Right Expr   `json:"right,omitempty"`
-	Op    string `json:"op"` // ==, !=, >, <, >=, <=, +, -, *, &&, ||
+	Op    string `json:"op"` // ==, !=, >, <, >=, <=, +, -, *, /, %, &&, ||
 }
 
 type UnaryOp struct {
@@ -184,6 +185,20 @@ type LenExpr struct {
 	Arg Expr `json:"arg"`
 }
 
+type ContainsExpr struct {
+	Haystack Expr `json:"haystack"`
+	Needle   Expr `json:"needle"`
+}
+
+type ExistsExpr struct {
+	Arg Expr `json:"arg"`
+}
+
+type HasKeyExpr struct {
+	Arg Expr   `json:"arg"`
+	Key Expr   `json:"key"`
+}
+
 type RegexLiteral struct {
 	Pattern string `json:"pattern"`
 }
@@ -200,4 +215,7 @@ func (ObjectLiteral) exprNode() {}
 func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
 func (LenExpr) exprNode()       {}
+func (ContainsExpr) exprNode()  {}
+func (ExistsExpr) exprNode()    {}
+func (HasKeyExpr) exprNode()    {}
 func (RegexLiteral) exprNode()  {}

@@ -11,7 +11,7 @@ import (
 var primitives = map[string]bool{
 	"int": true, "string": true, "bool": true,
 	"float": true, "bytes": true, "array": true, "map": true,
-	"any": true,
+	"enum": true, "any": true,
 }
 
 // Validate performs post-parse semantic validation on a spec.
@@ -204,6 +204,24 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 				v.errorf("%s: expected bool, got %s", context, exprTypeName(expr))
 			}
 		}
+	case "enum":
+		str, ok := expr.(parser.LiteralString)
+		if !ok {
+			if !isNonLiteral(expr) {
+				v.errorf("%s: expected enum value, got %s", context, exprTypeName(expr))
+			}
+			return
+		}
+		found := false
+		for _, variant := range te.Variants {
+			if str.Value == variant {
+				found = true
+				break
+			}
+		}
+		if !found {
+			v.errorf("%s: %q is not a valid enum variant (expected one of %v)", context, str.Value, te.Variants)
+		}
 	case "array":
 		arr, ok := expr.(parser.ArrayLiteral)
 		if !ok {
@@ -252,7 +270,7 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 func isNonLiteral(expr parser.Expr) bool {
 	switch expr.(type) {
 	case parser.FieldRef, parser.BinaryOp, parser.UnaryOp,
-		parser.EnvRef, parser.LenExpr, parser.RegexLiteral:
+		parser.EnvRef, parser.LenExpr, parser.ContainsExpr, parser.ExistsExpr, parser.HasKeyExpr, parser.RegexLiteral:
 		return true
 	}
 	return false
@@ -267,6 +285,8 @@ func typeName(te parser.TypeExpr) string {
 		return "[]unknown"
 	case "map":
 		return "map"
+	case "enum":
+		return fmt.Sprintf("enum(%v)", te.Variants)
 	default:
 		name := te.Name
 		if te.Optional {

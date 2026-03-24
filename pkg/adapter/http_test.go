@@ -405,3 +405,224 @@ func TestAssert_FailureMismatch(t *testing.T) {
 		t.Fatal("expected assertion to fail for mismatched value")
 	}
 }
+
+// --- Multi-step workflow tests ---
+
+// multiStepHandler provides endpoints for multi-step HTTP workflow tests.
+// POST /api/resources — creates a resource, returns {"id": 1, "name": <name>}
+// GET  /api/resources/1 — returns the last created resource (or 404)
+// GET  /api/headers — echoes request headers
+func multiStepMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	var created map[string]any
+
+	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		created = map[string]any{"id": float64(1), "name": body["name"]}
+		if r.Header.Get("Authorization") != "" {
+			created["auth"] = r.Header.Get("Authorization")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
+	})
+
+	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, r *http.Request) {
+		if created == nil {
+			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(created)
+	})
+
+	mux.HandleFunc("GET /api/headers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"auth":   r.Header.Get("Authorization"),
+			"custom": r.Header.Get("X-Custom"),
+		})
+	})
+
+	// Cookie endpoints
+	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"logged_in": true})
+	})
+
+	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("session")
+		if err != nil || cookie.Value != "abc123" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"user": "alice", "session": cookie.Value})
+	})
+
+	return mux
+}
+
+func TestMultiStep_CreateThenVerify(t *testing.T) {
+	srv := httptest.NewServer(multiStepMux())
+	defer srv.Close()
+
+	a := NewHTTPAdapter()
+	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 1: POST to create a resource
+	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "widget"}})
+	resp, err := a.Action("post", postArgs)
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("POST not OK: %s", resp.Error)
+	}
+
+	// Step 2: GET to verify the resource exists
+	getArgs := mustMarshal(t, []any{"/api/resources/1"})
+	resp, err = a.Action("get", getArgs)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("GET not OK: %s", resp.Error)
+	}
+
+	// Assertions apply to the last response (the GET)
+	assertResp, err := a.Assert("name", "", json.RawMessage(`"widget"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("assertion failed: %s", assertResp.Error)
+	}
+
+	assertResp, err = a.Assert("id", "", json.RawMessage(`1`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("assertion failed: %s", assertResp.Error)
+	}
+}
+
+func TestMultiStep_HeaderPersistence(t *testing.T) {
+	srv := httptest.NewServer(multiStepMux())
+	defer srv.Close()
+
+	a := NewHTTPAdapter()
+	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set a header
+	headerArgs := mustMarshal(t, []any{"Authorization", "Bearer my-token"})
+	if _, err := a.Action("header", headerArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// First request: POST — header should be present
+	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "test"}})
+	if _, err := a.Action("post", postArgs); err != nil {
+		t.Fatal(err)
+	}
+	assertResp, err := a.Assert("auth", "", json.RawMessage(`"Bearer my-token"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("POST auth assertion failed: %s", assertResp.Error)
+	}
+
+	// Second request: GET — header should still be present
+	getArgs := mustMarshal(t, []any{"/api/headers"})
+	if _, err := a.Action("get", getArgs); err != nil {
+		t.Fatal(err)
+	}
+	assertResp, err = a.Assert("auth", "", json.RawMessage(`"Bearer my-token"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("GET auth assertion failed: %s", assertResp.Error)
+	}
+}
+
+func TestMultiStep_CookiePersistence(t *testing.T) {
+	srv := httptest.NewServer(multiStepMux())
+	defer srv.Close()
+
+	a := NewHTTPAdapter()
+	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 1: POST /api/login — server sets a session cookie
+	loginArgs := mustMarshal(t, []any{"/api/login", map[string]any{}})
+	resp, err := a.Action("post", loginArgs)
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("login not OK: %s", resp.Error)
+	}
+
+	// Step 2: GET /api/me — cookie should be sent automatically
+	meArgs := mustMarshal(t, []any{"/api/me"})
+	resp, err = a.Action("get", meArgs)
+	if err != nil {
+		t.Fatalf("me failed: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("me not OK: %s", resp.Error)
+	}
+
+	assertResp, err := a.Assert("user", "", json.RawMessage(`"alice"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("assertion failed: %s", assertResp.Error)
+	}
+}
+
+func TestMultiStep_ErrorInMiddle(t *testing.T) {
+	srv := httptest.NewServer(multiStepMux())
+	defer srv.Close()
+
+	a := NewHTTPAdapter()
+	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	// GET a resource that doesn't exist yet — should get 404
+	getArgs := mustMarshal(t, []any{"/api/resources/1"})
+	resp, err := a.Action("get", getArgs)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	// The action still returns OK (the request succeeded); status is captured
+	if !resp.OK {
+		t.Fatalf("GET not OK: %s", resp.Error)
+	}
+
+	// Assert the 404 status
+	assertResp, err := a.Assert("status", "", json.RawMessage(`404`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assertResp.OK {
+		t.Fatalf("status assertion failed: %s", assertResp.Error)
+	}
+}
