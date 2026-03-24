@@ -342,15 +342,11 @@ func logProgress(jsonOutput bool, format string, args ...any) {
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
-// Skipped when SPECRUN_NO_SERVICES=1 is set in the environment.
 func startServices(
 	ctx context.Context,
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
-	if os.Getenv("SPECRUN_NO_SERVICES") == "1" {
-		return nil, nil, nil
-	}
 	cfg := buildInfraConfig(spec, opts.specFile)
 	manager, err := infra.NewManager(cfg)
 	if err != nil {
@@ -371,9 +367,6 @@ func startServices(
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
 	}
-
-	// Propagate to child processes so nested specrun invocations skip service management.
-	os.Setenv("SPECRUN_NO_SERVICES", "1") //nolint:errcheck // env propagation is best-effort
 
 	for _, svc := range services {
 		logProgress(opts.jsonOutput, "  %s ready on port %d\n", svc.Name, svc.Port)
@@ -597,23 +590,15 @@ func resolveExprToString(
 	}
 }
 
-// resolveServiceURL finds the URL for a named service. It checks running
-// services first, then falls back to the declared port (for SPECRUN_NO_SERVICES=1 mode).
+// resolveServiceURL finds the URL for a named service from running containers.
 func resolveServiceURL(
 	name string,
-	target *parser.Target,
+	_ *parser.Target,
 	services []infra.RunningService,
 ) string {
 	for _, svc := range services {
 		if svc.Name == name {
 			return svc.URL
-		}
-	}
-	if target != nil {
-		for _, svc := range target.Services {
-			if svc.Name == name && svc.Port > 0 {
-				return fmt.Sprintf("http://localhost:%d", svc.Port)
-			}
 		}
 	}
 	return ""
