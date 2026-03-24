@@ -89,6 +89,17 @@ scope parse_valid {
       name: "LoginUI"
     }
   }
+
+  # Verifies that all() and any() quantifier expressions parse.
+  scenario quantifier_spec {
+    given {
+      file: "testdata/self/quantifiers.spec"
+    }
+    then {
+      exit_code: 0
+      name: "Quantifiers"
+    }
+  }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.

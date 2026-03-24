@@ -310,6 +310,10 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		default:
 			return nil, false
 		}
+	case parser.AllExpr:
+		return c.evalAll(e)
+	case parser.AnyExpr:
+		return c.evalAny(e)
 	case parser.ContainsExpr:
 		haystack, ok := c.eval(e.Haystack)
 		if !ok {
@@ -409,6 +413,71 @@ func (c *evalCtx) evalUnary(e parser.UnaryOp) (any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// evalAll evaluates all(array, elem => predicate). Short-circuits on first false.
+func (c *evalCtx) evalAll(e parser.AllExpr) (any, bool) {
+	arrVal, ok := c.eval(e.Array)
+	if !ok {
+		return nil, false
+	}
+	arr, ok := arrVal.([]any)
+	if !ok {
+		return nil, false
+	}
+	for _, elem := range arr {
+		inner := c.withBinding(e.BoundVar, elem)
+		val, ok := inner.eval(e.Predicate)
+		if !ok {
+			return nil, false
+		}
+		b, isBool := val.(bool)
+		if !isBool {
+			return nil, false
+		}
+		if !b {
+			return false, true
+		}
+	}
+	return true, true
+}
+
+// evalAny evaluates any(array, elem => predicate). Short-circuits on first true.
+func (c *evalCtx) evalAny(e parser.AnyExpr) (any, bool) {
+	arrVal, ok := c.eval(e.Array)
+	if !ok {
+		return nil, false
+	}
+	arr, ok := arrVal.([]any)
+	if !ok {
+		return nil, false
+	}
+	for _, elem := range arr {
+		inner := c.withBinding(e.BoundVar, elem)
+		val, ok := inner.eval(e.Predicate)
+		if !ok {
+			return nil, false
+		}
+		b, isBool := val.(bool)
+		if !isBool {
+			return nil, false
+		}
+		if b {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// withBinding returns a new evalCtx with the bound variable added to the input scope.
+// The original input map is not mutated.
+func (c *evalCtx) withBinding(name string, value any) *evalCtx {
+	merged := make(map[string]any, len(c.input)+1)
+	for k, v := range c.input {
+		merged[k] = v
+	}
+	merged[name] = value
+	return &evalCtx{input: merged, fieldName: c.fieldName}
 }
 
 func (c *evalCtx) resolveRef(path string) (any, bool) {
