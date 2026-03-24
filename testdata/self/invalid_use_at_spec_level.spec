@@ -1,0 +1,3 @@
+use http
+spec Bad {
+}
