@@ -143,17 +143,24 @@ func (v *validator) validateGivenBlock(sc *parser.Scenario, inputFields map[stri
 	// Completeness check: all required fields must be assigned
 	// Skip for given blocks with action calls (e.g., Playwright flows)
 	if !hasCalls {
-		assigned := make(map[string]bool)
-		for _, step := range sc.Given.Steps {
-			if a, ok := step.(*parser.Assignment); ok {
-				assigned[topLevelField(a.Path)] = true
-			}
+		v.checkGivenCompleteness(sc, inputFields)
+	}
+}
+
+func (v *validator) checkGivenCompleteness(
+	sc *parser.Scenario,
+	inputFields map[string]*parser.Field,
+) {
+	assigned := make(map[string]bool)
+	for _, step := range sc.Given.Steps {
+		if a, ok := step.(*parser.Assignment); ok {
+			assigned[topLevelField(a.Path)] = true
 		}
-		for name, f := range inputFields {
-			if !f.Type.Optional && !assigned[name] {
-				v.errorf("scope %q, scenario %q: missing required field %q",
-					v.scope, sc.Name, name)
-			}
+	}
+	for name, f := range inputFields {
+		if !f.Type.Optional && !assigned[name] {
+			v.errorf("scope %q, scenario %q: missing required field %q",
+				v.scope, sc.Name, name)
 		}
 	}
 }
@@ -178,96 +185,106 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 
 	switch te.Name {
 	case "int":
-		if _, ok := expr.(parser.LiteralInt); !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected int, got %s", context, exprTypeName(expr))
-			}
-		}
+		v.checkIntType(expr, context)
 	case "float":
-		switch expr.(type) {
-		case parser.LiteralFloat, parser.LiteralInt:
-			// ok — accept int literals for float fields
-		default:
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected float, got %s", context, exprTypeName(expr))
-			}
-		}
+		v.checkFloatType(expr, context)
 	case "string":
-		if _, ok := expr.(parser.LiteralString); !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected string, got %s", context, exprTypeName(expr))
-			}
-		}
+		v.checkStringType(expr, context)
 	case "bool":
-		if _, ok := expr.(parser.LiteralBool); !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected bool, got %s", context, exprTypeName(expr))
-			}
-		}
+		v.checkBoolType(expr, context)
 	case "enum":
-		str, ok := expr.(parser.LiteralString)
-		if !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected enum value, got %s", context, exprTypeName(expr))
-			}
-			return
-		}
-		found := false
-		for _, variant := range te.Variants {
-			if str.Value == variant {
-				found = true
-				break
-			}
-		}
-		if !found {
-			v.errorf(
-				"%s: %q is not a valid enum variant (expected one of %v)",
-				context,
-				str.Value,
-				te.Variants,
-			)
-		}
+		v.checkEnumType(expr, te, context)
 	case "array":
-		arr, ok := expr.(parser.ArrayLiteral)
-		if !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected array, got %s", context, exprTypeName(expr))
-			}
-			return
-		}
-		if te.ElemType != nil {
-			for i, elem := range arr.Elements {
-				v.checkExprType(elem, *te.ElemType,
-					fmt.Sprintf("%s[%d]", context, i))
-			}
-		}
+		v.checkArrayType(expr, te, context)
 	default:
-		// Model type — expect ObjectLiteral
-		obj, ok := expr.(parser.ObjectLiteral)
-		if !ok {
-			if !isNonLiteral(expr) {
-				v.errorf("%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
-			}
+		v.checkModelType(expr, te, context)
+	}
+}
+
+func (v *validator) checkIntType(expr parser.Expr, context string) {
+	if _, ok := expr.(parser.LiteralInt); !ok && !isNonLiteral(expr) {
+		v.errorf("%s: expected int, got %s", context, exprTypeName(expr))
+	}
+}
+
+func (v *validator) checkFloatType(expr parser.Expr, context string) {
+	switch expr.(type) {
+	case parser.LiteralFloat, parser.LiteralInt:
+		// ok — accept int literals for float fields
+	default:
+		if !isNonLiteral(expr) {
+			v.errorf("%s: expected float, got %s", context, exprTypeName(expr))
+		}
+	}
+}
+
+func (v *validator) checkStringType(expr parser.Expr, context string) {
+	if _, ok := expr.(parser.LiteralString); !ok && !isNonLiteral(expr) {
+		v.errorf("%s: expected string, got %s", context, exprTypeName(expr))
+	}
+}
+
+func (v *validator) checkBoolType(expr parser.Expr, context string) {
+	if _, ok := expr.(parser.LiteralBool); !ok && !isNonLiteral(expr) {
+		v.errorf("%s: expected bool, got %s", context, exprTypeName(expr))
+	}
+}
+
+func (v *validator) checkEnumType(expr parser.Expr, te parser.TypeExpr, context string) {
+	str, ok := expr.(parser.LiteralString)
+	if !ok {
+		if !isNonLiteral(expr) {
+			v.errorf("%s: expected enum value, got %s", context, exprTypeName(expr))
+		}
+		return
+	}
+	for _, variant := range te.Variants {
+		if str.Value == variant {
 			return
 		}
-		// Validate object fields against model
-		model, ok := v.models[te.Name]
+	}
+	v.errorf("%s: %q is not a valid enum variant (expected one of %v)",
+		context, str.Value, te.Variants)
+}
+
+func (v *validator) checkArrayType(expr parser.Expr, te parser.TypeExpr, context string) {
+	arr, ok := expr.(parser.ArrayLiteral)
+	if !ok {
+		if !isNonLiteral(expr) {
+			v.errorf("%s: expected array, got %s", context, exprTypeName(expr))
+		}
+		return
+	}
+	if te.ElemType != nil {
+		for i, elem := range arr.Elements {
+			v.checkExprType(elem, *te.ElemType, fmt.Sprintf("%s[%d]", context, i))
+		}
+	}
+}
+
+func (v *validator) checkModelType(expr parser.Expr, te parser.TypeExpr, context string) {
+	obj, ok := expr.(parser.ObjectLiteral)
+	if !ok {
+		if !isNonLiteral(expr) {
+			v.errorf("%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
+		}
+		return
+	}
+	model, ok := v.models[te.Name]
+	if !ok {
+		return // unknown model — already reported by validateContract
+	}
+	modelFields := make(map[string]*parser.Field, len(model.Fields))
+	for _, f := range model.Fields {
+		modelFields[f.Name] = f
+	}
+	for _, of := range obj.Fields {
+		mf, ok := modelFields[of.Key]
 		if !ok {
-			return // unknown model — already reported by validateContract
+			v.errorf("%s: unknown field %q in model %s", context, of.Key, te.Name)
+			continue
 		}
-		modelFields := make(map[string]*parser.Field, len(model.Fields))
-		for _, f := range model.Fields {
-			modelFields[f.Name] = f
-		}
-		for _, of := range obj.Fields {
-			mf, ok := modelFields[of.Key]
-			if !ok {
-				v.errorf("%s: unknown field %q in model %s", context, of.Key, te.Name)
-				continue
-			}
-			v.checkExprType(of.Value, mf.Type,
-				fmt.Sprintf("%s.%s", context, of.Key))
-		}
+		v.checkExprType(of.Value, mf.Type, fmt.Sprintf("%s.%s", context, of.Key))
 	}
 }
 
@@ -331,11 +348,28 @@ func FormatErrors(errs []error) string {
 		return ""
 	}
 
-	type scopeErrors struct {
-		contract      []string
-		scenarios     map[string][]string
-		scenarioOrder []string
+	scopes, scopeOrder, ungrouped := groupErrors(errs)
+
+	var b strings.Builder
+	b.WriteString("validation errors:\n")
+
+	for _, name := range scopeOrder {
+		formatScopeErrors(&b, name, scopes[name])
 	}
+	for _, msg := range ungrouped {
+		fmt.Fprintf(&b, "  - %s\n", msg)
+	}
+
+	return b.String()
+}
+
+type scopeErrors struct {
+	contract      []string
+	scenarios     map[string][]string
+	scenarioOrder []string
+}
+
+func groupErrors(errs []error) (map[string]*scopeErrors, []string, []string) {
 	scopes := make(map[string]*scopeErrors)
 	var scopeOrder []string
 	var ungrouped []string
@@ -365,32 +399,24 @@ func FormatErrors(errs []error) string {
 		}
 	}
 
-	var b strings.Builder
-	b.WriteString("validation errors:\n")
+	return scopes, scopeOrder, ungrouped
+}
 
-	for _, name := range scopeOrder {
-		se := scopes[name]
-		fmt.Fprintf(&b, "\n  scope %s:\n", name)
-		if len(se.contract) > 0 {
-			b.WriteString("    contract:\n")
-			for _, msg := range se.contract {
-				fmt.Fprintf(&b, "      - %s\n", msg)
-			}
-		}
-		for _, scName := range se.scenarioOrder {
-			msgs := se.scenarios[scName]
-			fmt.Fprintf(&b, "    scenario %s:\n", scName)
-			for _, msg := range msgs {
-				fmt.Fprintf(&b, "      - %s\n", msg)
-			}
+func formatScopeErrors(b *strings.Builder, name string, se *scopeErrors) {
+	fmt.Fprintf(b, "\n  scope %s:\n", name)
+	if len(se.contract) > 0 {
+		b.WriteString("    contract:\n")
+		for _, msg := range se.contract {
+			fmt.Fprintf(b, "      - %s\n", msg)
 		}
 	}
-
-	for _, msg := range ungrouped {
-		fmt.Fprintf(&b, "  - %s\n", msg)
+	for _, scName := range se.scenarioOrder {
+		msgs := se.scenarios[scName]
+		fmt.Fprintf(b, "    scenario %s:\n", scName)
+		for _, msg := range msgs {
+			fmt.Fprintf(b, "      - %s\n", msg)
+		}
 	}
-
-	return b.String()
 }
 
 // extractScope parses 'scope "name", rest' from an error message.

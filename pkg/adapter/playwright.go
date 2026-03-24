@@ -88,6 +88,13 @@ func (a *PlaywrightAdapter) Action(name string, args json.RawMessage) (*Response
 		}
 	}
 
+	return a.dispatchAction(name, rawArgs)
+}
+
+func (a *PlaywrightAdapter) dispatchAction(
+	name string,
+	rawArgs []json.RawMessage,
+) (*Response, error) {
 	switch name {
 	case "goto":
 		return a.doGoto(rawArgs)

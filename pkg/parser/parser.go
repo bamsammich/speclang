@@ -511,55 +511,68 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 	}
 
 	// Map type: map[K, V]
-	if name.Value == "map" && p.peek().Type == TokenLBracket {
-		p.advance() // consume [
-		keyType, err := p.parseTypeExprInner()
-		if err != nil {
-			return TypeExpr{}, err
-		}
-		if _, err := p.expect(TokenComma); err != nil {
-			return TypeExpr{}, err
-		}
-		valType, err := p.parseTypeExprInner()
-		if err != nil {
-			return TypeExpr{}, err
-		}
-		if _, err := p.expect(TokenRBracket); err != nil {
-			return TypeExpr{}, err
-		}
-		return TypeExpr{Name: "map", KeyType: &keyType, ValType: &valType}, nil
+	if name.Value == typeMap && p.peek().Type == TokenLBracket {
+		return p.parseMapType()
 	}
 
 	// Enum type: enum("val1", "val2", ...)
-	if name.Value == "enum" && p.peek().Type == TokenLParen {
-		p.advance() // consume (
-		var variants []string
-		for p.peek().Type != TokenRParen {
-			if len(variants) > 0 {
-				if _, err := p.expect(TokenComma); err != nil {
-					return TypeExpr{}, err
-				}
-				// Allow trailing comma
-				if p.peek().Type == TokenRParen {
-					break
-				}
-			}
-			tok, err := p.expect(TokenString)
-			if err != nil {
-				return TypeExpr{}, p.errAt(p.peek(), "enum variants must be string literals")
-			}
-			variants = append(variants, tok.Value)
-		}
-		if _, err := p.expect(TokenRParen); err != nil {
-			return TypeExpr{}, err
-		}
-		if len(variants) == 0 {
-			return TypeExpr{}, p.errAt(name, "enum type requires at least one variant")
-		}
-		return TypeExpr{Name: "enum", Variants: variants}, nil
+	if name.Value == typeEnum && p.peek().Type == TokenLParen {
+		return p.parseEnumType(name)
 	}
 
 	return TypeExpr{Name: name.Value}, nil
+}
+
+const (
+	typeMap  = "map"
+	typeEnum = "enum"
+)
+
+func (p *parser) parseMapType() (TypeExpr, error) {
+	p.advance() // consume [
+	keyType, err := p.parseTypeExprInner()
+	if err != nil {
+		return TypeExpr{}, err
+	}
+	if _, err := p.expect(TokenComma); err != nil {
+		return TypeExpr{}, err
+	}
+	valType, err := p.parseTypeExprInner()
+	if err != nil {
+		return TypeExpr{}, err
+	}
+	if _, err := p.expect(TokenRBracket); err != nil {
+		return TypeExpr{}, err
+	}
+	return TypeExpr{Name: typeMap, KeyType: &keyType, ValType: &valType}, nil
+}
+
+func (p *parser) parseEnumType(name Token) (TypeExpr, error) {
+	p.advance() // consume (
+	var variants []string
+	for p.peek().Type != TokenRParen {
+		if len(variants) > 0 {
+			if _, err := p.expect(TokenComma); err != nil {
+				return TypeExpr{}, err
+			}
+			// Allow trailing comma
+			if p.peek().Type == TokenRParen {
+				break
+			}
+		}
+		tok, err := p.expect(TokenString)
+		if err != nil {
+			return TypeExpr{}, p.errAt(p.peek(), "enum variants must be string literals")
+		}
+		variants = append(variants, tok.Value)
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return TypeExpr{}, err
+	}
+	if len(variants) == 0 {
+		return TypeExpr{}, p.errAt(name, "enum type requires at least one variant")
+	}
+	return TypeExpr{Name: typeEnum, Variants: variants}, nil
 }
 
 // parseContract parses: contract { input { ... } output { ... } }
@@ -834,35 +847,36 @@ func (p *parser) parseGivenBlock() (*Block, error) {
 
 	block := &Block{}
 	for p.peek().Type != TokenRBrace {
-		if p.isGivenCall() {
-			call, err := p.parseCall()
-			if err != nil {
-				return nil, err
-			}
-			block.Steps = append(block.Steps, call)
-		} else {
-			path, err := p.parseFieldPath()
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(TokenColon); err != nil {
-				return nil, err
-			}
-			val, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			block.Steps = append(block.Steps, &Assignment{
-				Path:  path,
-				Value: val,
-			})
+		step, err := p.parseGivenStep()
+		if err != nil {
+			return nil, err
 		}
+		block.Steps = append(block.Steps, step)
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
 	}
 	return block, nil
+}
+
+// parseGivenStep parses a single step in a given block: either a call or an assignment.
+func (p *parser) parseGivenStep() (GivenStep, error) {
+	if p.isGivenCall() {
+		return p.parseCall()
+	}
+	path, err := p.parseFieldPath()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenColon); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &Assignment{Path: path, Value: val}, nil
 }
 
 // isGivenCall returns true if the current position starts a call (not an assignment).
@@ -914,39 +928,10 @@ func (p *parser) parseThenBlock() (*Block, error) {
 
 	block := &Block{}
 	for p.peek().Type != TokenRBrace {
-		path, err := p.parseFieldPath()
+		a, err := p.parseAssertion()
 		if err != nil {
 			return nil, err
 		}
-
-		a := &Assertion{Target: path}
-
-		// Check for @plugin.property syntax: target@plugin.property: expected
-		if p.peek().Type == TokenAt {
-			p.advance() // consume @
-			plugin, err := p.expectIdent()
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(TokenDot); err != nil {
-				return nil, err
-			}
-			property, err := p.expectIdent()
-			if err != nil {
-				return nil, err
-			}
-			a.Plugin = plugin.Value
-			a.Property = property.Value
-		}
-
-		if _, err := p.expect(TokenColon); err != nil {
-			return nil, err
-		}
-		val, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		a.Expected = val
 		block.Assertions = append(block.Assertions, a)
 	}
 
@@ -954,6 +939,45 @@ func (p *parser) parseThenBlock() (*Block, error) {
 		return nil, err
 	}
 	return block, nil
+}
+
+// parseAssertion parses a single then-block assertion:
+// path: expected  OR  path@plugin.property: expected
+func (p *parser) parseAssertion() (*Assertion, error) {
+	path, err := p.parseFieldPath()
+	if err != nil {
+		return nil, err
+	}
+
+	a := &Assertion{Target: path}
+
+	// Check for @plugin.property syntax: target@plugin.property: expected
+	if p.peek().Type == TokenAt {
+		p.advance() // consume @
+		plugin, err := p.expectIdent()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(TokenDot); err != nil {
+			return nil, err
+		}
+		property, err := p.expectIdent()
+		if err != nil {
+			return nil, err
+		}
+		a.Plugin = plugin.Value
+		a.Property = property.Value
+	}
+
+	if _, err := p.expect(TokenColon); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	a.Expected = val
+	return a, nil
 }
 
 // parseFieldPath consumes a dotted identifier path like "from.balance" or
@@ -1097,35 +1121,11 @@ func (p *parser) parseUnary() (Expr, error) {
 func (p *parser) parseAtom() (Expr, error) {
 	tok := p.peek()
 
+	if expr, err := p.parseLiteralAtom(tok); expr != nil || err != nil {
+		return expr, err
+	}
+
 	switch tok.Type {
-	case TokenInt:
-		p.advance()
-		v, err := strconv.Atoi(tok.Value)
-		if err != nil {
-			return nil, p.errAt(tok, fmt.Sprintf("invalid int: %s", tok.Value))
-		}
-		return LiteralInt{Value: v}, nil
-
-	case TokenFloat:
-		p.advance()
-		v, err := strconv.ParseFloat(tok.Value, 64)
-		if err != nil {
-			return nil, p.errAt(tok, fmt.Sprintf("invalid float: %s", tok.Value))
-		}
-		return LiteralFloat{Value: v}, nil
-
-	case TokenString:
-		p.advance()
-		return LiteralString{Value: tok.Value}, nil
-
-	case TokenBool:
-		p.advance()
-		return LiteralBool{Value: tok.Value == "true"}, nil
-
-	case TokenNull:
-		p.advance()
-		return LiteralNull{}, nil
-
 	case TokenEnv:
 		return p.parseEnvRef()
 
@@ -1150,28 +1150,65 @@ func (p *parser) parseAtom() (Expr, error) {
 		return p.parseIfExpr()
 
 	default:
-		// Built-in functions
-		if tok.Type == TokenIdent {
-			switch tok.Value {
-			case "len":
-				return p.parseLenExpr()
-			case "all":
-				return p.parseQuantifierExpr("all")
-			case "any":
-				return p.parseQuantifierExpr("any")
-			case "contains":
-				return p.parseContainsExpr()
-			case "exists":
-				return p.parseExistsExpr()
-			case "has_key":
-				return p.parseHasKeyExpr()
-			}
-		}
-		if isIdentLike(tok.Type) {
-			return p.parseFieldRefExpr()
-		}
-		return nil, p.errAt(tok, fmt.Sprintf("unexpected token %s in expression", tok.Type))
+		return p.parseAtomDefault(tok)
 	}
+}
+
+// parseLiteralAtom handles literal tokens (int, float, string, bool, null).
+// Returns (nil, nil) if the current token is not a literal.
+func (p *parser) parseLiteralAtom(tok Token) (Expr, error) {
+	switch tok.Type {
+	case TokenInt:
+		p.advance()
+		v, err := strconv.Atoi(tok.Value)
+		if err != nil {
+			return nil, p.errAt(tok, fmt.Sprintf("invalid int: %s", tok.Value))
+		}
+		return LiteralInt{Value: v}, nil
+	case TokenFloat:
+		p.advance()
+		v, err := strconv.ParseFloat(tok.Value, 64)
+		if err != nil {
+			return nil, p.errAt(tok, fmt.Sprintf("invalid float: %s", tok.Value))
+		}
+		return LiteralFloat{Value: v}, nil
+	case TokenString:
+		p.advance()
+		return LiteralString{Value: tok.Value}, nil
+	case TokenBool:
+		p.advance()
+		return LiteralBool{Value: tok.Value == "true"}, nil
+	case TokenNull:
+		p.advance()
+		return LiteralNull{}, nil
+	default:
+		return nil, nil
+	}
+}
+
+// parseAtomDefault handles the default branch of parseAtom: built-in function
+// calls and field references.
+func (p *parser) parseAtomDefault(tok Token) (Expr, error) {
+	if tok.Type == TokenIdent {
+		switch tok.Value {
+		case "len":
+			return p.parseLenExpr()
+		case "all":
+			return p.parseQuantifierExpr("all")
+		case "any":
+			return p.parseQuantifierExpr("any")
+		case "contains":
+			return p.parseContainsExpr()
+		case "exists":
+			return p.parseExistsExpr()
+		case "has_key":
+			return p.parseHasKeyExpr()
+		}
+	}
+	if isIdentLike(tok.Type) {
+		return p.parseFieldRefExpr()
+	}
+	return nil, p.errAt(tok, fmt.Sprintf("unexpected token %s in expression", tok.Type))
 }
 
 // parseFieldRefExpr parses a dotted identifier path as a FieldRef expression.

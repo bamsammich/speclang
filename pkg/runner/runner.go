@@ -229,25 +229,38 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 // buildAction constructs the adapter action call based on scope config.
 func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawMessage, error) {
 	if sr.method != "" {
-		// HTTP-style: action is the method, args are [path, body]
-		args, err := json.Marshal([]json.RawMessage{
-			json.RawMessage(fmt.Sprintf("%q", sr.path)),
-			inputJSON,
-		})
-		if err != nil {
-			return "", nil, fmt.Errorf("marshaling HTTP args: %w", err)
-		}
-		return strings.ToLower(sr.method), args, nil
+		return sr.buildHTTPAction(inputJSON)
 	}
+	return sr.buildExecAction(inputJSON)
+}
 
-	// Process-style: action is "exec", args are scope config args + input fields as CLI args
+func (sr *scopeRunner) buildHTTPAction(inputJSON json.RawMessage) (string, json.RawMessage, error) {
+	args, err := json.Marshal([]json.RawMessage{
+		json.RawMessage(fmt.Sprintf("%q", sr.path)),
+		inputJSON,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("marshaling HTTP args: %w", err)
+	}
+	return strings.ToLower(sr.method), args, nil
+}
+
+func (sr *scopeRunner) buildExecAction(inputJSON json.RawMessage) (string, json.RawMessage, error) {
 	var inputMap map[string]any
 	if err := json.Unmarshal(inputJSON, &inputMap); err != nil {
 		return "", nil, err
 	}
 
+	execArgs := sr.collectExecArgs(inputMap)
+	args, err := json.Marshal(execArgs)
+	if err != nil {
+		return "", nil, fmt.Errorf("marshaling exec args: %w", err)
+	}
+	return "exec", args, nil
+}
+
+func (sr *scopeRunner) collectExecArgs(inputMap map[string]any) []any {
 	var execArgs []any
-	// Prepend scope config args (e.g., "parse" or "generate --scope transfer --seed")
 	if configArgs := resolveConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
 		for _, a := range strings.Fields(configArgs) {
 			execArgs = append(execArgs, a)
@@ -256,52 +269,28 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 	if sr.scopeDef.Contract != nil {
 		for _, field := range sr.scopeDef.Contract.Input {
 			if val, ok := inputMap[field.Name]; ok {
-				switch v := val.(type) {
-				case string:
-					execArgs = append(execArgs, v)
-				default:
-					b, err := json.Marshal(v)
-					if err != nil {
-						return "", nil, fmt.Errorf("marshaling input field %q: %w", field.Name, err)
-					}
-					execArgs = append(execArgs, string(b))
-				}
+				execArgs = append(execArgs, fieldToString(val))
 			}
 		}
 	}
+	return execArgs
+}
 
-	args, err := json.Marshal(execArgs)
-	if err != nil {
-		return "", nil, fmt.Errorf("marshaling exec args: %w", err)
+func fieldToString(val any) string {
+	if s, ok := val.(string); ok {
+		return s
 	}
-	return "exec", args, nil
+	b, err := json.Marshal(val)
+	if err != nil {
+		return fmt.Sprintf("%v", val)
+	}
+	return string(b)
 }
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
-	var input map[string]any
-	expectsError := hasErrorPseudoAssertion(sc.Then, sr.scopeDef.Contract)
-
-	if hasCalls(sc.Given.Steps) {
-		// Step-by-step execution: calls go to the adapter in order,
-		// assignments accumulate into the input context.
-		var err error
-		input, err = sr.executeGivenSteps(sc.Given.Steps)
-		if err != nil {
-			if !expectsError || sr.lastActionError == "" {
-				return CheckResult{}, err
-			}
-			// Action error was captured — continue to assertions.
-		}
-	} else {
-		// Request/response execution: collect all assignments, dispatch as one action.
-		input = stepsToMap(sc.Given.Steps)
-		if _, err := sr.executeInput(input); err != nil {
-			return CheckResult{}, err
-		}
-		// If action returned {ok: false} but scenario doesn't assert on error, fail.
-		if sr.lastActionError != "" && !expectsError {
-			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
-		}
+	input, err := sr.executeGivenInput(sc)
+	if err != nil {
+		return CheckResult{}, err
 	}
 
 	check := CheckResult{
@@ -322,6 +311,31 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 	}
 
 	return check, nil
+}
+
+// executeGivenInput executes the given block, either step-by-step (when calls
+// are present) or as a batched request/response.
+func (sr *scopeRunner) executeGivenInput(sc *parser.Scenario) (map[string]any, error) {
+	expectsError := hasErrorPseudoAssertion(sc.Then, sr.scopeDef.Contract)
+
+	if hasCalls(sc.Given.Steps) {
+		input, err := sr.executeGivenSteps(sc.Given.Steps)
+		if err != nil {
+			if !expectsError || sr.lastActionError == "" {
+				return nil, err
+			}
+		}
+		return input, nil
+	}
+
+	input := stepsToMap(sc.Given.Steps)
+	if _, err := sr.executeInput(input); err != nil {
+		return nil, err
+	}
+	if sr.lastActionError != "" && !expectsError {
+		return nil, fmt.Errorf("action failed: %s", sr.lastActionError)
+	}
+	return input, nil
 }
 
 // hasCalls returns true if any given step is a Call (not just assignments).
@@ -403,65 +417,67 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 	}
 
 	for i := range sr.runner.n {
-		input, err := sr.generator.GenerateMatching(predicate)
+		f, err := sr.runWhenIteration(sc, predicate, needsPageIsolation, expectsError, i)
 		if err != nil {
 			return CheckResult{}, err
 		}
-
-		if needsPageIsolation {
-			if err := sr.newPageWithNavigation(); err != nil {
-				return CheckResult{}, fmt.Errorf("iteration %d: %w", i+1, err)
-			}
-		}
-
-		if _, err := sr.executeInput(input); err != nil {
-			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
-			}
-			return CheckResult{}, err
-		}
-
-		// If action returned {ok: false} but scenario doesn't assert on error, fail.
-		if sr.lastActionError != "" && !expectsError {
-			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
-			}
-			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
-		}
-
 		check.InputsRun = i + 1
-
-		if sc.Then == nil {
-			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
-			}
-			continue
-		}
-
-		if f, err := sr.checkThenAssertions(sc.Name, input, sc.Then); err != nil {
-			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
-			}
-			return CheckResult{}, err
-		} else if f != nil {
-			if needsPageIsolation {
-				sr.closePage() //nolint:errcheck // best-effort page cleanup, test result takes priority
-			}
-			f = sr.shrinkFailure(f, sc.Then)
+		if f != nil {
 			check.Passed = false
 			check.FailedAt = i + 1
 			check.Failure = f
 			return check, nil
 		}
-
-		if needsPageIsolation {
-			if err := sr.closePage(); err != nil {
-				return CheckResult{}, fmt.Errorf("iteration %d: closing page: %w", i+1, err)
-			}
-		}
 	}
 
 	return check, nil
+}
+
+// runWhenIteration runs a single iteration of a when-scenario. It returns a
+// failure (if assertions fail) or an error (if execution fails). A nil failure
+// with nil error means the iteration passed.
+func (sr *scopeRunner) runWhenIteration(
+	sc *parser.Scenario,
+	predicate func(map[string]any) bool,
+	needsPageIsolation bool,
+	expectsError bool,
+	i int,
+) (*Failure, error) {
+	input, err := sr.generator.GenerateMatching(predicate)
+	if err != nil {
+		return nil, err
+	}
+
+	if needsPageIsolation {
+		if err := sr.newPageWithNavigation(); err != nil {
+			return nil, fmt.Errorf("iteration %d: %w", i+1, err)
+		}
+		defer func() {
+			//nolint:errcheck // best-effort page cleanup, test result takes priority
+			sr.closePage()
+		}()
+	}
+
+	if _, err := sr.executeInput(input); err != nil {
+		return nil, err
+	}
+
+	if sr.lastActionError != "" && !expectsError {
+		return nil, fmt.Errorf("action failed: %s", sr.lastActionError)
+	}
+
+	if sc.Then == nil {
+		return nil, nil
+	}
+
+	f, err := sr.checkThenAssertions(sc.Name, input, sc.Then)
+	if err != nil {
+		return nil, err
+	}
+	if f != nil {
+		return sr.shrinkFailure(f, sc.Then), nil
+	}
+	return nil, nil
 }
 
 // hasPluginAssertions returns true if any assertion uses @plugin.property syntax.
@@ -562,50 +578,69 @@ func (sr *scopeRunner) checkThenAssertions(
 	then *parser.Block,
 ) (*Failure, error) {
 	for _, a := range then.Assertions {
-		val, ok := generator.Eval(a.Expected, input)
-		if !ok {
-			return nil, fmt.Errorf("evaluating expected expression for %q", a.Target)
-		}
-		expected, err := json.Marshal(val)
+		f, err := sr.checkSingleAssertion(name, input, a)
 		if err != nil {
-			return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
+			return nil, err
 		}
-
-		// Handle the "error" pseudo-field: assert against the last action error.
-		// Only intercept "error" if it's NOT declared as a contract output field.
-		if a.Target == errorPseudoField && a.Plugin == "" && !sr.hasOutputField(errorPseudoField) {
-			if f := sr.checkErrorAssertion(name, input, val, expected); f != nil {
-				return f, nil
-			}
-			continue
-		}
-
-		property := a.Target
-		locator := ""
-		if a.Plugin != "" {
-			selector, ok := sr.runner.spec.Locators[a.Target]
-			if !ok {
-				return nil, fmt.Errorf("locator %q not defined in locators block", a.Target)
-			}
-			locator = selector
-			property = a.Property
-		}
-		resp, err := sr.adapter.Assert(property, locator, expected)
-		if err != nil {
-			return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
-		}
-		if !resp.OK {
-			return &Failure{
-				Name:        name,
-				Scope:       sr.scope,
-				Input:       input,
-				Expected:    string(expected),
-				Actual:      string(resp.Actual),
-				Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
-			}, nil
+		if f != nil {
+			return f, nil
 		}
 	}
 	return nil, nil
+}
+
+func (sr *scopeRunner) checkSingleAssertion(
+	name string,
+	input map[string]any,
+	a *parser.Assertion,
+) (*Failure, error) {
+	val, ok := generator.Eval(a.Expected, input)
+	if !ok {
+		return nil, fmt.Errorf("evaluating expected expression for %q", a.Target)
+	}
+	expected, err := json.Marshal(val)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
+	}
+
+	// Handle the "error" pseudo-field: assert against the last action error.
+	if a.Target == errorPseudoField && a.Plugin == "" && !sr.hasOutputField(errorPseudoField) {
+		if f := sr.checkErrorAssertion(name, input, val, expected); f != nil {
+			return f, nil
+		}
+		return nil, nil
+	}
+
+	property, locator, err := sr.resolveAssertionTarget(a)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := sr.adapter.Assert(property, locator, expected)
+	if err != nil {
+		return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
+	}
+	if !resp.OK {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    string(expected),
+			Actual:      string(resp.Actual),
+			Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+		}, nil
+	}
+	return nil, nil
+}
+
+func (sr *scopeRunner) resolveAssertionTarget(a *parser.Assertion) (string, string, error) {
+	if a.Plugin == "" {
+		return a.Target, "", nil
+	}
+	selector, ok := sr.runner.spec.Locators[a.Target]
+	if !ok {
+		return "", "", fmt.Errorf("locator %q not defined in locators block", a.Target)
+	}
+	return a.Property, selector, nil
 }
 
 // hasOutputField returns true if the scope's contract declares a field with the given name.
