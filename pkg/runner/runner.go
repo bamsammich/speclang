@@ -10,6 +10,9 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
+// errorPseudoField is the name of the pseudo-field used to assert against action errors.
+const errorPseudoField = "error"
+
 // Result captures the outcome of a verification run.
 type Result struct {
 	Spec              string        `json:"spec"`
@@ -41,7 +44,7 @@ type ScopeResult struct {
 type CheckResult struct {
 	Failure   *Failure `json:"failure,omitempty"`
 	Name      string   `json:"name"`
-	Kind      string   `json:"kind"` // "scenario" or "invariant"
+	Kind      string   `json:"kind"`                // "scenario" or "invariant"
 	InputsRun int      `json:"inputs_run"`          // 1 for given-scenarios, N for when/invariants
 	FailedAt  int      `json:"failed_at,omitempty"` // which input number failed (0 if passed)
 	Passed    bool     `json:"passed"`
@@ -132,11 +135,12 @@ func (sr *scopeRunner) run(res *Result) error {
 		var check CheckResult
 		var err error
 
-		if sc.Given != nil {
+		switch {
+		case sc.Given != nil:
 			check, err = sr.runGivenScenario(sc)
-		} else if sc.When != nil {
+		case sc.When != nil:
 			check, err = sr.runWhenScenario(sc)
-		} else {
+		default:
 			continue
 		}
 
@@ -532,13 +536,13 @@ func hasErrorPseudoAssertion(then *parser.Block, contract *parser.Contract) bool
 	// If "error" is declared in the contract output, it's a real field, not a pseudo-field.
 	if contract != nil {
 		for _, f := range contract.Output {
-			if f.Name == "error" {
+			if f.Name == errorPseudoField {
 				return false
 			}
 		}
 	}
 	for _, a := range then.Assertions {
-		if a.Target == "error" && a.Plugin == "" {
+		if a.Target == errorPseudoField && a.Plugin == "" {
 			return true
 		}
 	}
@@ -566,7 +570,7 @@ func (sr *scopeRunner) checkThenAssertions(
 
 		// Handle the "error" pseudo-field: assert against the last action error.
 		// Only intercept "error" if it's NOT declared as a contract output field.
-		if a.Target == "error" && a.Plugin == "" && !sr.hasOutputField("error") {
+		if a.Target == errorPseudoField && a.Plugin == "" && !sr.hasOutputField(errorPseudoField) {
 			if f := sr.checkErrorAssertion(name, input, val, expected); f != nil {
 				return f, nil
 			}
@@ -903,4 +907,3 @@ func exprToValue(expr parser.Expr) any {
 		return nil
 	}
 }
-

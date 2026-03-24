@@ -415,7 +415,7 @@ func (a *PlaywrightAdapter) doClearState() (*Response, error) {
 }
 
 // parseSelector extracts a single selector string from the first argument.
-func (a *PlaywrightAdapter) parseSelector(args []json.RawMessage) (string, error) {
+func (*PlaywrightAdapter) parseSelector(args []json.RawMessage) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("action requires a selector argument")
 	}

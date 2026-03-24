@@ -73,11 +73,10 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	exitCode := 0
 	if err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		} else {
+		if !errors.As(err, &exitErr) {
 			return nil, fmt.Errorf("executing %s: %w", a.Command, err)
 		}
+		exitCode = exitErr.ExitCode()
 	}
 
 	stdout := stdoutBuf.String()
@@ -93,10 +92,8 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	result := map[string]any{
 		"exit_code": exitCode,
 	}
-	if parsed != nil {
-		for k, v := range parsed {
-			result[k] = v
-		}
+	for k, v := range parsed {
+		result[k] = v
 	}
 	resultJSON, _ := json.Marshal(result) //nolint:errcheck // result is always marshallable
 
@@ -131,10 +128,7 @@ func (a *ProcessAdapter) Assert(
 	case property == "stdout":
 		actual = a.last.stdout
 	default:
-		path := property
-		if strings.HasPrefix(path, "stdout.") {
-			path = strings.TrimPrefix(path, "stdout.")
-		}
+		path := strings.TrimPrefix(property, "stdout.")
 		if a.last.stdout == nil {
 			return nil, fmt.Errorf("stdout is not JSON, cannot extract path %q", path)
 		}

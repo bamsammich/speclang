@@ -13,7 +13,7 @@ import (
 type Resolver struct{}
 
 // Resolve reads an OpenAPI file and returns speclang models and scopes.
-func (r *Resolver) Resolve(absPath string) ([]*parser.Model, []*parser.Scope, error) {
+func (*Resolver) Resolve(absPath string) ([]*parser.Model, []*parser.Scope, error) {
 	doc, err := loadDocument(absPath)
 	if err != nil {
 		return nil, nil, err

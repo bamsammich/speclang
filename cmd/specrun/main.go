@@ -14,7 +14,7 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/generator"
 	"github.com/bamsammich/speclang/v2/pkg/openapi"
 	"github.com/bamsammich/speclang/v2/pkg/parser"
-	protoResolver "github.com/bamsammich/speclang/v2/pkg/proto"
+	protoresolver "github.com/bamsammich/speclang/v2/pkg/proto"
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 	"github.com/bamsammich/speclang/v2/pkg/validator"
 )
@@ -396,6 +396,6 @@ func resolveExprToString(expr parser.Expr) string {
 func defaultImports() parser.ImportRegistry {
 	return parser.ImportRegistry{
 		"openapi": &openapi.Resolver{},
-		"proto":   &protoResolver.Resolver{},
+		"proto":   &protoresolver.Resolver{},
 	}
 }

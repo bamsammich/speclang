@@ -16,8 +16,7 @@ import (
 func convertMessages(proto *pb.Proto) []*parser.Model {
 	var models []*parser.Model
 	for _, item := range proto.ProtoBody {
-		switch v := item.(type) {
-		case *pb.Message:
+		if v, ok := item.(*pb.Message); ok {
 			models = append(models, flattenMessage("", v)...)
 		}
 	}
@@ -165,10 +164,6 @@ func mapWellKnownType(typ string) (parser.TypeExpr, bool) {
 
 	case "google.protobuf.BytesValue":
 		return parser.TypeExpr{Name: "bytes", Optional: true}, true
-
-	case "google.protobuf.Any", "google.protobuf.Struct",
-		"google.protobuf.Value", "google.protobuf.ListValue":
-		return parser.TypeExpr{}, false
 
 	default:
 		return parser.TypeExpr{}, false
