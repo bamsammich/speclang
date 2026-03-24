@@ -364,9 +364,26 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		return exists, true
 	case parser.UnaryOp:
 		return c.evalUnary(e)
+	case parser.IfExpr:
+		return c.evalIf(e)
 	default:
 		return nil, false
 	}
+}
+
+func (c *evalCtx) evalIf(e parser.IfExpr) (any, bool) {
+	cond, ok := c.eval(e.Condition)
+	if !ok {
+		return nil, false
+	}
+	b, isBool := cond.(bool)
+	if !isBool {
+		return nil, false
+	}
+	if b {
+		return c.eval(e.Then)
+	}
+	return c.eval(e.Else)
 }
 
 func (c *evalCtx) evalUnary(e parser.UnaryOp) (any, bool) {
