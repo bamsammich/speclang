@@ -254,6 +254,55 @@ scenario process_batch {
 }
 ```
 
+## Error Assertions (Negative Testing)
+
+Use the `error` pseudo-field in `then` blocks to assert that an action **should fail**. This activates when `error` is NOT declared in the scope's contract output fields.
+
+```
+scope bad_input {
+  use playwright
+
+  config {
+    url: "/form"
+  }
+
+  contract {
+    input {
+      value: string
+    }
+    output {
+      ok: bool
+    }
+  }
+
+  scenario click_nonexistent {
+    given {
+      playwright.click(nonexistent_btn)
+    }
+    then {
+      error: "element not found"
+    }
+  }
+
+  scenario success_no_error {
+    given {
+      playwright.click(submit_btn)
+    }
+    then {
+      error: null
+    }
+  }
+}
+```
+
+When an adapter action returns `{ok: false, error: "..."}`:
+- If `error` is asserted, the error string is compared against the expected value
+- If `error: null` is asserted and no error occurred, the assertion passes
+- If `error` is asserted but no error occurred, the assertion fails
+- If an action fails but `error` is NOT in `then`, the test still fails (backward compatible)
+
+**Important:** If `error` is declared as a contract output field (e.g., `output { error: string? }`), it's treated as a normal response field, not the pseudo-field. The transfer example uses `error` as a regular output field.
+
 ## Include Directive
 
 Split specs across files. Paths are relative to the including file.

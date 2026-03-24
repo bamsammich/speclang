@@ -53,6 +53,23 @@ A single spec can have scopes with different plugins. For example, an app spec m
 
 **Prefer invariants over scenarios when possible.** Invariants are the strongest form of verification — they test across the full input space, not just a slice.
 
+## Asserting on Errors (Negative Testing)
+
+Use the `error` pseudo-field in `then` blocks to assert that an action should fail:
+
+```
+scenario missing_element {
+  given {
+    playwright.click(nonexistent)
+  }
+  then {
+    error: "element not found"
+  }
+}
+```
+
+Use `error: null` to assert that no error occurred. This only works when `error` is NOT a contract output field. If `error` IS declared in the output (like `output { error: string? }`), it's treated as a normal response field.
+
 ## Writing Good Invariants
 
 Invariants express universal truths about the system. Think about:

@@ -89,6 +89,10 @@ func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) 
 			continue
 		}
 
+		// "error" is a pseudo-field for asserting on action errors, not a contract output.
+		if a.Target == "error" {
+			continue
+		}
 		fieldName := topLevelField(a.Target)
 		if _, ok := outputFields[fieldName]; !ok {
 			v.errorf("scope %q, scenario %q: then target %q does not match any output field",

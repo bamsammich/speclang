@@ -152,6 +152,23 @@ Invariants: 3/3 passed
 ./specrun verify --json examples/transfer.spec              # verify with JSON output
 ```
 
+## Error Assertions
+
+Use the `error` pseudo-field in `then` blocks to test that an action should fail. When an adapter action returns `{ok: false}`, the error string is captured and assertable:
+
+```
+scenario click_missing_element {
+  given {
+    playwright.click(nonexistent_btn)
+  }
+  then {
+    error: "element not found"
+  }
+}
+```
+
+Use `error: null` to assert no error occurred. This only activates when `error` is NOT declared in the contract output — if `error` is a contract output field (like in the transfer example), it works as a normal response field.
+
 ## Claude Code Plugin
 
 speclang ships as a Claude Code plugin with two skills that integrate specification-driven development into your AI workflow.

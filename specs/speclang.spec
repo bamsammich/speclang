@@ -16,4 +16,5 @@ spec Speclang {
   include "adapters.spec"
   include "enum.spec"
   include "exists.spec"
+  include "error_assertions.spec"
 }
