@@ -191,9 +191,10 @@ This syntax is available to all adapters but is primarily used with `playwright`
 
 ## Mixed `given` Block Syntax
 
-`given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written.
+`given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written. This works with any adapter that supports action calls (Playwright and HTTP).
 
 ```
+# Playwright example
 given {
   playwright.fill(username_field, "alice")   # action call
   playwright.fill(password_field, "secret")  # action call
@@ -201,9 +202,16 @@ given {
   pass: "secret"                              # data assignment
   playwright.click(submit_btn)               # action call
 }
+
+# HTTP multi-step example
+given {
+  http.header("Authorization", "Bearer token")   # set persistent header
+  http.post("/api/items", { name: "widget" })     # POST to create
+  http.get("/api/items/1")                        # GET to verify
+}
 ```
 
-Data assignments populate the input context for assertion evaluation. Action calls execute against the adapter immediately.
+Data assignments populate the input context for assertion evaluation. Action calls execute against the adapter immediately. For the HTTP adapter, headers and cookies persist across calls within a scenario, and `then` assertions apply to the last response.
 
 You can also call named actions defined in `action` blocks:
 
@@ -299,7 +307,66 @@ Error messages are hierarchical: `scope / scenario` or `scope / invariant` for c
 
 ### `use http`
 
-For HTTP APIs. Scope config uses `path` and `method`. Target uses `base_url`.
+For HTTP APIs. Target uses `base_url`.
+
+**Single-request scopes**: Scope config uses `path` and `method`. All `given` assignments become the request body.
+
+**Multi-step scopes**: Use action calls in `given` blocks. No `path`/`method` config needed — each call specifies its own path. Headers and cookies persist across calls. `then` assertions apply to the last response.
+
+#### Actions
+
+| Action | Args | Description |
+|--------|------|-------------|
+| `http.get(path)` | URL path | GET request |
+| `http.post(path, body)` | URL path + JSON body | POST request |
+| `http.put(path, body)` | URL path + JSON body | PUT request |
+| `http.delete(path)` | URL path | DELETE request |
+| `http.header(name, value)` | header name + value | Set persistent header |
+
+#### Assertions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status` | `int` | HTTP status code |
+| `body` | `any` | Full response body |
+| `header.<name>` | `string` | Response header |
+| `<field.path>` | `any` | Dot-path into JSON body |
+
+#### Multi-step Example
+
+```
+scope create_and_verify {
+  use http
+
+  contract {
+    input { name: string }
+    output { id: int, name: string }
+  }
+
+  scenario create_then_get {
+    given {
+      name: "widget"
+      http.post("/api/resources", { name: "widget" })
+      http.get("/api/resources/1")
+    }
+    then {
+      status: 200
+      id: 1
+      name: "widget"
+    }
+  }
+
+  scenario with_auth_header {
+    given {
+      http.header("Authorization", "Bearer token")
+      http.get("/api/protected")
+    }
+    then {
+      status: 200
+    }
+  }
+}
+```
 
 ### `use process`
 

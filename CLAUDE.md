@@ -335,6 +335,57 @@ go test ./...                                                   # run all tests
 ./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 
+## HTTP Adapter
+
+The HTTP adapter (`use http`) tests HTTP APIs. It supports single-request scopes (via `config` with `path` and `method`) and multi-step workflows (via action calls in `given` blocks).
+
+### Config (from `target` block)
+
+- `base_url` — API base URL (required); supports `env()` expressions
+
+### Config (from scope `config` block)
+
+- `path` — request path (for single-request scopes)
+- `method` — HTTP method: GET, POST, PUT, DELETE (for single-request scopes)
+
+### Actions
+
+- `http.get(path)` — GET request
+- `http.post(path, body)` — POST request with JSON body
+- `http.put(path, body)` — PUT request with JSON body
+- `http.delete(path)` — DELETE request
+- `http.header(name, value)` — set a persistent header for all subsequent requests
+
+### Assertions
+
+- `status` — HTTP status code (int)
+- `body` — full response body (parsed JSON)
+- `header.<name>` — response header value
+- `<field.path>` — dot-path traversal into JSON response body
+
+### Multi-step `given` blocks
+
+HTTP scopes support action calls in `given` blocks for multi-step workflows. Headers and cookies persist across calls within a scenario. `then` assertions apply to the last response.
+
+```
+scope create_and_verify {
+  use http
+
+  scenario create_then_get {
+    given {
+      http.post("/api/resources", { name: "widget" })
+      http.get("/api/resources/1")
+    }
+    then {
+      status: 200
+      name: "widget"
+    }
+  }
+}
+```
+
+When `given` contains only field assignments (no action calls), the scope's `config` block `path` and `method` determine the single request. When `given` contains action calls, each call executes independently and `config` is not used for request dispatch.
+
 ## Process Adapter
 
 The process adapter (`use process`) executes subprocesses and asserts against their output. It mirrors the HTTP adapter's pattern.
@@ -383,14 +434,22 @@ The playwright adapter (`use playwright`) drives a browser via [playwright-go](h
 
 ### Mixed `given` blocks
 
-`given` blocks may interleave field assignments and action calls:
+`given` blocks may interleave field assignments and action calls. This works with any adapter that supports action calls (Playwright and HTTP):
 
 ```
+# Playwright example
 given {
   amount: 1000
   playwright.goto("/transfer")
   playwright.fill(amount_input, amount)
   playwright.click(submit_btn)
+}
+
+# HTTP multi-step example
+given {
+  http.header("Authorization", "Bearer token")
+  http.post("/api/items", { name: "widget" })
+  http.get("/api/items/1")
 }
 ```
 

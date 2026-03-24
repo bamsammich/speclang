@@ -225,6 +225,30 @@ speclang uses a plugin architecture for interacting with different systems. Each
 | `process` | CLI tools / subprocesses | `command` | `args` |
 | `playwright` | Browser UIs | `base_url`, `headless`, `timeout` | `url` |
 
+### HTTP
+
+HTTP scopes can either use a single-request pattern (via `config` with `path` and `method`) or multi-step workflows using action calls in `given` blocks:
+
+```
+scope create_and_verify {
+  use http
+
+  scenario create_then_get {
+    given {
+      http.header("Authorization", "Bearer token")
+      http.post("/api/resources", { name: "widget" })
+      http.get("/api/resources/1")
+    }
+    then {
+      status: 200
+      name: "widget"
+    }
+  }
+}
+```
+
+Headers and cookies persist across calls within a scenario. `then` assertions apply to the last response. Available actions: `http.get(path)`, `http.post(path, body)`, `http.put(path, body)`, `http.delete(path)`, `http.header(name, value)`.
+
 ### Playwright
 
 Use `playwright` to write specs for browser-driven UIs. It controls a real browser via [Playwright](https://playwright.dev/).
