@@ -927,7 +927,8 @@ func (p *parser) parseThenBlock() (*Block, error) {
 	return block, nil
 }
 
-// parseFieldPath consumes a dotted identifier path like "from.balance".
+// parseFieldPath consumes a dotted identifier path like "from.balance" or
+// "scopes.0.checks.3.inputs_run" (integer segments for array index access).
 func (p *parser) parseFieldPath() (string, error) {
 	first, err := p.expectIdent()
 	if err != nil {
@@ -936,6 +937,12 @@ func (p *parser) parseFieldPath() (string, error) {
 	path := first.Value
 	for p.peek().Type == TokenDot {
 		p.advance() // consume .
+		// Accept integer tokens as array index segments (e.g., "scopes.0.checks.3").
+		if p.peek().Type == TokenInt {
+			seg := p.advance()
+			path += "." + seg.Value
+			continue
+		}
 		next, err := p.expectIdent()
 		if err != nil {
 			return "", err
