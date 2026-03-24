@@ -68,7 +68,10 @@ func TestVerify_ScopeResults(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +165,10 @@ func TestRelationalAssertions(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +505,10 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +577,10 @@ func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -594,7 +606,10 @@ func TestVerifyTransferSpec(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatalf("create adapter: %v", err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatalf("init adapter: %v", err)
 	}
@@ -1019,7 +1034,10 @@ func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	adp := adapter.NewHTTPAdapter()
+	adp, err := adapter.NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}

@@ -342,7 +342,10 @@ func createSingleAdapter(
 ) (adapter.Adapter, error) {
 	switch pluginName {
 	case "http":
-		adp := adapter.NewHTTPAdapter()
+		adp, err := adapter.NewHTTPAdapter()
+		if err != nil {
+			return nil, fmt.Errorf("creating http adapter: %w", err)
+		}
 		if err := adp.Init(targetConfig); err != nil {
 			return nil, err
 		}

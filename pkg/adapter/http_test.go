@@ -63,7 +63,10 @@ func transferHandler(w http.ResponseWriter, r *http.Request) {
 func newTestAdapter(t *testing.T) (*HTTPAdapter, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(transferHandler))
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -332,10 +335,13 @@ func TestAssert_ErrorString(t *testing.T) {
 }
 
 func TestAssert_BeforeRequest(t *testing.T) {
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.BaseURL = "http://unused"
 
-	_, err := a.Assert("status", "", json.RawMessage(`200`))
+	_, err = a.Assert("status", "", json.RawMessage(`200`))
 	if err == nil {
 		t.Fatal("expected error when asserting before any request")
 	}
@@ -353,7 +359,10 @@ func TestAction_Header(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -374,10 +383,13 @@ func TestAction_Header(t *testing.T) {
 }
 
 func TestAction_Unknown(t *testing.T) {
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.BaseURL = "http://unused"
 
-	_, err := a.Action("patch", json.RawMessage(`["/foo"]`))
+	_, err = a.Action("patch", json.RawMessage(`["/foo"]`))
 	if err == nil {
 		t.Fatal("expected error for unknown action")
 	}
@@ -481,7 +493,10 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +543,10 @@ func TestMultiStep_HeaderPersistence(t *testing.T) {
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -570,7 +588,10 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -608,7 +629,10 @@ func TestMultiStep_ErrorInMiddle(t *testing.T) {
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
-	a := NewHTTPAdapter()
+	a, err := NewHTTPAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
