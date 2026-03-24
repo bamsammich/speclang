@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/fatih/color"
 	playwright "github.com/playwright-community/playwright-go"
 	"github.com/urfave/cli/v3"
 
@@ -21,6 +22,13 @@ import (
 	protoresolver "github.com/bamsammich/speclang/v2/pkg/proto"
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 	"github.com/bamsammich/speclang/v2/pkg/validator"
+)
+
+var (
+	colorGreen = color.New(color.FgGreen)
+	colorRed   = color.New(color.FgRed)
+	colorBold  = color.New(color.Bold)
+	colorDim   = color.New(color.FgHiBlack)
 )
 
 func main() {
@@ -299,8 +307,8 @@ func runVerify(opts *verifyOpts) int {
 	r.SetN(opts.iterations)
 
 	if !opts.jsonOutput {
-		fmt.Printf("verifying %s (%s) with seed=%d, iterations=%d\n\n",
-			opts.specFile, spec.Name, opts.seed, opts.iterations)
+		colorBold.Printf("Verifying %s", spec.Name)
+		colorDim.Printf(" (seed=%d, iterations=%d)\n\n", opts.seed, opts.iterations)
 	}
 
 	return runAndReport(r, opts.jsonOutput)
@@ -384,7 +392,7 @@ func startServices(
 
 func printResults(res *runner.Result) {
 	for _, scope := range res.Scopes {
-		fmt.Printf("  scope %s:\n", scope.Name)
+		colorBold.Printf("  scope %s:\n", scope.Name)
 		for _, check := range scope.Checks {
 			if check.Passed {
 				printPassedCheck(check)
@@ -395,16 +403,21 @@ func printResults(res *runner.Result) {
 		fmt.Println()
 	}
 
-	fmt.Printf("Scenarios:  %d/%d passed\n", res.ScenariosPassed, res.ScenariosRun)
-	fmt.Printf("Invariants: %d/%d passed\n", res.InvariantsPassed, res.InvariantsChecked)
+	allPass := len(res.Failures) == 0
+	summaryColor := colorGreen
+	if !allPass {
+		summaryColor = colorRed
+	}
+	summaryColor.Printf("Scenarios:  %d/%d passed\n", res.ScenariosPassed, res.ScenariosRun)
+	summaryColor.Printf("Invariants: %d/%d passed\n", res.InvariantsPassed, res.InvariantsChecked)
 }
 
 func printPassedCheck(check runner.CheckResult) {
-	if check.InputsRun <= 1 {
-		fmt.Printf("    \u2713 %s %s\n", check.Kind, check.Name)
-	} else {
-		fmt.Printf("    \u2713 %s %s (%d inputs)\n", check.Kind, check.Name, check.InputsRun)
+	colorGreen.Printf("    \u2713 %s %s", check.Kind, check.Name)
+	if check.InputsRun > 1 {
+		colorDim.Printf(" (%d inputs)", check.InputsRun)
 	}
+	fmt.Println()
 }
 
 func printFailedCheck(check runner.CheckResult) {
@@ -413,10 +426,12 @@ func printFailedCheck(check runner.CheckResult) {
 		suffix = ", shrunk"
 	}
 	if check.InputsRun <= 1 {
-		fmt.Printf("    \u2717 %s %s (failed%s)\n", check.Kind, check.Name, suffix)
+		colorRed.Printf("    \u2717 %s %s", check.Kind, check.Name)
+		fmt.Printf(" (failed%s)\n", suffix)
 	} else {
-		fmt.Printf("    \u2717 %s %s (failed on input %d/%d%s)\n",
-			check.Kind, check.Name, check.FailedAt, check.InputsRun, suffix)
+		colorRed.Printf("    \u2717 %s %s", check.Kind, check.Name)
+		fmt.Printf(" (failed on input %d/%d%s)\n",
+			check.FailedAt, check.InputsRun, suffix)
 	}
 
 	if check.Failure == nil {
