@@ -29,6 +29,7 @@ func writeSpecFile(t *testing.T, path string, content string) {
 }
 
 func TestLexImportKeyword(t *testing.T) {
+	t.Parallel()
 	tokens, err := Lex(`import openapi("schema.yaml")`)
 	if err != nil {
 		t.Fatal(err)
@@ -42,6 +43,7 @@ func TestLexImportKeyword(t *testing.T) {
 }
 
 func TestParseImport_Basic(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -94,6 +96,7 @@ spec Test {
 }
 
 func TestParseImport_MergesWithHandWritten(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -152,6 +155,7 @@ spec Test {
 }
 
 func TestParseImport_UnknownAdapter(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -171,6 +175,7 @@ spec Test {
 }
 
 func TestParseImport_NilRegistry(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -189,6 +194,7 @@ spec Test {
 }
 
 func TestParseImport_ResolverError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -209,6 +215,7 @@ spec Test {
 }
 
 func TestParseImport_DuplicateModelName(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -237,6 +244,7 @@ spec Test {
 }
 
 func TestParseImport_DuplicateScopeName(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -269,6 +277,7 @@ spec Test {
 }
 
 func TestParseImport_EmptyResult(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
@@ -292,6 +301,7 @@ spec Test {
 }
 
 func TestParseImport_SyntaxError_MissingParen(t *testing.T) {
+	t.Parallel()
 	src := `
 spec Test {
   import openapi "schema.yaml"
@@ -304,6 +314,7 @@ spec Test {
 }
 
 func TestParseImport_SyntaxError_MissingPath(t *testing.T) {
+	t.Parallel()
 	src := `
 spec Test {
   import openapi()

@@ -6,6 +6,7 @@ import (
 )
 
 func TestProcessAdapter_ExecEcho(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	if err := a.Init(map[string]string{"command": "echo"}); err != nil {
 		t.Fatal(err)
@@ -30,6 +31,7 @@ func TestProcessAdapter_ExecEcho(t *testing.T) {
 }
 
 func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	if err := a.Init(map[string]string{
 		"command": "echo",
@@ -61,6 +63,7 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 }
 
 func TestProcessAdapter_ExitCodeNonZero(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	if err := a.Init(map[string]string{"command": "false"}); err != nil {
 		t.Fatal(err)
@@ -82,6 +85,7 @@ func TestProcessAdapter_ExitCodeNonZero(t *testing.T) {
 }
 
 func TestProcessAdapter_JSONStdout(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	if err := a.Init(map[string]string{"command": "echo"}); err != nil {
 		t.Fatal(err)
@@ -110,6 +114,7 @@ func TestProcessAdapter_JSONStdout(t *testing.T) {
 }
 
 func TestProcessAdapter_Stderr(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	if err := a.Init(map[string]string{"command": "sh"}); err != nil {
 		t.Fatal(err)
@@ -131,6 +136,7 @@ func TestProcessAdapter_Stderr(t *testing.T) {
 }
 
 func TestProcessAdapter_AssertBeforeExec(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	a.Command = "echo"
 
@@ -141,6 +147,7 @@ func TestProcessAdapter_AssertBeforeExec(t *testing.T) {
 }
 
 func TestProcessAdapter_UnknownAction(t *testing.T) {
+	t.Parallel()
 	a := NewProcessAdapter()
 	a.Command = "echo"
 

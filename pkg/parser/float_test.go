@@ -5,6 +5,7 @@ import (
 )
 
 func TestLexFloat(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input  string
 		tokens []struct {
@@ -83,6 +84,7 @@ func TestLexFloat(t *testing.T) {
 }
 
 func TestParseFloatLiteral(t *testing.T) {
+	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   scope test {

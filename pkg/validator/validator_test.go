@@ -9,6 +9,7 @@ import (
 )
 
 func TestValidate_UnknownTypeInContract(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -39,6 +40,7 @@ func TestValidate_UnknownTypeInContract(t *testing.T) {
 }
 
 func TestValidate_KnownModelPasses(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Widget", Fields: []*parser.Field{
@@ -65,6 +67,7 @@ func TestValidate_KnownModelPasses(t *testing.T) {
 }
 
 func TestValidate_UnknownArrayElementType(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -89,6 +92,7 @@ func TestValidate_UnknownArrayElementType(t *testing.T) {
 }
 
 func TestValidate_GivenLiteralTypeMismatch(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -123,6 +127,7 @@ func TestValidate_GivenLiteralTypeMismatch(t *testing.T) {
 }
 
 func TestValidate_GivenLiteralCorrectType(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -167,6 +172,7 @@ func TestValidate_GivenLiteralCorrectType(t *testing.T) {
 }
 
 func TestValidate_NullOnlyForOptional(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -209,6 +215,7 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 }
 
 func TestValidate_ArrayElementTypeMismatch(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -252,6 +259,7 @@ func TestValidate_ArrayElementTypeMismatch(t *testing.T) {
 }
 
 func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Item", Fields: []*parser.Field{
@@ -327,6 +335,7 @@ func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
 }
 
 func TestValidate_NestedArrays(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -376,6 +385,7 @@ func TestValidate_NestedArrays(t *testing.T) {
 }
 
 func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Account", Fields: []*parser.Field{
@@ -426,6 +436,7 @@ func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
 }
 
 func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Account", Fields: []*parser.Field{
@@ -472,6 +483,7 @@ func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
 }
 
 func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Account", Fields: []*parser.Field{
@@ -515,6 +527,7 @@ func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
 }
 
 func TestValidate_GivenMissingRequiredField(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -556,6 +569,7 @@ func TestValidate_GivenMissingRequiredField(t *testing.T) {
 }
 
 func TestValidate_GivenWithCallsSkipsCompleteness(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -587,6 +601,7 @@ func TestValidate_GivenWithCallsSkipsCompleteness(t *testing.T) {
 }
 
 func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -622,6 +637,7 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 }
 
 func TestValidate_ThenUnknownField(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -666,6 +682,7 @@ func TestValidate_ThenUnknownField(t *testing.T) {
 }
 
 func TestValidate_ThenDotPathValid(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Models: []*parser.Model{
 			{Name: "Account", Fields: []*parser.Field{
@@ -719,6 +736,7 @@ func TestValidate_ThenDotPathValid(t *testing.T) {
 }
 
 func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -760,6 +778,7 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 }
 
 func TestValidate_MultipleErrors(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -808,6 +827,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 }
 
 func TestFormatErrors(t *testing.T) {
+	t.Parallel()
 	errs := []error{
 		fmt.Errorf("scope %q, contract input %q: unknown type %q", "orders", "items", "Itme"),
 		fmt.Errorf(
@@ -842,6 +862,7 @@ func contains(s, substr string) bool {
 }
 
 func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
+	t.Parallel()
 	// "error" in then block should not trigger validation error when it's not
 	// a contract output field (it's the error pseudo-field).
 	spec := &parser.Spec{
@@ -877,6 +898,7 @@ func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
 }
 
 func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
+	t.Parallel()
 	// When "error" IS a contract output field, "nonexistent" should still fail validation.
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{{

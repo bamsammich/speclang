@@ -7,6 +7,7 @@ import (
 )
 
 func TestValidate_EnumValidVariant(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -47,6 +48,7 @@ func TestValidate_EnumValidVariant(t *testing.T) {
 }
 
 func TestValidate_EnumInvalidVariant(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -90,6 +92,7 @@ func TestValidate_EnumInvalidVariant(t *testing.T) {
 }
 
 func TestValidate_EnumWrongLiteralType(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -130,6 +133,7 @@ func TestValidate_EnumWrongLiteralType(t *testing.T) {
 }
 
 func TestValidate_EnumInContractPasses(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{
@@ -154,6 +158,7 @@ func TestValidate_EnumInContractPasses(t *testing.T) {
 }
 
 func TestValidate_EnumNullForOptional(t *testing.T) {
+	t.Parallel()
 	spec := &parser.Spec{
 		Scopes: []*parser.Scope{
 			{

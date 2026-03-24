@@ -14,6 +14,7 @@ func testdataPath(name string) string {
 }
 
 func TestResolve_User(t *testing.T) {
+	t.Parallel()
 	r := &Resolver{}
 	models, scopes, err := r.Resolve(testdataPath("user.proto"))
 	if err != nil {
@@ -33,6 +34,7 @@ func TestResolve_User(t *testing.T) {
 }
 
 func TestConvertMessages_User(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("user.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +66,7 @@ func TestConvertMessages_User(t *testing.T) {
 }
 
 func TestConvertMessages_Nested(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("nested.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +111,7 @@ func TestConvertMessages_Nested(t *testing.T) {
 }
 
 func TestConvertMessages_Unsupported(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("unsupported.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +146,7 @@ func TestConvertMessages_Unsupported(t *testing.T) {
 }
 
 func TestConvertMessages_Empty(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("empty.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +159,7 @@ func TestConvertMessages_Empty(t *testing.T) {
 }
 
 func TestConvertServices_User(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("user.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -187,6 +193,7 @@ func TestConvertServices_User(t *testing.T) {
 }
 
 func TestConvertServices_Streaming(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("streaming.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -205,6 +212,7 @@ func TestConvertServices_Streaming(t *testing.T) {
 }
 
 func TestConvertMessages_MessageRef(t *testing.T) {
+	t.Parallel()
 	proto, err := parseProtoFile(testdataPath("user.proto"))
 	if err != nil {
 		t.Fatal(err)
@@ -238,6 +246,7 @@ func TestConvertMessages_MessageRef(t *testing.T) {
 }
 
 func TestMapProtoType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
@@ -268,18 +277,22 @@ func TestMapProtoType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := mapProtoType(tt.input)
-		if ok != tt.ok {
-			t.Errorf("mapProtoType(%q): ok = %v, want %v", tt.input, ok, tt.ok)
-			continue
-		}
-		if ok && got.Name != tt.want {
-			t.Errorf("mapProtoType(%q) = %q, want %q", tt.input, got.Name, tt.want)
-		}
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			got, ok := mapProtoType(tt.input)
+			if ok != tt.ok {
+				t.Errorf("mapProtoType(%q): ok = %v, want %v", tt.input, ok, tt.ok)
+				return
+			}
+			if ok && got.Name != tt.want {
+				t.Errorf("mapProtoType(%q) = %q, want %q", tt.input, got.Name, tt.want)
+			}
+		})
 	}
 }
 
 func TestParseProtoFile_Invalid(t *testing.T) {
+	t.Parallel()
 	_, err := parseProtoFile("/nonexistent/file.proto")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")

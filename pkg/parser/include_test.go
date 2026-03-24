@@ -7,6 +7,7 @@ import (
 )
 
 func TestResolveIncludes_Basic(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "basic", "root.spec")
 	tokens, err := lexFile(root)
 	if err != nil {
@@ -66,6 +67,7 @@ func TestResolveIncludes_Basic(t *testing.T) {
 }
 
 func TestResolveIncludes_Nested(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "nested", "root.spec")
 	tokens, err := lexFile(root)
 	if err != nil {
@@ -98,6 +100,7 @@ func TestResolveIncludes_Nested(t *testing.T) {
 }
 
 func TestResolveIncludes_Circular(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "circular", "a.spec")
 	tokens, err := lexFile(root)
 	if err != nil {
@@ -120,6 +123,7 @@ func TestResolveIncludes_Circular(t *testing.T) {
 }
 
 func TestParseFile_WithIncludes(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "basic", "root.spec")
 	spec, err := ParseFile(root)
 	if err != nil {
@@ -138,6 +142,7 @@ func TestParseFile_WithIncludes(t *testing.T) {
 }
 
 func TestParseFile_NestedIncludes(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "nested", "root.spec")
 	spec, err := ParseFile(root)
 	if err != nil {
@@ -157,6 +162,7 @@ func TestParseFile_NestedIncludes(t *testing.T) {
 }
 
 func TestParseFile_CircularIncludeError(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "circular", "a.spec")
 	_, err := ParseFile(root)
 	if err == nil {
@@ -165,6 +171,7 @@ func TestParseFile_CircularIncludeError(t *testing.T) {
 }
 
 func TestParseFile_DuplicateModelError(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "duplicate", "root.spec")
 	_, err := ParseFile(root)
 	if err == nil {
@@ -179,6 +186,7 @@ func TestParseFile_DuplicateModelError(t *testing.T) {
 }
 
 func TestParseFile_DuplicateScopeError(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "testdata", "include", "duplicate_scope", "root.spec")
 	_, err := ParseFile(root)
 	if err == nil {
@@ -193,6 +201,7 @@ func TestParseFile_DuplicateScopeError(t *testing.T) {
 }
 
 func TestResolveIncludes_MissingFile(t *testing.T) {
+	t.Parallel()
 	tokens := []Token{
 		{Type: TokenInclude, Value: "include", File: "test.spec", Line: 1, Col: 1},
 		{Type: TokenString, Value: "nonexistent.spec", File: "test.spec", Line: 1, Col: 9},
@@ -206,6 +215,7 @@ func TestResolveIncludes_MissingFile(t *testing.T) {
 }
 
 func TestResolveIncludes_NonStringAfterInclude(t *testing.T) {
+	t.Parallel()
 	tokens := []Token{
 		{Type: TokenInclude, Value: "include", File: "test.spec", Line: 1, Col: 1},
 		{Type: TokenIdent, Value: "foo", File: "test.spec", Line: 1, Col: 9},
