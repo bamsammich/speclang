@@ -170,7 +170,7 @@ type verifyOpts struct {
 }
 
 func parseVerifyOpts(args []string) (*verifyOpts, error) {
-	fs := flag.NewFlagSet("verify", flag.ExitOnError)
+	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	opts := &verifyOpts{}
 	fs.Uint64Var(&opts.seed, "seed", 42, "random seed for input generation")
 	fs.IntVar(&opts.iterations, "iterations", 100, "inputs per when-scenario and invariant")
@@ -179,16 +179,51 @@ func parseVerifyOpts(args []string) (*verifyOpts, error) {
 		&opts.keepServices, "keep-services", false, "keep containers running after verification",
 	)
 	fs.BoolVar(&opts.noServices, "no-services", false, "skip service lifecycle management")
-	if err := fs.Parse(args); err != nil {
+
+	flagArgs, specFile := splitVerifyArgs(fs, args)
+	if err := fs.Parse(flagArgs); err != nil {
 		return nil, err
 	}
-	if fs.NArg() < 1 {
+	if specFile == "" {
 		return nil, errors.New(
 			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services] [--no-services]",
 		)
 	}
-	opts.specFile = fs.Arg(0)
+	opts.specFile = specFile
 	return opts, nil
+}
+
+// splitVerifyArgs separates flags from the positional spec file argument.
+// Unlike splitFlagsAndPositional, this uses the FlagSet definition to correctly
+// identify boolean flags that don't consume a following argument.
+func splitVerifyArgs(fs *flag.FlagSet, args []string) (flagArgs []string, positional string) {
+	boolFlags := make(map[string]bool)
+	fs.VisitAll(func(f *flag.Flag) {
+		if _, ok := f.Value.(interface{ IsBoolFlag() bool }); ok {
+			boolFlags[f.Name] = true
+		}
+	})
+
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
+			if positional == "" {
+				positional = a
+			}
+			continue
+		}
+		flagArgs = append(flagArgs, a)
+		// If flag has no "=" value and is NOT a bool flag, consume the next arg as its value.
+		name := strings.TrimLeft(a, "-")
+		if eqIdx := strings.Index(name, "="); eqIdx >= 0 {
+			continue // value is inline
+		}
+		if !boolFlags[name] && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			i++
+			flagArgs = append(flagArgs, args[i])
+		}
+	}
+	return flagArgs, positional
 }
 
 func runVerify(args []string) int {
