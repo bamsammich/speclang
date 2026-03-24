@@ -390,6 +390,61 @@ func TestGenerateRunID(t *testing.T) {
 	}
 }
 
+func TestFindModuleRoot(t *testing.T) {
+	// Create a temp tree: root/go.mod, root/sub/dir/
+	root := t.TempDir()
+	gomod := filepath.Join(root, "go.mod")
+	if err := os.WriteFile(gomod, []byte("module test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	subDir := filepath.Join(root, "sub", "dir")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findModuleRoot(subDir)
+	if got != root {
+		t.Errorf("findModuleRoot(%q) = %q, want %q", subDir, got, root)
+	}
+
+	// No go.mod anywhere → empty string.
+	nomod := t.TempDir()
+	if got := findModuleRoot(nomod); got != "" {
+		t.Errorf("findModuleRoot(%q) = %q, want empty", nomod, got)
+	}
+}
+
+func TestResolveBuildContext_WithGoMod(t *testing.T) {
+	root := t.TempDir()
+	gomod := filepath.Join(root, "go.mod")
+	if err := os.WriteFile(gomod, []byte("module test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	buildDir := filepath.Join(root, "services", "web")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ctxDir, dfPath := resolveBuildContext(buildDir)
+	if ctxDir != root {
+		t.Errorf("contextDir = %q, want %q", ctxDir, root)
+	}
+	if dfPath != "services/web/Dockerfile" {
+		t.Errorf("dockerfilePath = %q, want %q", dfPath, "services/web/Dockerfile")
+	}
+}
+
+func TestResolveBuildContext_WithoutGoMod(t *testing.T) {
+	dir := t.TempDir()
+	ctxDir, dfPath := resolveBuildContext(dir)
+	if ctxDir != dir {
+		t.Errorf("contextDir = %q, want %q", ctxDir, dir)
+	}
+	if dfPath != "Dockerfile" {
+		t.Errorf("dockerfilePath = %q, want %q", dfPath, "Dockerfile")
+	}
+}
+
 func TestCreateBuildContext(t *testing.T) {
 	dir := t.TempDir()
 	dockerfilePath := filepath.Join(dir, "Dockerfile")

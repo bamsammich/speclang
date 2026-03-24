@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	defaultDockerfile  = "Dockerfile"
 	healthPollInterval = 500 * time.Millisecond
 	healthTimeout      = 30 * time.Second
 	stopTimeout        = 10 // seconds
@@ -187,7 +188,12 @@ func (dm *DockerManager) ensureImage(ctx context.Context, svc ServiceDef) error 
 }
 
 func (dm *DockerManager) buildImage(ctx context.Context, svc ServiceDef) error {
-	tarBuf, err := createBuildContext(svc.Build)
+	// Use the Go module root (if found) as the build context so that
+	// Dockerfiles can COPY go.mod and reference any package in the module.
+	// The Dockerfile path is set relative to the context directory.
+	contextDir, dockerfilePath := resolveBuildContext(svc.Build)
+
+	tarBuf, err := createBuildContext(contextDir)
 	if err != nil {
 		return fmt.Errorf("creating build context: %w", err)
 	}
@@ -195,7 +201,7 @@ func (dm *DockerManager) buildImage(ctx context.Context, svc ServiceDef) error {
 	resp, err := dm.client.ImageBuild(ctx, tarBuf, types.ImageBuildOptions{
 		Tags:       []string{dm.imageName(svc)},
 		Remove:     true,
-		Dockerfile: "Dockerfile",
+		Dockerfile: dockerfilePath,
 	})
 	if err != nil {
 		return fmt.Errorf("building image: %w", err)
@@ -361,6 +367,44 @@ func generateRunID() (string, error) {
 		return "", fmt.Errorf("reading random bytes: %w", err)
 	}
 	return fmt.Sprintf("%x", b), nil
+}
+
+// resolveBuildContext determines the Docker build context directory and the
+// relative Dockerfile path. If a Go module root (go.mod) is found as an
+// ancestor of buildDir, it is used as the context so that the Dockerfile can
+// access the full module tree. Otherwise buildDir itself is the context.
+func resolveBuildContext(buildDir string) (contextDir, dockerfilePath string) {
+	moduleRoot := findModuleRoot(buildDir)
+	if moduleRoot == "" {
+		return buildDir, defaultDockerfile
+	}
+
+	rel, err := filepath.Rel(moduleRoot, buildDir)
+	if err != nil {
+		return buildDir, defaultDockerfile
+	}
+
+	return moduleRoot, filepath.ToSlash(filepath.Join(rel, defaultDockerfile))
+}
+
+// findModuleRoot walks up from dir looking for a directory containing go.mod.
+// Returns the path to that directory, or "" if none is found.
+func findModuleRoot(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(abs, "go.mod")); err == nil {
+			return abs
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return ""
+		}
+		abs = parent
+	}
 }
 
 // createBuildContext creates a tar archive of the directory for Docker image build.
