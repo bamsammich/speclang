@@ -45,8 +45,6 @@ components:
 Write a speclang spec that imports it:
 
 ```
-use http
-
 spec MyAPI {
   target {
     base_url: env(APP_URL, "http://localhost:8080")
@@ -57,6 +55,7 @@ spec MyAPI {
   # The import generates:
   #   model User { id: int { 1 <= id }  name: string  email: string? }
   #   scope create_user { config { path: "/users"  method: "POST" }  contract { ... } }
+  # Each imported scope needs a `use http` declaration added.
 }
 ```
 
@@ -109,8 +108,6 @@ Each path + HTTP method becomes a scope:
 Imported scopes are scaffolds. The real value comes from adding invariants and scenarios:
 
 ```
-use http
-
 spec MyAPI {
   target {
     base_url: env(APP_URL, "http://localhost:8080")
@@ -121,6 +118,7 @@ spec MyAPI {
   # You can reference imported models in hand-written scopes,
   # or add invariants/scenarios to imported scopes by defining
   # them in separate included files.
+  # Each imported scope needs a `use http` declaration added.
 }
 ```
 
@@ -137,7 +135,7 @@ Since invariants and scenarios must live inside scope blocks, and imported scope
 
 ## Example
 
-See [`examples/openapi/`](../examples/openapi/) for a complete example importing a Petstore API.
+See [`examples/openapi/`](../../examples/openapi/) for a complete example importing a Petstore API.
 
 ## Technical Details
 

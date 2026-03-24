@@ -434,7 +434,9 @@ Dot-paths in `then` blocks support numeric array indexing. `stdout.items.0.name`
 
 For browser UI testing. Controls a real browser via Playwright. Target uses `base_url`, `headless` (default `"true"`), and `timeout` (milliseconds, default `"5000"`). Scope config uses `url` (the page path to navigate to).
 
-Requires Playwright browsers to be installed: `npx playwright install chromium`
+Requires Playwright browsers to be installed: `specrun install playwright`
+
+> For the complete syntax reference, see [docs/language-reference.md](../../../docs/language-reference.md).
 
 #### Actions
 

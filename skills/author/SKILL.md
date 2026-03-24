@@ -210,5 +210,5 @@ specrun verify path/to/spec.spec
 If the spec needs a running server or binary, mention the setup required. For `playwright` specs, the user also needs:
 
 ```bash
-npx playwright install chromium
+specrun install playwright
 ```
