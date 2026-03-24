@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+// writeJSON is a test helper that encodes v as JSON to the response writer,
+// falling back to a 500 error if encoding fails.
+func writeJSON(w http.ResponseWriter, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // specrunBin builds the specrun binary to a temp dir and returns its path.
 func specrunBin(t *testing.T) string {
 	t.Helper()
@@ -393,7 +401,7 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Request-Id", "test-123")
 		w.Header().Set("Requestid", "test-123")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"items": []map[string]any{
 				{"id": 1, "name": "alpha"},
 				{"id": 2, "name": "beta"},
@@ -404,7 +412,7 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"id":   1,
 			"name": "alpha",
 			"tags": []string{"first", "primary"},
@@ -420,7 +428,7 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 		body["id"] = 42
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(body)
+		writeJSON(w, body)
 	})
 
 	mux.HandleFunc("PUT /api/items/1", func(w http.ResponseWriter, r *http.Request) {
@@ -431,17 +439,17 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 		}
 		body["id"] = 1
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(body)
+		writeJSON(w, body)
 	})
 
 	mux.HandleFunc("DELETE /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"deleted": true})
+		writeJSON(w, map[string]any{"deleted": true})
 	})
 
 	mux.HandleFunc("GET /api/headers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"auth":         r.Header.Get("Authorization"),
 			"custom":       r.Header.Get("X-Custom"),
 			"content_type": r.Header.Get("Content-Type"),
@@ -460,18 +468,18 @@ func startHTTPTestServer(t *testing.T) *httptest.Server {
 		createdResource = map[string]any{"id": 1, "name": body["name"]}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(createdResource)
+		writeJSON(w, createdResource)
 	})
 
 	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
 		if createdResource == nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]any{"error": "not_found"})
+			writeJSON(w, map[string]any{"error": "not_found"})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(createdResource)
+		writeJSON(w, createdResource)
 	})
 
 	return httptest.NewServer(mux)

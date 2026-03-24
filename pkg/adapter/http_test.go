@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// writeJSON encodes v as JSON to w, falling back to a 500 error if encoding fails.
+func writeJSON(w http.ResponseWriter, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func transferHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -428,7 +435,7 @@ func multiStepMux() *http.ServeMux {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(created)
+		writeJSON(w, created)
 	})
 
 	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, r *http.Request) {
@@ -437,12 +444,12 @@ func multiStepMux() *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(created)
+		writeJSON(w, created)
 	})
 
 	mux.HandleFunc("GET /api/headers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"auth":   r.Header.Get("Authorization"),
 			"custom": r.Header.Get("X-Custom"),
 		})
@@ -452,7 +459,7 @@ func multiStepMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"logged_in": true})
+		writeJSON(w, map[string]any{"logged_in": true})
 	})
 
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
@@ -460,11 +467,11 @@ func multiStepMux() *http.ServeMux {
 		if err != nil || cookie.Value != "abc123" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+			writeJSON(w, map[string]any{"error": "unauthorized"})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"user": "alice", "session": cookie.Value})
+		writeJSON(w, map[string]any{"user": "alice", "session": cookie.Value})
 	})
 
 	return mux

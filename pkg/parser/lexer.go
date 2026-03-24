@@ -9,8 +9,8 @@ import (
 // Token represents a lexical token.
 type Token struct {
 	Value string
-	Type  TokenType
 	File  string
+	Type  TokenType
 	Line  int
 	Col   int
 }
@@ -71,21 +71,21 @@ const (
 	TokenQuestion // ?
 
 	// Operators
-	TokenEq     // ==
-	TokenNeq    // !=
-	TokenGt     // >
-	TokenLt     // <
-	TokenGte    // >=
-	TokenLte    // <=
-	TokenPlus   // +
-	TokenMinus  // -
+	TokenEq      // ==
+	TokenNeq     // !=
+	TokenGt      // >
+	TokenLt      // <
+	TokenGte     // >=
+	TokenLte     // <=
+	TokenPlus    // +
+	TokenMinus   // -
 	TokenStar    // *
 	TokenSlash   // /
 	TokenPercent // %
 	TokenAnd     // &&
-	TokenOr     // ||
-	TokenNot    // !
-	TokenAssign // =
+	TokenOr      // ||
+	TokenNot     // !
+	TokenAssign  // =
 
 	// Special
 	TokenComment

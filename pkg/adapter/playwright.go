@@ -13,12 +13,12 @@ import (
 
 // PlaywrightAdapter implements browser automation via playwright-go.
 type PlaywrightAdapter struct {
-	pw      *playwright.Playwright
 	browser playwright.Browser
 	page    playwright.Page
-	pages   []playwright.Page // tracked for cleanup
+	pw      *playwright.Playwright
 	baseURL string
-	timeout float64 // milliseconds
+	pages   []playwright.Page
+	timeout float64
 }
 
 func NewPlaywrightAdapter() *PlaywrightAdapter {
@@ -49,7 +49,10 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 
 	pw, err := playwright.Run()
 	if err != nil {
-		return fmt.Errorf("starting playwright: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
+		return fmt.Errorf(
+			"starting playwright: %w\n\nHint: run 'specrun install playwright' to install browsers",
+			err,
+		)
 	}
 	a.pw = pw
 
@@ -57,15 +60,18 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 		Headless: playwright.Bool(headless),
 	})
 	if err != nil {
-		a.pw.Stop() //nolint:errcheck
-		return fmt.Errorf("launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers", err)
+		a.pw.Stop() //nolint:errcheck // best-effort cleanup during error path, original error is more important
+		return fmt.Errorf(
+			"launching browser: %w\n\nHint: run 'specrun install playwright' to install browsers",
+			err,
+		)
 	}
 	a.browser = browser
 
 	page, err := browser.NewPage()
 	if err != nil {
-		browser.Close()     //nolint:errcheck
-		a.pw.Stop()         //nolint:errcheck
+		browser.Close() //nolint:errcheck // best-effort cleanup during error path
+		a.pw.Stop()     //nolint:errcheck // best-effort cleanup during error path
 		return fmt.Errorf("creating page: %w", err)
 	}
 	a.page = page
@@ -82,6 +88,13 @@ func (a *PlaywrightAdapter) Action(name string, args json.RawMessage) (*Response
 		}
 	}
 
+	return a.dispatchAction(name, rawArgs)
+}
+
+func (a *PlaywrightAdapter) dispatchAction(
+	name string,
+	rawArgs []json.RawMessage,
+) (*Response, error) {
 	switch name {
 	case "goto":
 		return a.doGoto(rawArgs)
@@ -142,7 +155,10 @@ func (a *PlaywrightAdapter) Assert(
 		actual, err = loc.Count()
 	case strings.HasPrefix(property, "attribute."):
 		attrName := strings.TrimPrefix(property, "attribute.")
-		actual, err = loc.GetAttribute(attrName, playwright.LocatorGetAttributeOptions{Timeout: &timeout})
+		actual, err = loc.GetAttribute(
+			attrName,
+			playwright.LocatorGetAttributeOptions{Timeout: &timeout},
+		)
 	default:
 		return nil, fmt.Errorf("unknown playwright assertion property %q", property)
 	}
@@ -267,9 +283,10 @@ func (a *PlaywrightAdapter) doType(args []json.RawMessage) (*Response, error) {
 	if err := json.Unmarshal(args[1], &value); err != nil {
 		return nil, fmt.Errorf("parsing value: %w", err)
 	}
-	if err := a.page.Locator(selector).PressSequentially(value, playwright.LocatorPressSequentiallyOptions{
-		Timeout: &a.timeout,
-	}); err != nil {
+	if err := a.page.Locator(selector).
+		PressSequentially(value, playwright.LocatorPressSequentiallyOptions{
+			Timeout: &a.timeout,
+		}); err != nil {
 		return &Response{OK: false, Error: err.Error()}, nil
 	}
 	return &Response{OK: true}, nil
@@ -405,7 +422,7 @@ func (a *PlaywrightAdapter) doClearState() (*Response, error) {
 }
 
 // parseSelector extracts a single selector string from the first argument.
-func (a *PlaywrightAdapter) parseSelector(args []json.RawMessage) (string, error) {
+func (*PlaywrightAdapter) parseSelector(args []json.RawMessage) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("action requires a selector argument")
 	}

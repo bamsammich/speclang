@@ -90,7 +90,10 @@ func TestResolveIncludes_Nested(t *testing.T) {
 		}
 	}
 	if modelCount != 2 {
-		t.Fatalf("expected 2 model tokens (Item from leaf + Container from mid), got %d", modelCount)
+		t.Fatalf(
+			"expected 2 model tokens (Item from leaf + Container from mid), got %d",
+			modelCount,
+		)
 	}
 }
 

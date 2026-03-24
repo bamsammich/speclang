@@ -104,7 +104,10 @@ func TestValidate_GivenLiteralTypeMismatch(t *testing.T) {
 						Name: "smoke",
 						Given: &parser.Block{
 							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "count", Value: parser.LiteralString{Value: "not_an_int"}},
+								&parser.Assignment{
+									Path:  "count",
+									Value: parser.LiteralString{Value: "not_an_int"},
+								},
 							},
 						},
 					},
@@ -137,9 +140,18 @@ func TestValidate_GivenLiteralCorrectType(t *testing.T) {
 						Name: "smoke",
 						Given: &parser.Block{
 							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "count", Value: parser.LiteralInt{Value: 42}},
-								&parser.Assignment{Path: "name", Value: parser.LiteralString{Value: "foo"}},
-								&parser.Assignment{Path: "active", Value: parser.LiteralBool{Value: true}},
+								&parser.Assignment{
+									Path:  "count",
+									Value: parser.LiteralInt{Value: 42},
+								},
+								&parser.Assignment{
+									Path:  "name",
+									Value: parser.LiteralString{Value: "foo"},
+								},
+								&parser.Assignment{
+									Path:  "active",
+									Value: parser.LiteralBool{Value: true},
+								},
 							},
 						},
 					},
@@ -163,7 +175,10 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 				Contract: &parser.Contract{
 					Input: []*parser.Field{
 						{Name: "required_field", Type: parser.TypeExpr{Name: "string"}},
-						{Name: "optional_field", Type: parser.TypeExpr{Name: "string", Optional: true}},
+						{
+							Name: "optional_field",
+							Type: parser.TypeExpr{Name: "string", Optional: true},
+						},
 					},
 				},
 				Scenarios: []*parser.Scenario{
@@ -171,8 +186,14 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 						Name: "smoke",
 						Given: &parser.Block{
 							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "required_field", Value: parser.LiteralNull{}},
-								&parser.Assignment{Path: "optional_field", Value: parser.LiteralNull{}},
+								&parser.Assignment{
+									Path:  "required_field",
+									Value: parser.LiteralNull{},
+								},
+								&parser.Assignment{
+									Path:  "optional_field",
+									Value: parser.LiteralNull{},
+								},
 							},
 						},
 					},
@@ -260,12 +281,24 @@ func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
 									Value: parser.ArrayLiteral{
 										Elements: []parser.Expr{
 											parser.ObjectLiteral{Fields: []*parser.ObjField{
-												{Key: "name", Value: parser.LiteralString{Value: "widget"}},
-												{Key: "price", Value: parser.LiteralInt{Value: 100}},
+												{
+													Key:   "name",
+													Value: parser.LiteralString{Value: "widget"},
+												},
+												{
+													Key:   "price",
+													Value: parser.LiteralInt{Value: 100},
+												},
 											}},
 											parser.ObjectLiteral{Fields: []*parser.ObjField{
-												{Key: "name", Value: parser.LiteralString{Value: "gadget"}},
-												{Key: "colour", Value: parser.LiteralString{Value: "red"}},
+												{
+													Key:   "name",
+													Value: parser.LiteralString{Value: "gadget"},
+												},
+												{
+													Key:   "colour",
+													Value: parser.LiteralString{Value: "red"},
+												},
 											}},
 										},
 									},
@@ -369,7 +402,10 @@ func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
 									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
 										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
 										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
-										{Key: "email", Value: parser.LiteralString{Value: "alice@test.com"}},
+										{
+											Key:   "email",
+											Value: parser.LiteralString{Value: "alice@test.com"},
+										},
 									}},
 								},
 							},
@@ -415,7 +451,10 @@ func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
 									Path: "from",
 									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
 										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
-										{Key: "balance", Value: parser.LiteralString{Value: "not_an_int"}},
+										{
+											Key:   "balance",
+											Value: parser.LiteralString{Value: "not_an_int"},
+										},
 									}},
 								},
 							},
@@ -493,7 +532,10 @@ func TestValidate_GivenMissingRequiredField(t *testing.T) {
 						Name: "smoke",
 						Given: &parser.Block{
 							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "from", Value: parser.LiteralString{Value: "alice"}},
+								&parser.Assignment{
+									Path:  "from",
+									Value: parser.LiteralString{Value: "alice"},
+								},
 								// "to" is missing and required
 								// "note" is missing but optional — should not error
 							},
@@ -560,7 +602,11 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 						Name: "generative",
 						When: &parser.Block{
 							Predicates: []parser.Expr{
-								parser.BinaryOp{Left: parser.FieldRef{Path: "amount"}, Op: ">", Right: parser.LiteralInt{Value: 0}},
+								parser.BinaryOp{
+									Left:  parser.FieldRef{Path: "amount"},
+									Op:    ">",
+									Right: parser.LiteralInt{Value: 0},
+								},
 							},
 						},
 					},
@@ -693,7 +739,12 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 						},
 						Then: &parser.Block{
 							Assertions: []*parser.Assertion{
-								{Target: "welcome", Plugin: "playwright", Property: "visible", Expected: parser.LiteralBool{Value: true}},
+								{
+									Target:   "welcome",
+									Plugin:   "playwright",
+									Property: "visible",
+									Expected: parser.LiteralBool{Value: true},
+								},
 							},
 						},
 					},
@@ -728,7 +779,10 @@ func TestValidate_MultipleErrors(t *testing.T) {
 						Name: "bad",
 						Given: &parser.Block{
 							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "count", Value: parser.LiteralString{Value: "wrong"}},
+								&parser.Assignment{
+									Path:  "count",
+									Value: parser.LiteralString{Value: "wrong"},
+								},
 								// name is missing
 							},
 						},
@@ -745,16 +799,30 @@ func TestValidate_MultipleErrors(t *testing.T) {
 
 	errs := Validate(spec)
 	if len(errs) < 3 {
-		t.Fatalf("expected at least 3 errors (type mismatch + missing field + bad then target), got %d: %v", len(errs), errs)
+		t.Fatalf(
+			"expected at least 3 errors (type mismatch + missing field + bad then target), got %d: %v",
+			len(errs),
+			errs,
+		)
 	}
 }
 
 func TestFormatErrors(t *testing.T) {
 	errs := []error{
 		fmt.Errorf("scope %q, contract input %q: unknown type %q", "orders", "items", "Itme"),
-		fmt.Errorf("scope %q, scenario %q, field %q: expected int, got string literal", "orders", "smoke", "count"),
+		fmt.Errorf(
+			"scope %q, scenario %q, field %q: expected int, got string literal",
+			"orders",
+			"smoke",
+			"count",
+		),
 		fmt.Errorf("scope %q, scenario %q: missing required field %q", "orders", "smoke", "name"),
-		fmt.Errorf("scope %q, scenario %q: then target %q does not match any output field", "transfer", "basic", "balnce"),
+		fmt.Errorf(
+			"scope %q, scenario %q: then target %q does not match any output field",
+			"transfer",
+			"basic",
+			"balnce",
+		),
 	}
 
 	output := FormatErrors(errs)
@@ -848,5 +916,4 @@ func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
 	if !found {
 		t.Error("expected validation error for 'nonexistent' field")
 	}
-	_ = fmt.Sprintf("test") // keep fmt import
 }

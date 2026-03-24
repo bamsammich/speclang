@@ -76,7 +76,14 @@ func TestGenerateEnum_Optional(t *testing.T) {
 	g := New(
 		&parser.Contract{
 			Input: []*parser.Field{
-				{Name: "role", Type: parser.TypeExpr{Name: "enum", Variants: []string{"admin", "user"}, Optional: true}},
+				{
+					Name: "role",
+					Type: parser.TypeExpr{
+						Name:     "enum",
+						Variants: []string{"admin", "user"},
+						Optional: true,
+					},
+				},
 			},
 		},
 		nil, 42,

@@ -10,13 +10,22 @@ import (
 
 // mockResolver implements ImportResolver for testing.
 type mockResolver struct {
+	err    error
 	models []*Model
 	scopes []*Scope
-	err    error
 }
 
 func (m *mockResolver) Resolve(absPath string) ([]*Model, []*Scope, error) {
 	return m.models, m.scopes, m.err
+}
+
+// writeSpecFile is a test helper that writes spec content to a file and
+// fails the test on error.
+func writeSpecFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestLexImportKeyword(t *testing.T) {
@@ -35,11 +44,11 @@ func TestLexImportKeyword(t *testing.T) {
 func TestParseImport_Basic(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   import test("schema.yaml")
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{
 		models: []*Model{
@@ -87,7 +96,7 @@ spec Test {
 func TestParseImport_MergesWithHandWritten(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   model Local {
     id: int
@@ -101,7 +110,7 @@ spec Test {
     }
   }
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{
 		models: []*Model{
@@ -145,11 +154,11 @@ spec Test {
 func TestParseImport_UnknownAdapter(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   import unknown("schema.yaml")
 }
-`), 0644)
+`)
 
 	registry := ImportRegistry{"openapi": &mockResolver{}}
 	_, err := ParseFileWithImports(specFile, registry)
@@ -164,11 +173,11 @@ spec Test {
 func TestParseImport_NilRegistry(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   import openapi("schema.yaml")
 }
-`), 0644)
+`)
 
 	_, err := ParseFileWithImports(specFile, nil)
 	if err == nil {
@@ -182,11 +191,11 @@ spec Test {
 func TestParseImport_ResolverError(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   import test("bad.yaml")
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{err: fmt.Errorf("file not found")}
 	registry := ImportRegistry{"test": resolver}
@@ -202,14 +211,14 @@ spec Test {
 func TestParseImport_DuplicateModelName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   model Pet {
     id: int
   }
   import test("schema.yaml")
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{
 		models: []*Model{
@@ -230,7 +239,7 @@ spec Test {
 func TestParseImport_DuplicateScopeName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   scope my_scope {
     use http
@@ -241,7 +250,7 @@ spec Test {
   }
   import test("schema.yaml")
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{
 		scopes: []*Scope{
@@ -262,11 +271,11 @@ spec Test {
 func TestParseImport_EmptyResult(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
-	os.WriteFile(specFile, []byte(`
+	writeSpecFile(t, specFile, `
 spec Test {
   import test("empty.yaml")
 }
-`), 0644)
+`)
 
 	resolver := &mockResolver{models: nil, scopes: nil}
 	registry := ImportRegistry{"test": resolver}

@@ -214,7 +214,11 @@ func TestEvalAll_WithObjectElements(t *testing.T) {
 		Array:    parser.FieldRef{Path: "scopes"},
 		BoundVar: "s",
 		Predicate: parser.BinaryOp{
-			Left: parser.FieldRef{Path: "s.passed"}, Op: "==", Right: parser.LiteralBool{Value: true},
+			Left: parser.FieldRef{
+				Path: "s.passed",
+			},
+			Op:    "==",
+			Right: parser.LiteralBool{Value: true},
 		},
 	}
 
@@ -241,7 +245,11 @@ func TestEvalAny_WithStringPredicate(t *testing.T) {
 		Array:    parser.FieldRef{Path: "scopes"},
 		BoundVar: "s",
 		Predicate: parser.BinaryOp{
-			Left: parser.FieldRef{Path: "s.name"}, Op: "==", Right: parser.LiteralString{Value: "transfer"},
+			Left: parser.FieldRef{
+				Path: "s.name",
+			},
+			Op:    "==",
+			Right: parser.LiteralString{Value: "transfer"},
 		},
 	}
 

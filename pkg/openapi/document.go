@@ -20,7 +20,10 @@ func loadDocument(path string) (*openapi3.T, error) {
 	}
 
 	// Validate the document structure (catches missing required fields, etc.)
-	if err := doc.Validate(context.Background(), openapi3.DisableSchemaDefaultsValidation()); err != nil {
+	if err := doc.Validate(
+		context.Background(),
+		openapi3.DisableSchemaDefaultsValidation(),
+	); err != nil {
 		return nil, fmt.Errorf("validating openapi spec: %w", err)
 	}
 

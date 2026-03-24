@@ -6,8 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bamsammich/speclang/v2/pkg/parser"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
+
+	"github.com/bamsammich/speclang/v2/pkg/parser"
 )
 
 // convertMessages extracts all messages from a proto file and converts
@@ -15,8 +16,7 @@ import (
 func convertMessages(proto *pb.Proto) []*parser.Model {
 	var models []*parser.Model
 	for _, item := range proto.ProtoBody {
-		switch v := item.(type) {
-		case *pb.Message:
+		if v, ok := item.(*pb.Message); ok {
 			models = append(models, flattenMessage("", v)...)
 		}
 	}
@@ -46,9 +46,19 @@ func flattenMessage(prefix string, msg *pb.Message) []*parser.Model {
 			// Nested message — flatten with prefix
 			nested = append(nested, flattenMessage(name, v)...)
 		case *pb.MapField:
-			fmt.Fprintf(os.Stderr, "warning: unsupported map field %q in message %q, skipping\n", v.MapName, name)
+			fmt.Fprintf(
+				os.Stderr,
+				"warning: unsupported map field %q in message %q, skipping\n",
+				v.MapName,
+				name,
+			)
 		case *pb.Oneof:
-			fmt.Fprintf(os.Stderr, "warning: unsupported oneof %q in message %q, skipping\n", v.OneofName, name)
+			fmt.Fprintf(
+				os.Stderr,
+				"warning: unsupported oneof %q in message %q, skipping\n",
+				v.OneofName,
+				name,
+			)
 		}
 	}
 
@@ -68,7 +78,12 @@ func flattenMessage(prefix string, msg *pb.Message) []*parser.Model {
 func protoFieldToField(f *pb.Field) *parser.Field {
 	typeExpr, ok := mapProtoType(f.Type)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "warning: unsupported type %q for field %q, skipping\n", f.Type, f.FieldName)
+		fmt.Fprintf(
+			os.Stderr,
+			"warning: unsupported type %q for field %q, skipping\n",
+			f.Type,
+			f.FieldName,
+		)
 		return nil
 	}
 
@@ -149,10 +164,6 @@ func mapWellKnownType(typ string) (parser.TypeExpr, bool) {
 
 	case "google.protobuf.BytesValue":
 		return parser.TypeExpr{Name: "bytes", Optional: true}, true
-
-	case "google.protobuf.Any", "google.protobuf.Struct",
-		"google.protobuf.Value", "google.protobuf.ListValue":
-		return parser.TypeExpr{}, false
 
 	default:
 		return parser.TypeExpr{}, false

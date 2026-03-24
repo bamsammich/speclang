@@ -116,6 +116,10 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 		return g.generateFields(rng, m.Fields)
 	}
 
+	return g.generatePrimitive(rng, t)
+}
+
+func (g *Generator) generatePrimitive(rng *rand.Rand, t parser.TypeExpr) any {
 	switch t.Name {
 	case "int":
 		return generateInt(rng)
@@ -188,7 +192,7 @@ func generateBytes(rng *rand.Rand) string {
 	}
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = byte(rng.IntN(256))
+		b[i] = byte(rng.IntN(256)) //nolint:gosec // IntN(256) returns 0-255, always fits in byte
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
@@ -260,6 +264,43 @@ type evalCtx struct {
 }
 
 func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
+	if v, ok := evalLiteral(expr); ok {
+		return v, true
+	}
+
+	switch e := expr.(type) {
+	case parser.FieldRef:
+		return c.resolveRef(e.Path)
+	case parser.BinaryOp:
+		return c.evalBinary(e)
+	case parser.ObjectLiteral:
+		return c.evalObject(e)
+	case parser.ArrayLiteral:
+		return c.evalArray(e)
+	case parser.LenExpr:
+		return c.evalLen(e)
+	case parser.AllExpr:
+		return c.evalAll(e)
+	case parser.AnyExpr:
+		return c.evalAny(e)
+	case parser.ContainsExpr:
+		return c.evalContains(e)
+	case parser.ExistsExpr:
+		return c.evalExists(e)
+	case parser.HasKeyExpr:
+		return c.evalHasKey(e)
+	case parser.UnaryOp:
+		return c.evalUnary(e)
+	case parser.IfExpr:
+		return c.evalIf(e)
+	default:
+		return nil, false
+	}
+}
+
+// evalLiteral returns the Go value for literal expression types, or (nil, false)
+// if the expression is not a literal.
+func evalLiteral(expr parser.Expr) (any, bool) {
 	switch e := expr.(type) {
 	case parser.LiteralInt:
 		return e.Value, true
@@ -271,108 +312,107 @@ func (c *evalCtx) eval(expr parser.Expr) (any, bool) {
 		return e.Value, true
 	case parser.LiteralNull:
 		return nil, true
-	case parser.FieldRef:
-		return c.resolveRef(e.Path)
-	case parser.BinaryOp:
-		return c.evalBinary(e)
-	case parser.ObjectLiteral:
-		m := make(map[string]any, len(e.Fields))
-		for _, f := range e.Fields {
-			v, ok := c.eval(f.Value)
-			if !ok {
-				return nil, false
-			}
-			m[f.Key] = v
-		}
-		return m, true
-	case parser.ArrayLiteral:
-		result := make([]any, len(e.Elements))
-		for i, elem := range e.Elements {
-			v, ok := c.eval(elem)
-			if !ok {
-				return nil, false
-			}
-			result[i] = v
-		}
-		return result, true
-	case parser.LenExpr:
-		val, ok := c.eval(e.Arg)
-		if !ok {
-			return nil, false
-		}
-		switch v := val.(type) {
-		case []any:
-			return len(v), true
-		case map[string]any:
-			return len(v), true
-		case string:
-			return len(v), true
-		default:
-			return nil, false
-		}
-	case parser.AllExpr:
-		return c.evalAll(e)
-	case parser.AnyExpr:
-		return c.evalAny(e)
-	case parser.ContainsExpr:
-		haystack, ok := c.eval(e.Haystack)
-		if !ok {
-			return nil, false
-		}
-		needle, ok := c.eval(e.Needle)
-		if !ok {
-			return nil, false
-		}
-		switch h := haystack.(type) {
-		case string:
-			n, ok := needle.(string)
-			if !ok {
-				return nil, false
-			}
-			return strings.Contains(h, n), true
-		case []any:
-			for _, elem := range h {
-				if reflect.DeepEqual(elem, needle) {
-					return true, true
-				}
-			}
-			return false, true
-		default:
-			return nil, false
-		}
-	case parser.ExistsExpr:
-		val, ok := c.eval(e.Arg)
-		if !ok {
-			return false, true
-		}
-		_ = val
-		return true, true
-	case parser.HasKeyExpr:
-		obj, ok := c.eval(e.Arg)
-		if !ok {
-			return false, true
-		}
-		key, kok := c.eval(e.Key)
-		if !kok {
-			return nil, false
-		}
-		keyStr, isStr := key.(string)
-		if !isStr {
-			return nil, false
-		}
-		m, isMap := obj.(map[string]any)
-		if !isMap {
-			return false, true
-		}
-		_, exists := m[keyStr]
-		return exists, true
-	case parser.UnaryOp:
-		return c.evalUnary(e)
-	case parser.IfExpr:
-		return c.evalIf(e)
 	default:
 		return nil, false
 	}
+}
+
+func (c *evalCtx) evalObject(e parser.ObjectLiteral) (any, bool) {
+	m := make(map[string]any, len(e.Fields))
+	for _, f := range e.Fields {
+		v, ok := c.eval(f.Value)
+		if !ok {
+			return nil, false
+		}
+		m[f.Key] = v
+	}
+	return m, true
+}
+
+func (c *evalCtx) evalArray(e parser.ArrayLiteral) (any, bool) {
+	result := make([]any, len(e.Elements))
+	for i, elem := range e.Elements {
+		v, ok := c.eval(elem)
+		if !ok {
+			return nil, false
+		}
+		result[i] = v
+	}
+	return result, true
+}
+
+func (c *evalCtx) evalLen(e parser.LenExpr) (any, bool) {
+	val, ok := c.eval(e.Arg)
+	if !ok {
+		return nil, false
+	}
+	switch v := val.(type) {
+	case []any:
+		return len(v), true
+	case map[string]any:
+		return len(v), true
+	case string:
+		return len(v), true
+	default:
+		return nil, false
+	}
+}
+
+func (c *evalCtx) evalContains(e parser.ContainsExpr) (any, bool) {
+	haystack, ok := c.eval(e.Haystack)
+	if !ok {
+		return nil, false
+	}
+	needle, ok := c.eval(e.Needle)
+	if !ok {
+		return nil, false
+	}
+	switch h := haystack.(type) {
+	case string:
+		n, ok := needle.(string)
+		if !ok {
+			return nil, false
+		}
+		return strings.Contains(h, n), true
+	case []any:
+		for _, elem := range h {
+			if reflect.DeepEqual(elem, needle) {
+				return true, true
+			}
+		}
+		return false, true
+	default:
+		return nil, false
+	}
+}
+
+func (c *evalCtx) evalExists(e parser.ExistsExpr) (any, bool) {
+	_, ok := c.eval(e.Arg)
+	if !ok {
+		return false, true
+	}
+	return true, true
+}
+
+func (c *evalCtx) evalHasKey(e parser.HasKeyExpr) (any, bool) {
+	obj, ok := c.eval(e.Arg)
+	if !ok {
+		return false, true
+	}
+	key, kok := c.eval(e.Key)
+	if !kok {
+		return nil, false
+	}
+	keyStr, isStr := key.(string)
+	if !isStr {
+		return nil, false
+	}
+	m, isMap := obj.(map[string]any)
+	if !isMap {
+		return false, true
+	}
+	_, exists := m[keyStr]
+	return exists, true
 }
 
 func (c *evalCtx) evalIf(e parser.IfExpr) (any, bool) {
