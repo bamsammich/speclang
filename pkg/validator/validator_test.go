@@ -857,6 +857,62 @@ func TestFormatErrors(t *testing.T) {
 	}
 }
 
+func TestValidate_ServiceRefValid(t *testing.T) {
+	t.Parallel()
+	spec := &parser.Spec{
+		Target: &parser.Target{
+			Fields: map[string]parser.Expr{
+				"base_url": parser.ServiceRef{Name: "myapp"},
+			},
+			Services: []*parser.Service{
+				{Name: "myapp", Image: "myapp:latest", Port: 8080},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid service ref, got: %v", errs)
+	}
+}
+
+func TestValidate_ServiceRefUndeclared(t *testing.T) {
+	t.Parallel()
+	spec := &parser.Spec{
+		Target: &parser.Target{
+			Fields: map[string]parser.Expr{
+				"base_url": parser.ServiceRef{Name: "ghost"},
+			},
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for undeclared service ref, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "ghost") || !contains(errs[0].Error(), "undeclared") {
+		t.Errorf("expected error about undeclared service 'ghost', got: %v", errs[0])
+	}
+}
+
+func TestValidate_ServiceRefWithCompose(t *testing.T) {
+	t.Parallel()
+	// When compose is set, service refs are resolved externally — no error.
+	spec := &parser.Spec{
+		Target: &parser.Target{
+			Fields: map[string]parser.Expr{
+				"base_url": parser.ServiceRef{Name: "external_svc"},
+			},
+			Compose: "docker-compose.yml",
+		},
+	}
+
+	errs := Validate(spec)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors when compose is set, got: %v", errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }

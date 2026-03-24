@@ -8,7 +8,7 @@ The process adapter (`use process`) executes subprocesses and asserts against th
 
 | Key | Required | Description |
 |-----|----------|-------------|
-| `command` | Yes | Binary to run |
+| `command` | Yes | Binary to run. Supports `env()` expressions and `service()` references. |
 
 ```
 target {

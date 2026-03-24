@@ -2,7 +2,7 @@
 scope verify_pass {
   use process
   config {
-    args: "verify --json"
+    args: "verify --json --no-services"
   }
 
   contract {

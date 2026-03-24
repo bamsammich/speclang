@@ -10,7 +10,17 @@ spec <Name> {
   description: "<text>"              # optional: AI context about the system
 
   target {
-    base_url: env(APP_URL)           # plugin-dependent config
+    services {                       # optional: Docker containers as test infra
+      <name> {
+        build: "<dockerfile-dir>"    # OR image: "<docker-image>"
+        port: <port>                 # optional
+        health: "<http-path>"        # optional
+        env { KEY: "value" }         # optional
+        volumes { "<host>": "<container>" }  # optional
+      }
+      # OR: compose: "<path>"        # docker-compose file
+    }
+    base_url: env(APP_URL)           # plugin-dependent config (or service(name))
   }
 
   include "<path>"                   # spec-body include
@@ -80,6 +90,7 @@ spec <Name> {
 - **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
 - **Field references**: `from.balance`, `output.error`
 - **Environment**: `env(VAR)`, `env(VAR, "default")`
+- **Service reference**: `service(name)` -- resolves to running container URL from `services` block
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
 - **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`

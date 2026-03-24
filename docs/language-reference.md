@@ -72,7 +72,85 @@ Plugin-dependent configuration. Common keys:
 | `headless` | playwright | `"true"` or `"false"` (default `"true"`) |
 | `timeout` | playwright | Milliseconds (default `"5000"`) |
 
-Values can use `env(VAR)` or `env(VAR, "default")` to read environment variables.
+Values can use `env(VAR)` or `env(VAR, "default")` to read environment variables, or `service(name)` to reference a declared service URL.
+
+## Target Services
+
+The `services` block in `target` declares Docker containers as test infrastructure. When services are declared, `specrun verify` manages their full lifecycle: cleanup stale containers, build/pull, start, health-check, run verification, then stop and remove.
+
+### Inline Services
+
+```
+target {
+  services {
+    app {
+      build: "./server"           # Dockerfile directory (relative to spec file)
+      port: 8080                  # container port (host port may differ)
+      health: "/healthz"          # HTTP health check path (optional)
+      env { PORT: "8080" }        # environment variables (optional)
+      volumes {                   # volume mounts (optional)
+        "./fixtures": "/data"
+      }
+    }
+    db {
+      image: "postgres:16"        # pre-built image (alternative to build)
+      port: 5432
+      env { POSTGRES_PASSWORD: "test" }
+    }
+  }
+  base_url: service(app)          # resolves to running container URL
+}
+```
+
+Each service must have either `build` (path to a directory containing a Dockerfile) or `image` (a Docker image reference). Service fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `build` | One of build/image | Dockerfile directory |
+| `image` | One of build/image | Pre-built Docker image |
+| `port` | No | Container port to expose (static mapping when specified, dynamic when omitted) |
+| `health` | No | HTTP path for health check (falls back to TCP port check) |
+| `env` | No | Environment variables passed to the container |
+| `volumes` | No | Host-to-container volume mounts |
+
+### Compose Support
+
+For multi-service setups, reference a docker-compose file instead of inline definitions:
+
+```
+target {
+  services {
+    compose: "docker-compose.yml"
+  }
+  base_url: service(app)
+}
+```
+
+The compose path is relative to the spec file. Service names in `service()` references must match compose service names.
+
+### `service(name)` Resolution
+
+`service(name)` resolves at runtime to `http://localhost:<port>` where `<port>` is the actual mapped host port of the named container. The name must match a service declared in the `services` block; unknown names are rejected during validation.
+
+### Health Checks
+
+- If `health` is specified, an HTTP GET is sent to `http://localhost:<port><health>` until a 200 response is received
+- If `health` is not specified, a TCP connection check is performed against the mapped port
+- Health checks have a timeout; failure to become healthy causes verification to abort
+
+### Container Lifecycle
+
+1. **Pre-flight cleanup**: Remove any stale containers from previous runs (identified by labels)
+2. **Build/pull**: Build images from Dockerfiles or pull pre-built images
+3. **Start**: Start containers with port mappings and environment variables
+4. **Health check**: Wait for each service to become healthy
+5. **Verify**: Run the spec verification
+6. **Teardown**: Stop and remove containers (unless `--keep-services`)
+
+### CLI Flags
+
+- `--keep-services` -- leave containers running after verification (useful for debugging)
+- `--no-services` -- skip all service lifecycle management; services must be started manually or by an outer process. This is used internally when the self-verification specs invoke `specrun verify` as a subprocess.
 
 ## Models
 
@@ -147,6 +225,14 @@ stdout.items.0.name      # numeric segment indexes into array
 ```
 
 Numeric segments in dot-paths index into arrays by position (zero-based).
+
+### Service References
+
+```
+service(app)                  # resolves to URL of named service from target services block
+```
+
+Resolves at runtime to the URL of a running container declared in the `target` `services` block. The name must match a declared service. See [Target Services](#target-services) for details.
 
 ### Environment Variables
 

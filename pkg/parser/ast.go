@@ -23,9 +23,22 @@ type Scope struct {
 	Scenarios  []*Scenario     `json:"scenarios,omitempty"`
 }
 
+// Service declares a container to run as test infrastructure.
+type Service struct {
+	Env     map[string]string `json:"env,omitempty"`
+	Volumes map[string]string `json:"volumes,omitempty"`
+	Name    string            `json:"name"`
+	Build   string            `json:"build,omitempty"`
+	Image   string            `json:"image,omitempty"`
+	Health  string            `json:"health,omitempty"`
+	Port    int               `json:"port,omitempty"`
+}
+
 // Target holds configuration for the system under test.
 type Target struct {
-	Fields map[string]Expr `json:"fields,omitempty"` // key -> value expression (may be EnvRef, LiteralString, etc.)
+	Fields   map[string]Expr `json:"fields,omitempty"`   // key -> value expression (may be EnvRef, LiteralString, etc.)
+	Compose  string          `json:"compose,omitempty"`  // docker-compose file path (mutually exclusive with services)
+	Services []*Service      `json:"services,omitempty"` // named container services
 }
 
 // Model defines a named data structure.
@@ -157,6 +170,12 @@ type EnvRef struct {
 	Default string `json:"default,omitempty"`
 } // env(VAR) or env(VAR, "default")
 
+// ServiceRef references a named service from the target services block.
+// Resolves to the service's URL at runtime. Docker must be available.
+type ServiceRef struct {
+	Name string `json:"name"`
+}
+
 type BinaryOp struct {
 	Left  Expr   `json:"left,omitempty"`
 	Right Expr   `json:"right,omitempty"`
@@ -234,6 +253,7 @@ func (UnaryOp) exprNode()       {}
 func (ObjectLiteral) exprNode() {}
 func (ArrayLiteral) exprNode()  {}
 func (EnvRef) exprNode()        {}
+func (ServiceRef) exprNode()    {}
 func (LenExpr) exprNode()       {}
 func (AllExpr) exprNode()       {}
 func (AnyExpr) exprNode()       {}
