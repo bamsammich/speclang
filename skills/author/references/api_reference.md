@@ -81,7 +81,7 @@ spec <Name> {
 - **Environment**: `env(VAR)`, `env(VAR, "default")`
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
-- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
+- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`
 - **Functions**: `len(expr)` — returns length of array, map, or string
 
 ## Comments
