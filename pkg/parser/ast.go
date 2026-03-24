@@ -25,20 +25,20 @@ type Scope struct {
 
 // Service declares a container to run as test infrastructure.
 type Service struct {
+	Env     map[string]string `json:"env,omitempty"`
+	Volumes map[string]string `json:"volumes,omitempty"`
 	Name    string            `json:"name"`
 	Build   string            `json:"build,omitempty"`
 	Image   string            `json:"image,omitempty"`
-	Port    int               `json:"port,omitempty"`
 	Health  string            `json:"health,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Volumes map[string]string `json:"volumes,omitempty"`
+	Port    int               `json:"port,omitempty"`
 }
 
 // Target holds configuration for the system under test.
 type Target struct {
 	Fields   map[string]Expr `json:"fields,omitempty"`   // key -> value expression (may be EnvRef, LiteralString, etc.)
+	Compose  string          `json:"compose,omitempty"`  // docker-compose file path (mutually exclusive with services)
 	Services []*Service      `json:"services,omitempty"` // named container services
-	Compose  string          `json:"compose,omitempty"`  // docker-compose file path (mutually exclusive with Services)
 }
 
 // Model defines a named data structure.
