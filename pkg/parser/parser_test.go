@@ -81,15 +81,26 @@ func TestParseTransferSpec(t *testing.T) {
 		if !ok {
 			t.Fatal("expected base_url in target")
 		}
-		envRef, ok := val.(parser.EnvRef)
+		svcRef, ok := val.(parser.ServiceRef)
 		if !ok {
-			t.Fatalf("expected EnvRef, got %T", val)
+			t.Fatalf("expected ServiceRef, got %T", val)
 		}
-		if envRef.Var != "APP_URL" {
-			t.Errorf("expected Var=APP_URL, got %q", envRef.Var)
+		if svcRef.Name != "app" {
+			t.Errorf("expected Name=app, got %q", svcRef.Name)
 		}
-		if envRef.Default != "http://localhost:8080" {
-			t.Errorf("expected Default=http://localhost:8080, got %q", envRef.Default)
+
+		if len(spec.Target.Services) != 1 {
+			t.Fatalf("expected 1 service, got %d", len(spec.Target.Services))
+		}
+		svc := spec.Target.Services[0]
+		if svc.Name != "app" {
+			t.Errorf("expected service name=app, got %q", svc.Name)
+		}
+		if svc.Build != "./server" {
+			t.Errorf("expected build=./server, got %q", svc.Build)
+		}
+		if svc.Port != 8080 {
+			t.Errorf("expected port=8080, got %d", svc.Port)
 		}
 	})
 

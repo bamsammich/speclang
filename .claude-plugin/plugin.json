@@ -1,7 +1,7 @@
 {
   "name": "speclang",
   "description": "Specification-driven development skills: author speclang specs from natural language and verify implementations against specs before merging",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "bamsammich"
   },

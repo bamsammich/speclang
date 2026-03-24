@@ -8,11 +8,22 @@ The HTTP adapter (`use http`) tests REST APIs. It supports single-request scopes
 
 | Key | Required | Description |
 |-----|----------|-------------|
-| `base_url` | Yes | API base URL. Supports `env()` expressions. |
+| `base_url` | Yes | API base URL. Supports `env()` expressions and `service()` references. |
 
 ```
 target {
   base_url: env(APP_URL, "http://localhost:8080")
+}
+```
+
+Or with [target services](../services.md):
+
+```
+target {
+  services {
+    app { build: "./server"  port: 8080 }
+  }
+  base_url: service(app)
 }
 ```
 

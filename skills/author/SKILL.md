@@ -19,6 +19,7 @@ Convert natural language requirements into speclang specification files.
 - [ ] If the user has an OpenAPI spec, use `import openapi("path")` to import models and scopes
 - [ ] `spec <Name>` with a `description` explaining what the system is
 - [ ] `target` block with connection config (plugin-dependent)
+- [ ] If using Docker: `services` block in `target` with container definitions, and `service(name)` for URLs
 - [ ] For `playwright` specs: `locators` block declaring all named element locators
 - [ ] For `playwright` specs: `action` blocks for reusable UI sequences (login, navigation)
 - [ ] `model` blocks for shared data structures
@@ -207,7 +208,9 @@ After writing the spec, tell the user how to verify it:
 specrun verify path/to/spec.spec
 ```
 
-If the spec needs a running server or binary, mention the setup required. For `playwright` specs, the user also needs:
+If the spec declares `services` in the `target` block, Docker must be available on the host. The containers will be managed automatically by `specrun verify`. If Docker is unavailable, the user must start the servers manually and use `--no-services`.
+
+If the spec needs a running server or binary without services, mention the setup required. For `playwright` specs, the user also needs:
 
 ```bash
 specrun install playwright

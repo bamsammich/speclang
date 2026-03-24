@@ -30,16 +30,10 @@ func TestLexTransferSpec(t *testing.T) {
 	assertToken(t, tokens, 1, TokenIdent, "AccountAPI")
 	assertToken(t, tokens, 2, TokenLBrace, "{")
 
-	// Check that "env" is lexed as a keyword
-	envIdx := findToken(tokens, TokenEnv)
-	if envIdx < 0 {
-		t.Fatal("could not find env keyword")
-	}
-
-	// Check string literal "http://localhost:8080"
-	strIdx := findTokenValue(tokens, TokenString, "http://localhost:8080")
-	if strIdx < 0 {
-		t.Fatal("could not find string literal 'http://localhost:8080'")
+	// Check that "service" is lexed as a keyword (base_url: service(app))
+	svcIdx := findToken(tokens, TokenService)
+	if svcIdx < 0 {
+		t.Fatal("could not find service keyword")
 	}
 
 	// Check include directives with string paths

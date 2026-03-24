@@ -146,9 +146,38 @@ SPECRUN_BIN=./specrun specrun verify specs/speclang.spec
 
 See [Self-Verification](self-verification.md) for details on how this works.
 
+## Self-Contained Specs with Docker
+
+Instead of manually starting servers before verification, you can declare services directly in the spec. `specrun verify` will build, start, health-check, and tear down containers automatically.
+
+```
+spec TransferAPI {
+  target {
+    services {
+      app {
+        build: "./server"
+        port: 8080
+      }
+    }
+    base_url: service(app)
+  }
+
+  # ... models, scopes, etc.
+}
+```
+
+Run verification -- no manual server startup needed:
+
+```bash
+specrun verify transfer.spec
+```
+
+The `service(app)` expression resolves to the running container's URL at runtime. Docker must be available on the host. See [Target Services](services.md) for the full guide.
+
 ## Next Steps
 
 - [Language Reference](language-reference.md) -- complete syntax for models, types, expressions, constraints, and scenarios
+- [Target Services](services.md) -- Docker containers as test infrastructure
 - [HTTP Adapter](adapters/http.md) -- testing REST APIs
 - [Process Adapter](adapters/process.md) -- testing CLI tools and subprocesses
 - [Playwright Adapter](adapters/playwright.md) -- testing browser UIs

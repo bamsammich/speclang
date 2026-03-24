@@ -251,6 +251,14 @@ func (p *parser) parseTarget() (*Target, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		if key.Value == "services" {
+			if err := p.parseServices(t); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
 		if _, err := p.expect(TokenColon); err != nil {
 			return nil, err
 		}
@@ -265,6 +273,166 @@ func (p *parser) parseTarget() (*Target, error) {
 		return nil, err
 	}
 	return t, nil
+}
+
+// parseServices parses the services block inside target.
+// Supports either compose shorthand or named service blocks.
+func (p *parser) parseServices(t *Target) error {
+	if _, err := p.expect(TokenLBrace); err != nil {
+		return err
+	}
+
+	for p.peek().Type != TokenRBrace {
+		key, err := p.expect(TokenIdent)
+		if err != nil {
+			return err
+		}
+
+		if key.Value == "compose" {
+			if _, err := p.expect(TokenColon); err != nil {
+				return err
+			}
+			val, err := p.expect(TokenString)
+			if err != nil {
+				return err
+			}
+			t.Compose = val.Value
+			continue
+		}
+
+		svc, err := p.parseService(key.Value)
+		if err != nil {
+			return err
+		}
+		t.Services = append(t.Services, svc)
+	}
+
+	if _, err := p.expect(TokenRBrace); err != nil {
+		return err
+	}
+	return nil
+}
+
+// parseService parses a named service block: name { build: "...", port: N, ... }
+func (p *parser) parseService(name string) (*Service, error) {
+	if _, err := p.expect(TokenLBrace); err != nil {
+		return nil, err
+	}
+
+	svc := &Service{Name: name}
+	for p.peek().Type != TokenRBrace {
+		if err := p.parseServiceEntry(svc); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := p.expect(TokenRBrace); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
+// parseServiceEntry parses a single key-value or sub-block inside a service.
+func (p *parser) parseServiceEntry(svc *Service) error {
+	key := p.advance()
+	if !isIdentLike(key.Type) && key.Type != TokenEnv {
+		return fmt.Errorf("%d:%d: expected identifier, got %s (%q)",
+			key.Line, key.Col, key.Type, key.Value)
+	}
+
+	switch key.Value {
+	case "env":
+		m, err := p.parseStringMap()
+		if err != nil {
+			return err
+		}
+		svc.Env = m
+	case "volumes":
+		m, err := p.parseStringMap()
+		if err != nil {
+			return err
+		}
+		svc.Volumes = m
+	default:
+		if _, err := p.expect(TokenColon); err != nil {
+			return err
+		}
+		return p.parseServiceField(svc, key)
+	}
+	return nil
+}
+
+// parseServiceField parses a scalar field inside a service block.
+func (p *parser) parseServiceField(svc *Service, key Token) error {
+	switch key.Value {
+	case "build":
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return err
+		}
+		svc.Build = val.Value
+	case "image":
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return err
+		}
+		svc.Image = val.Value
+	case "port":
+		val, err := p.expect(TokenInt)
+		if err != nil {
+			return err
+		}
+		v, err := strconv.Atoi(val.Value)
+		if err != nil {
+			return p.errAt(val, fmt.Sprintf("invalid port: %s", val.Value))
+		}
+		svc.Port = v
+	case "health":
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return err
+		}
+		svc.Health = val.Value
+	default:
+		return p.errAt(key, fmt.Sprintf("unknown service field %q", key.Value))
+	}
+	return nil
+}
+
+// parseStringMap parses: { key: "value", ... }
+func (p *parser) parseStringMap() (map[string]string, error) {
+	if _, err := p.expect(TokenLBrace); err != nil {
+		return nil, err
+	}
+
+	m := make(map[string]string)
+	for p.peek().Type != TokenRBrace {
+		var keyVal string
+		tok := p.peek()
+		if tok.Type == TokenString {
+			p.advance()
+			keyVal = tok.Value
+		} else {
+			key, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			keyVal = key.Value
+		}
+		if _, err := p.expect(TokenColon); err != nil {
+			return nil, err
+		}
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return nil, err
+		}
+		m[keyVal] = val.Value
+	}
+
+	if _, err := p.expect(TokenRBrace); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // parseScope parses: scope name { config/contract/invariant/scenario ... }
@@ -1129,6 +1297,9 @@ func (p *parser) parseAtom() (Expr, error) {
 	case TokenEnv:
 		return p.parseEnvRef()
 
+	case TokenService:
+		return p.parseServiceRef()
+
 	case TokenLBrace:
 		return p.parseObjectLiteral()
 
@@ -1393,6 +1564,22 @@ func (p *parser) parseEnvRef() (Expr, error) {
 		return nil, err
 	}
 	return ref, nil
+}
+
+// parseServiceRef parses: service(name)
+func (p *parser) parseServiceRef() (Expr, error) {
+	p.advance() // consume "service"
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	name, err := p.expectIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return ServiceRef{Name: name.Value}, nil
 }
 
 // parseObjectLiteral parses: { key: value, ... }

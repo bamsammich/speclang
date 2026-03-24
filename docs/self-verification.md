@@ -6,6 +6,8 @@ Speclang verifies itself using its own specification language. This is black-box
 
 The self-verification specs use the **process adapter** to invoke `specrun` subcommands as a subprocess and verify their behavior. The specs treat `specrun` as an opaque binary, asserting only on its outputs (exit code, stdout, stderr) without knowledge of its internals.
 
+The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `target` block. When Docker is available, these containers are managed automatically. In CI or when Docker is unavailable, servers are started manually and `--no-services` is used for subprocess invocations.
+
 This creates a bootstrapping loop: `specrun verify specs/speclang.spec` launches `specrun` to verify specs that themselves invoke `specrun` subcommands. The outer instance orchestrates; the inner instances are the system under test.
 
 ## Current Coverage
@@ -27,6 +29,7 @@ The self-verification suite includes **63 scenarios** and **19 invariants** acro
 | `shrinking.spec` | `shrinking` | Counterexample shrinking produces minimal values |
 | `adapters.spec` | `adapter_fixtures` | HTTP and process adapter fixture tests pass |
 | `cli_flags.spec` | `cli_flags_*` | CLI flag parsing (seed, iterations, json, errors) |
+| `services.spec` | `verify_service_lifecycle`, `parse_service_ref`, `invalid_service_ref` | Service lifecycle, service ref parsing, validation errors |
 
 ### Shrinking Specs
 

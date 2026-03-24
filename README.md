@@ -106,6 +106,7 @@ Failures show shrunk counterexamples -- the minimal input that reproduces the bu
 | [Playwright Adapter](docs/adapters/playwright.md) | Browser UI testing |
 | [OpenAPI Import](docs/imports/openapi.md) | Import from OpenAPI schemas |
 | [Protobuf Import](docs/imports/protobuf.md) | Import from proto files |
+| [Target Services](docs/services.md) | Docker containers as test infrastructure |
 | [Self-Verification](docs/self-verification.md) | How speclang tests itself |
 
 ## Claude Code Plugin

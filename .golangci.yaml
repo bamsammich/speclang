@@ -114,6 +114,9 @@ linters:
           - ireturn # CLI wiring must return Adapter interface by design
         path: cmd/specrun/
       - linters:
+          - ireturn # factory must return ServiceManager interface by design
+        path: pkg/infra/
+      - linters:
           - gocyclo
           - revive
         path: _test\.go
