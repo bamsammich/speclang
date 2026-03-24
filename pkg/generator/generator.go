@@ -136,6 +136,11 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 			return g.generateMap(rng, *t.ValType)
 		}
 		return nil
+	case "enum":
+		if len(t.Variants) > 0 {
+			return t.Variants[rng.IntN(len(t.Variants))]
+		}
+		return nil
 	default:
 		return nil
 	}

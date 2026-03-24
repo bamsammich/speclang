@@ -530,6 +530,35 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 		return TypeExpr{Name: "map", KeyType: &keyType, ValType: &valType}, nil
 	}
 
+	// Enum type: enum("val1", "val2", ...)
+	if name.Value == "enum" && p.peek().Type == TokenLParen {
+		p.advance() // consume (
+		var variants []string
+		for p.peek().Type != TokenRParen {
+			if len(variants) > 0 {
+				if _, err := p.expect(TokenComma); err != nil {
+					return TypeExpr{}, err
+				}
+				// Allow trailing comma
+				if p.peek().Type == TokenRParen {
+					break
+				}
+			}
+			tok, err := p.expect(TokenString)
+			if err != nil {
+				return TypeExpr{}, p.errAt(p.peek(), "enum variants must be string literals")
+			}
+			variants = append(variants, tok.Value)
+		}
+		if _, err := p.expect(TokenRParen); err != nil {
+			return TypeExpr{}, err
+		}
+		if len(variants) == 0 {
+			return TypeExpr{}, p.errAt(name, "enum type requires at least one variant")
+		}
+		return TypeExpr{Name: "enum", Variants: variants}, nil
+	}
+
 	return TypeExpr{Name: name.Value}, nil
 }
 
