@@ -18,4 +18,5 @@ spec Speclang {
   include "exists.spec"
   include "error_assertions.spec"
   include "shrinking.spec"
+  include "import.spec"
 }

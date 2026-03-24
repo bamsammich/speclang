@@ -327,6 +327,7 @@ speclang/
 ├── specs/                # self-verification specs (speclang verifying itself)
 │   ├── speclang.spec     # root: use process, includes parse/generate/verify
 │   ├── parse.spec        # parse_valid + parse_invalid scopes
+│   ├── import.spec       # import behavioral verification (OpenAPI + Protobuf)
 │   ├── generate.spec     # generator constraint satisfaction
 │   ├── verify.spec       # verify_pass scope
 │   ├── verify_fail.spec  # verify_fail scope (broken implementation detection)
@@ -494,6 +495,11 @@ The self-verification spec uses the process adapter to invoke `specrun` subcomma
 
 - **parse_valid** — verifies the parser accepts valid specs and produces expected AST structure
 - **parse_invalid** — verifies the parser rejects malformed specs with exit code 1
+- **import_openapi** — verifies OpenAPI imports produce correct models (names, fields, types, optionality) and scopes
+- **import_openapi_constraints** — verifies minimum/maximum constraints are preserved from OpenAPI schemas
+- **import_openapi_refs** — verifies $ref fields resolve to correct model type names
+- **import_proto** — verifies protobuf imports produce correct models (names, fields, types) and scopes from service RPCs
+- **import_proto_streaming** — verifies streaming RPCs are skipped, only unary RPCs produce scopes
 - **generate** — verifies the generator produces constraint-satisfying outputs across seeds
 - **verify_pass** — verifies that `specrun verify` passes correct implementations
 - **verify_fail** — verifies that `specrun verify` detects incorrect implementations
