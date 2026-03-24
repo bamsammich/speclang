@@ -338,6 +338,13 @@ func runAndReport(r *runner.Runner, jsonOutput bool) int {
 	return 0
 }
 
+// logProgress writes a dim progress message to stderr when not in JSON mode.
+func logProgress(jsonOutput bool, format string, args ...any) {
+	if !jsonOutput {
+		colorDim.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
@@ -363,9 +370,15 @@ func startServices(
 		fmt.Fprintf(os.Stderr, "warning: cleanup failed: %v\n", cleanupErr)
 	}
 
+	logProgress(opts.jsonOutput, "Starting services...\n")
+
 	services, err := manager.Start(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
+	}
+
+	for _, svc := range services {
+		logProgress(opts.jsonOutput, "  %s ready on port %d\n", svc.Name, svc.Port)
 	}
 
 	// Register signal handler for graceful shutdown.
@@ -378,16 +391,25 @@ func startServices(
 		os.Exit(1)                         //nolint:revive // intentional exit on interrupt
 	}()
 
-	var cleanup func()
-	if !opts.keepServices {
-		cleanup = func() {
-			if stopErr := manager.Stop(ctx); stopErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to stop services: %v\n", stopErr)
-			}
-		}
-	}
+	cleanup := makeCleanup(ctx, manager, opts)
 
 	return services, cleanup, nil
+}
+
+// makeCleanup returns a function that stops services with progress messages,
+// or nil if --keep-services is set.
+func makeCleanup(ctx context.Context, manager infra.ServiceManager, opts *verifyOpts) func() {
+	if opts.keepServices {
+		return nil
+	}
+	return func() {
+		logProgress(opts.jsonOutput, "\nStopping services... ")
+		if stopErr := manager.Stop(ctx); stopErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to stop services: %v\n", stopErr)
+		} else {
+			logProgress(opts.jsonOutput, "done\n")
+		}
+	}
 }
 
 func printResults(res *runner.Result) {
