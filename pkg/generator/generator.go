@@ -137,6 +137,11 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 			return g.generateMap(rng, *t.ValType)
 		}
 		return nil
+	case "enum":
+		if len(t.Variants) > 0 {
+			return t.Variants[rng.IntN(len(t.Variants))]
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -435,12 +440,16 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 		return evalBoolOp(op, left, right)
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
-	case "<", "<=", ">", ">=", "+", "-", "*":
+	case "<", "<=", ">", ">=", "+", "-", "*", "/", "%":
 		// If both sides are native int, use int arithmetic (avoids float precision issues).
 		ln, lok := left.(int)
 		rn, rok := right.(int)
 		if lok && rok {
 			return evalIntOp(op, ln, rn)
+		}
+		// Modulo is only defined for integers.
+		if op == "%" {
+			return nil, false
 		}
 		// Otherwise try float arithmetic (handles float64 from JSON and float type).
 		lf, lfok := toFloat(left)
@@ -498,6 +507,16 @@ func evalIntOp(op string, l, r int) (any, bool) {
 		return l - r, true
 	case "*":
 		return l * r, true
+	case "/":
+		if r == 0 {
+			return nil, false
+		}
+		return l / r, true
+	case "%":
+		if r == 0 {
+			return nil, false
+		}
+		return l % r, true
 	default:
 		return nil, false
 	}
@@ -519,6 +538,11 @@ func evalFloatOp(op string, l, r float64) (any, bool) {
 		return l - r, true
 	case "*":
 		return l * r, true
+	case "/":
+		if r == 0 {
+			return nil, false
+		}
+		return l / r, true
 	default:
 		return nil, false
 	}

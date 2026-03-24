@@ -71,8 +71,9 @@ spec <Name> {
 - `any` — untyped (passed through)
 - `[]T` — array/slice of type T (e.g., `[]int`, `[]Account`)
 - `map[K, V]` — map with key type K and value type V (e.g., `map[string, int]`)
+- `enum("val1", "val2", ...)` — one of a fixed set of string values (e.g., `enum("http", "process", "playwright")`)
 - `<ModelName>` — reference to a defined model
-- Append `?` for optional: `string?`, `[]int?` (optional array)
+- Append `?` for optional: `string?`, `[]int?`, `enum("a", "b")?` (optional)
 
 ## Expressions
 
@@ -81,7 +82,7 @@ spec <Name> {
 - **Environment**: `env(VAR)`, `env(VAR, "default")`
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
-- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
+- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`
 - **Functions**:
   - `len(expr)` — returns length of array, map, or string
   - `contains(haystack, needle)` — returns `bool`. String haystack + string needle: substring check. `[]any` haystack + any needle: element membership check.

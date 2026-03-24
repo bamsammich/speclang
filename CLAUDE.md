@@ -52,7 +52,9 @@ spec <Name> {
   }
 
   model <Name> {
-    <field>: <type>
+    <field>: <type>                    # int, float, string, bytes, bool, any,
+                                       # []T, map[K,V], enum("a","b",...), ModelName
+                                       # append ? for optional: string?, enum(...)?
     <field>: <type> { <constraint> }
   }
 
