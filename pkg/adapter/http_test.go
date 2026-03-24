@@ -140,6 +140,90 @@ func TestExtractPath_NullValue(t *testing.T) {
 	}
 }
 
+func TestExtractPath_ArrayIndex(t *testing.T) {
+	obj := map[string]any{
+		"items": []any{"alpha", "beta", "gamma"},
+	}
+	val, err := extractPath(obj, "items.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != "alpha" {
+		t.Fatalf("got %v, want alpha", val)
+	}
+}
+
+func TestExtractPath_ArrayIndexNested(t *testing.T) {
+	obj := map[string]any{
+		"scopes": []any{
+			map[string]any{"name": "transfer", "passed": true},
+			map[string]any{"name": "validate", "passed": false},
+		},
+	}
+	val, err := extractPath(obj, "scopes.1.name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != "validate" {
+		t.Fatalf("got %v, want validate", val)
+	}
+}
+
+func TestExtractPath_ArrayIndexOutOfRange(t *testing.T) {
+	obj := map[string]any{
+		"items": []any{"alpha"},
+	}
+	_, err := extractPath(obj, "items.5")
+	if err == nil {
+		t.Fatal("expected error for out-of-range index")
+	}
+}
+
+func TestExtractPath_ArrayNegativeIndex(t *testing.T) {
+	obj := map[string]any{
+		"items": []any{"alpha"},
+	}
+	_, err := extractPath(obj, "items.-1")
+	if err == nil {
+		t.Fatal("expected error for negative index")
+	}
+}
+
+func TestExtractPath_ObjectInArray(t *testing.T) {
+	obj := map[string]any{
+		"failures": []any{
+			map[string]any{
+				"name":   "conservation",
+				"input":  map[string]any{"amount": float64(5)},
+				"shrunk": true,
+			},
+		},
+	}
+	val, err := extractPath(obj, "failures.0.input.amount")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != float64(5) {
+		t.Fatalf("got %v, want 5", val)
+	}
+}
+
+func TestExtractPath_ArrayInArray(t *testing.T) {
+	obj := map[string]any{
+		"matrix": []any{
+			[]any{1, 2},
+			[]any{3, 4},
+		},
+	}
+	val, err := extractPath(obj, "matrix.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != 3 {
+		t.Fatalf("got %v, want 3", val)
+	}
+}
+
 // --- Integration tests ---
 
 func TestAction_PostSuccess(t *testing.T) {

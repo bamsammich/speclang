@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -200,21 +201,31 @@ func (*HTTPAdapter) Close() error {
 	return nil
 }
 
-// extractPath walks a nested map by dot-separated path segments.
+// extractPath walks a nested map/array by dot-separated path segments.
 func extractPath(obj map[string]any, path string) (any, error) {
 	parts := strings.Split(path, ".")
 	var current any = obj
 
 	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("cannot traverse into non-object at %q", part)
+		switch v := current.(type) {
+		case map[string]any:
+			val, exists := v[part]
+			if !exists {
+				return nil, fmt.Errorf("key %q not found", part)
+			}
+			current = val
+		case []any:
+			idx, err := strconv.Atoi(part)
+			if err != nil {
+				return nil, fmt.Errorf("array requires numeric index, got %q", part)
+			}
+			if idx < 0 || idx >= len(v) {
+				return nil, fmt.Errorf("array index %d out of range (length %d)", idx, len(v))
+			}
+			current = v[idx]
+		default:
+			return nil, fmt.Errorf("cannot traverse into %T at %q", current, part)
 		}
-		val, exists := m[part]
-		if !exists {
-			return nil, fmt.Errorf("key %q not found", part)
-		}
-		current = val
 	}
 
 	return current, nil

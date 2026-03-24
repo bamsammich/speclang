@@ -49,6 +49,7 @@ scope generate_seed_2 {
 }
 
 # Iteration count is respected: --iterations controls inputs_run in JSON output.
+# scopes.0.checks.3 is the first invariant ("conservation") in the transfer scope.
 scope verify_iterations {
   use process
   config {
@@ -62,8 +63,7 @@ scope verify_iterations {
     }
     output {
       exit_code: int
-      scenarios_run: int
-      scenarios_passed: int
+      scopes: array
     }
   }
 
@@ -74,8 +74,7 @@ scope verify_iterations {
     }
     then {
       exit_code: 0
-      scenarios_run: 3
-      scenarios_passed: 3
+      scopes.0.checks.3.inputs_run: 10
     }
   }
 }

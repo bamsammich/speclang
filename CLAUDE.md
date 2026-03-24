@@ -354,6 +354,7 @@ Runs `command [...args] [...input_fields]`. Captures exit code, stdout (best-eff
 - `exit_code` — integer comparison
 - `stdout` — full parsed JSON body (or raw string if not JSON)
 - `stdout.field.path` — dot-path traversal into parsed JSON
+- `stdout.items.0.name` — numeric segment in dot-path indexes into a JSON array by position
 - `stderr` — raw string
 
 ## Playwright Adapter
