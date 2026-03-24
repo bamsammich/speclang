@@ -113,6 +113,88 @@ func TestEvalLen(t *testing.T) {
 	}
 }
 
+func TestEvalContains(t *testing.T) {
+	ctx := &evalCtx{input: map[string]any{
+		"msg":   "parse error: unexpected token",
+		"items": []any{1, 2, 3},
+		"empty": "",
+		"arr":   []any{},
+	}}
+
+	// String substring match
+	val, ok := ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "msg"},
+		Needle:   parser.LiteralString{Value: "error"},
+	})
+	if !ok || val != true {
+		t.Errorf("contains(msg, 'error') = %v, want true", val)
+	}
+
+	// String substring miss
+	val, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "msg"},
+		Needle:   parser.LiteralString{Value: "success"},
+	})
+	if !ok || val != false {
+		t.Errorf("contains(msg, 'success') = %v, want false", val)
+	}
+
+	// Array element membership
+	val, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "items"},
+		Needle:   parser.LiteralInt{Value: 2},
+	})
+	if !ok || val != true {
+		t.Errorf("contains(items, 2) = %v, want true", val)
+	}
+
+	// Array element miss
+	val, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "items"},
+		Needle:   parser.LiteralInt{Value: 99},
+	})
+	if !ok || val != false {
+		t.Errorf("contains(items, 99) = %v, want false", val)
+	}
+
+	// Empty string contains empty string
+	val, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "empty"},
+		Needle:   parser.LiteralString{Value: ""},
+	})
+	if !ok || val != true {
+		t.Errorf("contains('', '') = %v, want true", val)
+	}
+
+	// Empty array does not contain anything
+	val, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "arr"},
+		Needle:   parser.LiteralInt{Value: 1},
+	})
+	if !ok || val != false {
+		t.Errorf("contains([], 1) = %v, want false", val)
+	}
+
+	// Type mismatch: string haystack with int needle
+	_, ok = ctx.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "msg"},
+		Needle:   parser.LiteralInt{Value: 42},
+	})
+	if ok {
+		t.Error("contains(string, int) should return not ok")
+	}
+
+	// Type mismatch: int haystack
+	ctx2 := &evalCtx{input: map[string]any{"n": 42}}
+	_, ok = ctx2.eval(parser.ContainsExpr{
+		Haystack: parser.FieldRef{Path: "n"},
+		Needle:   parser.LiteralInt{Value: 4},
+	})
+	if ok {
+		t.Error("contains(int, int) should return not ok")
+	}
+}
+
 func TestEvalArrayLiteral(t *testing.T) {
 	ctx := &evalCtx{input: map[string]any{}}
 

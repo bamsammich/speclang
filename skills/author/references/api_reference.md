@@ -83,7 +83,9 @@ spec <Name> {
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
 - **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`
-- **Functions**: `len(expr)` — returns length of array, map, or string
+- **Functions**:
+  - `len(expr)` — returns length of array, map, or string
+  - `contains(haystack, needle)` — returns `bool`. String haystack + string needle: substring check. `[]any` haystack + any needle: element membership check.
 
 ## Comments
 
