@@ -6,7 +6,7 @@ Speclang verifies itself using its own specification language. This is black-box
 
 The self-verification specs use the **process adapter** to invoke `specrun` subcommands as a subprocess and verify their behavior. The specs treat `specrun` as an opaque binary, asserting only on its outputs (exit code, stdout, stderr) without knowledge of its internals.
 
-The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `target` block. When Docker is available, these containers are managed automatically. In CI or when Docker is unavailable, servers are started manually and `--no-services` is used for subprocess invocations.
+The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `target` block. When Docker is available, these containers are managed automatically. In CI or when Docker is unavailable, servers are started manually and `SPECRUN_NO_SERVICES=1` is set so subprocess invocations skip service management.
 
 This creates a bootstrapping loop: `specrun verify specs/speclang.spec` launches `specrun` to verify specs that themselves invoke `specrun` subcommands. The outer instance orchestrates; the inner instances are the system under test.
 

@@ -53,7 +53,7 @@ scope generate_seed_2 {
 scope verify_iterations {
   use process
   config {
-    args: "verify --json --no-services --iterations"
+    args: "verify --json --iterations"
   }
 
   contract {
@@ -83,7 +83,7 @@ scope verify_iterations {
 scope verify_json_output {
   use process
   config {
-    args: "verify --json --no-services examples/transfer.spec"
+    args: "verify --json examples/transfer.spec"
   }
 
   contract {

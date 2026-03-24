@@ -142,16 +142,12 @@ func verifyCmd() *cli.Command {
 				Name:  "keep-services",
 				Usage: "keep containers running after verification",
 			},
-			&cli.BoolFlag{
-				Name:  "no-services",
-				Usage: "skip service lifecycle management",
-			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			specFile := cmd.Args().First()
 			if specFile == "" {
 				return cli.Exit(
-					"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services] [--no-services]",
+					"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services]",
 					1,
 				)
 			}
@@ -161,7 +157,6 @@ func verifyCmd() *cli.Command {
 				iterations:   cmd.Int("iterations"),
 				jsonOutput:   cmd.Bool("json"),
 				keepServices: cmd.Bool("keep-services"),
-				noServices:   cmd.Bool("no-services"),
 			}
 			code := runVerify(opts)
 			if code != 0 {
@@ -268,7 +263,6 @@ type verifyOpts struct {
 	iterations   int
 	jsonOutput   bool
 	keepServices bool
-	noServices   bool
 }
 
 func runVerify(opts *verifyOpts) int {
@@ -348,12 +342,13 @@ func logProgress(jsonOutput bool, format string, args ...any) {
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
+// Skipped when SPECRUN_NO_SERVICES=1 is set in the environment.
 func startServices(
 	ctx context.Context,
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
-	if opts.noServices {
+	if os.Getenv("SPECRUN_NO_SERVICES") == "1" {
 		return nil, nil, nil
 	}
 	cfg := buildInfraConfig(spec, opts.specFile)
@@ -376,6 +371,9 @@ func startServices(
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
 	}
+
+	// Propagate to child processes so nested specrun invocations skip service management.
+	os.Setenv("SPECRUN_NO_SERVICES", "1") //nolint:errcheck // env propagation is best-effort
 
 	for _, svc := range services {
 		logProgress(opts.jsonOutput, "  %s ready on port %d\n", svc.Name, svc.Port)
@@ -600,7 +598,7 @@ func resolveExprToString(
 }
 
 // resolveServiceURL finds the URL for a named service. It checks running
-// services first, then falls back to the declared port (for --no-services mode).
+// services first, then falls back to the declared port (for SPECRUN_NO_SERVICES=1 mode).
 func resolveServiceURL(
 	name string,
 	target *parser.Target,

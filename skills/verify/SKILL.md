@@ -41,7 +41,7 @@ specrun install playwright
 
 ### 2c. For specs with target services, ensure Docker is available
 
-If the spec declares `services` in the `target` block, Docker must be running. `specrun verify` will manage containers automatically. If Docker is unavailable, use `--no-services` and start servers manually.
+If the spec declares `services` in the `target` block, Docker must be running. `specrun verify` will manage containers automatically. If Docker is unavailable, set `SPECRUN_NO_SERVICES=1` and start servers manually.
 
 ### 3. Run verification
 
@@ -49,7 +49,7 @@ If the spec declares `services` in the `target` block, Docker must be running. `
 specrun verify path/to/spec.spec
 ```
 
-If the spec declares services, containers will start automatically before verification and stop after. Use `--keep-services` to leave containers running for debugging. Use `--no-services` to skip container management entirely.
+If the spec declares services, containers will start automatically before verification and stop after. Use `--keep-services` to leave containers running for debugging. Set `SPECRUN_NO_SERVICES=1` to skip container management entirely.
 
 For multiple spec files, verify each one. Start with the most relevant spec for the changes made.
 
