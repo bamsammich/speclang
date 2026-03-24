@@ -44,6 +44,8 @@ func shrinkField(
 		return shrinkArray(input, field.Name, stillFails)
 	case "map":
 		return shrinkMap(input, field.Name, stillFails)
+	case "enum":
+		return shrinkEnum(input, field.Name, field.Type.Variants, stillFails)
 	}
 
 	// Model lookup for named model types.
@@ -60,6 +62,26 @@ func shrinkField(
 	default:
 		return input
 	}
+}
+
+// shrinkEnum tries each variant in order, keeping the first (earliest-index)
+// variant that still causes the failure.
+func shrinkEnum(
+	input map[string]any,
+	name string,
+	variants []string,
+	stillFails func(map[string]any) bool,
+) map[string]any {
+	current := copyMap(input)
+	for _, v := range variants {
+		candidate := copyMap(current)
+		candidate[name] = v
+		if stillFails(candidate) {
+			current[name] = v
+			return current
+		}
+	}
+	return current
 }
 
 // shrinkInt binary searches toward 0.

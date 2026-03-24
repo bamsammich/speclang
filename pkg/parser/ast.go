@@ -43,10 +43,11 @@ type Field struct {
 
 // TypeExpr represents a type in the spec language.
 type TypeExpr struct {
-	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", or model name
+	Name     string    `json:"name"`                    // "int", "string", "bool", "float", "bytes", "array", "map", "enum", or model name
 	ElemType *TypeExpr `json:"elem_type,omitempty"`     // element type for arrays
 	KeyType  *TypeExpr `json:"key_type,omitempty"`      // key type for maps
 	ValType  *TypeExpr `json:"val_type,omitempty"`      // value type for maps
+	Variants []string  `json:"variants,omitempty"`      // enum variants (for enum type)
 	Optional bool      `json:"optional,omitempty"`      // trailing ?
 }
 

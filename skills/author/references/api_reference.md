@@ -71,8 +71,9 @@ spec <Name> {
 - `any` — untyped (passed through)
 - `[]T` — array/slice of type T (e.g., `[]int`, `[]Account`)
 - `map[K, V]` — map with key type K and value type V (e.g., `map[string, int]`)
+- `enum("val1", "val2", ...)` — one of a fixed set of string values (e.g., `enum("http", "process", "playwright")`)
 - `<ModelName>` — reference to a defined model
-- Append `?` for optional: `string?`, `[]int?` (optional array)
+- Append `?` for optional: `string?`, `[]int?`, `enum("a", "b")?` (optional)
 
 ## Expressions
 
