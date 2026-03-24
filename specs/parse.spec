@@ -122,4 +122,171 @@ scope parse_invalid {
       exit_code: 1
     }
   }
+
+  # Scope without 'use <plugin>' should fail.
+  scenario missing_use_directive {
+    given {
+      file: "testdata/self/invalid_missing_use.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Multiple 'use' directives in same scope should fail.
+  scenario multiple_use_directives {
+    given {
+      file: "testdata/self/invalid_multiple_use.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # 'use' at spec level (outside scope) should fail.
+  scenario use_at_spec_level {
+    given {
+      file: "testdata/self/invalid_use_at_spec_level.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Unknown token in spec body should fail.
+  scenario unknown_token_in_spec {
+    given {
+      file: "testdata/self/invalid_unknown_token.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Unexpected keyword inside contract block should fail.
+  scenario malformed_contract {
+    given {
+      file: "testdata/self/invalid_malformed_contract.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Unexpected token inside then block should fail.
+  scenario malformed_then {
+    given {
+      file: "testdata/self/invalid_malformed_then.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Unterminated string literal should fail at lex time.
+  scenario unterminated_string {
+    given {
+      file: "testdata/self/invalid_unterminated_string.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Single '&' (incomplete operator) should fail at lex time.
+  scenario incomplete_operator {
+    given {
+      file: "testdata/self/invalid_single_ampersand.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Duplicate model names across includes should fail.
+  scenario duplicate_model_include {
+    given {
+      file: "testdata/include/duplicate/root.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Duplicate scope names across includes should fail.
+  scenario duplicate_scope_include {
+    given {
+      file: "testdata/include/duplicate_scope/root.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+}
+
+# Verifies the validator rejects semantically invalid specs with a non-zero exit code.
+scope validate_invalid {
+  use process
+  config {
+    args: "parse"
+  }
+
+  contract {
+    input {
+      file: string
+    }
+    output {
+      exit_code: int
+    }
+  }
+
+  # Unknown type in model field should fail validation.
+  scenario unknown_type {
+    given {
+      file: "testdata/self/invalid_unknown_type.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # String literal for int field should fail validation.
+  scenario type_mismatch_in_given {
+    given {
+      file: "testdata/self/invalid_type_mismatch.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Null for non-optional field should fail validation.
+  scenario null_non_optional {
+    given {
+      file: "testdata/self/invalid_null_non_optional.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Missing required field in given block should fail validation.
+  scenario missing_required_field {
+    given {
+      file: "testdata/self/invalid_missing_required_field.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
+
+  # Then target not in contract output should fail validation.
+  scenario then_unknown_output {
+    given {
+      file: "testdata/self/invalid_then_unknown_field.spec"
+    }
+    then {
+      exit_code: 1
+    }
+  }
 }
