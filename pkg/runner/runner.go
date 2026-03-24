@@ -72,13 +72,14 @@ func (r *Runner) SetN(n int) {
 
 // scopeRunner holds per-scope state for running scenarios and invariants.
 type scopeRunner struct {
-	runner    *Runner
-	adapter   adapter.Adapter // resolved from scope.Use
-	generator *generator.Generator
-	scopeDef  *parser.Scope
-	scope     string
-	path      string
-	method    string
+	runner          *Runner
+	adapter         adapter.Adapter // resolved from scope.Use
+	generator       *generator.Generator
+	scopeDef        *parser.Scope
+	scope           string
+	path            string
+	method          string
+	lastActionError string // captured when an action returns {ok: false}
 }
 
 func (sr *scopeRunner) scenarios() []*parser.Scenario {
@@ -189,7 +190,12 @@ func resolveConfigString(config map[string]parser.Expr, key string) string {
 }
 
 // executeInput sends an input map to the adapter and returns the parsed response.
+// When expectError is true, an action returning {ok: false} is captured as an
+// assertable error instead of failing the test. The captured error string is
+// stored in sr.lastActionError.
 func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error) {
+	sr.lastActionError = ""
+
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling input: %w", err)
@@ -205,7 +211,8 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
 	if !resp.OK {
-		return nil, fmt.Errorf("action %q failed: %s", actionName, resp.Error)
+		sr.lastActionError = resp.Error
+		return nil, nil
 	}
 
 	var output map[string]any
@@ -268,6 +275,7 @@ func (sr *scopeRunner) buildAction(inputJSON json.RawMessage) (string, json.RawM
 
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
 	var input map[string]any
+	expectsError := hasErrorPseudoAssertion(sc.Then, sr.scopeDef.Contract)
 
 	if hasCalls(sc.Given.Steps) {
 		// Step-by-step execution: calls go to the adapter in order,
@@ -275,13 +283,20 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 		var err error
 		input, err = sr.executeGivenSteps(sc.Given.Steps)
 		if err != nil {
-			return CheckResult{}, err
+			if !expectsError || sr.lastActionError == "" {
+				return CheckResult{}, err
+			}
+			// Action error was captured — continue to assertions.
 		}
 	} else {
 		// Request/response execution: collect all assignments, dispatch as one action.
 		input = stepsToMap(sc.Given.Steps)
 		if _, err := sr.executeInput(input); err != nil {
 			return CheckResult{}, err
+		}
+		// If action returned {ok: false} but scenario doesn't assert on error, fail.
+		if sr.lastActionError != "" && !expectsError {
+			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
 	}
 
@@ -318,7 +333,11 @@ func hasCalls(steps []parser.GivenStep) bool {
 
 // executeGivenSteps walks given block steps in order: calls go to the adapter,
 // assignments accumulate into the input context for assertion evaluation.
+// When an action returns {ok: false}, the error is captured in sr.lastActionError
+// and the remaining steps are skipped. The caller decides whether this is an
+// expected error (via hasErrorPseudoAssertion) or a test failure.
 func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]any, error) {
+	sr.lastActionError = ""
 	input := make(map[string]any)
 	for _, step := range steps {
 		switch s := step.(type) {
@@ -334,7 +353,8 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
 			}
 			if !resp.OK {
-				return nil, fmt.Errorf("action %s.%s failed: %s", s.Namespace, s.Method, resp.Error)
+				sr.lastActionError = resp.Error
+				return input, fmt.Errorf("action %s.%s failed: %s", s.Namespace, s.Method, resp.Error)
 			}
 		}
 	}
@@ -365,6 +385,7 @@ func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, erro
 func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error) {
 	predicate := buildPredicate(sc.When.Predicates)
 	needsPageIsolation := sc.Then != nil && hasPluginAssertions(sc.Then.Assertions)
+	expectsError := hasErrorPseudoAssertion(sc.Then, sr.scopeDef.Contract)
 
 	check := CheckResult{
 		Name:   sc.Name,
@@ -389,6 +410,14 @@ func (sr *scopeRunner) runWhenScenario(sc *parser.Scenario) (CheckResult, error)
 				sr.closePage() //nolint:errcheck
 			}
 			return CheckResult{}, err
+		}
+
+		// If action returned {ok: false} but scenario doesn't assert on error, fail.
+		if sr.lastActionError != "" && !expectsError {
+			if needsPageIsolation {
+				sr.closePage() //nolint:errcheck
+			}
+			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
 
 		check.InputsRun = i + 1
@@ -489,8 +518,32 @@ func buildPredicate(predicates []parser.Expr) func(map[string]any) bool {
 	}
 }
 
+// hasErrorPseudoAssertion returns true if the then block asserts on the "error"
+// pseudo-field (i.e., "error" is NOT a contract output field).
+func hasErrorPseudoAssertion(then *parser.Block, contract *parser.Contract) bool {
+	if then == nil {
+		return false
+	}
+	// If "error" is declared in the contract output, it's a real field, not a pseudo-field.
+	if contract != nil {
+		for _, f := range contract.Output {
+			if f.Name == "error" {
+				return false
+			}
+		}
+	}
+	for _, a := range then.Assertions {
+		if a.Target == "error" && a.Plugin == "" {
+			return true
+		}
+	}
+	return false
+}
+
 // checkThenAssertions checks all then-block assertions via the adapter.
 // Returns a Failure on the first failing assertion, or nil if all pass.
+// The "error" pseudo-field is handled specially: it asserts against the last
+// action error captured from an adapter {ok: false} response.
 func (sr *scopeRunner) checkThenAssertions(
 	name string,
 	input map[string]any,
@@ -504,6 +557,15 @@ func (sr *scopeRunner) checkThenAssertions(
 		expected, err := json.Marshal(val)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling expected for %q: %w", a.Target, err)
+		}
+
+		// Handle the "error" pseudo-field: assert against the last action error.
+		// Only intercept "error" if it's NOT declared as a contract output field.
+		if a.Target == "error" && a.Plugin == "" && !sr.hasOutputField("error") {
+			if f := sr.checkErrorAssertion(name, input, val, expected); f != nil {
+				return f, nil
+			}
+			continue
 		}
 
 		property := a.Target
@@ -534,6 +596,71 @@ func (sr *scopeRunner) checkThenAssertions(
 	return nil, nil
 }
 
+// hasOutputField returns true if the scope's contract declares a field with the given name.
+func (sr *scopeRunner) hasOutputField(name string) bool {
+	if sr.scopeDef.Contract == nil {
+		return false
+	}
+	for _, f := range sr.scopeDef.Contract.Output {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// checkErrorAssertion checks the "error" pseudo-field against the last captured action error.
+// If the expected value is null/nil, the assertion passes when no error occurred.
+// If the expected value is a string, the assertion passes when the error matches exactly.
+func (sr *scopeRunner) checkErrorAssertion(
+	name string,
+	input map[string]any,
+	expectedVal any,
+	expectedJSON json.RawMessage,
+) *Failure {
+	if expectedVal == nil {
+		// Asserting error: null — expect no error.
+		if sr.lastActionError == "" {
+			return nil // pass
+		}
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    "null",
+			Actual:      fmt.Sprintf("%q", sr.lastActionError),
+			Description: fmt.Sprintf("assertion \"error\" failed: expected no error, got %q", sr.lastActionError),
+		}
+	}
+
+	// Asserting error: "some string" — expect that specific error.
+	actualJSON, _ := json.Marshal(sr.lastActionError) //nolint:errcheck
+
+	if sr.lastActionError == "" {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    string(expectedJSON),
+			Actual:      `""`,
+			Description: fmt.Sprintf("assertion \"error\" failed: expected error %s, but no error occurred", string(expectedJSON)),
+		}
+	}
+
+	if string(actualJSON) == string(expectedJSON) {
+		return nil // pass
+	}
+
+	return &Failure{
+		Name:        name,
+		Scope:       sr.scope,
+		Input:       input,
+		Expected:    string(expectedJSON),
+		Actual:      string(actualJSON),
+		Description: fmt.Sprintf("assertion \"error\" failed: expected %s, got %s", string(expectedJSON), string(actualJSON)),
+	}
+}
+
 func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) {
 	check := CheckResult{
 		Name:   inv.Name,
@@ -550,6 +677,9 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 		output, err := sr.executeInput(input)
 		if err != nil {
 			return CheckResult{}, err
+		}
+		if sr.lastActionError != "" {
+			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
 
 		check.InputsRun = i + 1
@@ -585,10 +715,14 @@ func (sr *scopeRunner) shrinkFailure(f *Failure, then *parser.Block) *Failure {
 	}
 
 	fields := sr.generator.ContractInput()
+	expectsError := hasErrorPseudoAssertion(then, sr.scopeDef.Contract)
 	shrunk := generator.Shrink(
 		input, fields, models,
 		func(candidate map[string]any) bool {
 			if _, err := sr.executeInput(candidate); err != nil {
+				return false
+			}
+			if sr.lastActionError != "" && !expectsError {
 				return false
 			}
 			fail, err := sr.checkThenAssertions(f.Name, candidate, then)
@@ -620,7 +754,7 @@ func (sr *scopeRunner) shrinkInvariantFailure(f *Failure, inv *parser.Invariant)
 		input, fields, models,
 		func(candidate map[string]any) bool {
 			output, err := sr.executeInput(candidate)
-			if err != nil {
+			if err != nil || sr.lastActionError != "" {
 				return false
 			}
 			ctx := buildInvariantContext(candidate, output)

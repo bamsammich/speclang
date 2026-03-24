@@ -772,3 +772,81 @@ func TestFormatErrors(t *testing.T) {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
+	// "error" in then block should not trigger validation error when it's not
+	// a contract output field (it's the error pseudo-field).
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{{
+			Name: "test",
+			Use:  "http",
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "expect_error",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "something"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	errs := Validate(spec)
+	for _, e := range errs {
+		if contains(e.Error(), "error") && contains(e.Error(), "output field") {
+			t.Errorf("error pseudo-field should be allowed, got: %v", e)
+		}
+	}
+}
+
+func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
+	// When "error" IS a contract output field, "nonexistent" should still fail validation.
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{{
+			Name: "test",
+			Use:  "http",
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "error", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "check_fields",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "ok"}},
+						{Target: "nonexistent", Expected: parser.LiteralString{Value: "bad"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	errs := Validate(spec)
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "nonexistent") {
+			found = true
+		}
+		if contains(e.Error(), `"error"`) && contains(e.Error(), "output field") {
+			t.Errorf("error should be valid when declared in output, got: %v", e)
+		}
+	}
+	if !found {
+		t.Error("expected validation error for 'nonexistent' field")
+	}
+	_ = fmt.Sprintf("test") // keep fmt import
+}

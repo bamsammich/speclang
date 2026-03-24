@@ -439,3 +439,401 @@ func TestVerifyTransferSpec(t *testing.T) {
 		t.Errorf("expected 3 invariants passed, got %d", res.InvariantsPassed)
 	}
 }
+
+// failingAdapter returns {ok: false} on Action calls with a configurable error message.
+type failingAdapter struct {
+	errorMsg string
+}
+
+func (f *failingAdapter) Init(config map[string]string) error { return nil }
+func (f *failingAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
+	return &adapter.Response{OK: false, Error: f.errorMsg}, nil
+}
+func (f *failingAdapter) Assert(property string, locator string, expected json.RawMessage) (*adapter.Response, error) {
+	return &adapter.Response{OK: true, Actual: expected}, nil
+}
+func (f *failingAdapter) Close() error { return nil }
+
+func TestErrorPseudoField_GivenScenario_ExpectedError(t *testing.T) {
+	t.Parallel()
+
+	// Scenario expects an error and the adapter returns one — should pass.
+	spec := &parser.Spec{
+		Name: "ErrorTest",
+		Scopes: []*parser.Scope{{
+			Name: "fail_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/fail"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				// No "error" in output — triggers pseudo-field behavior.
+				Output: []*parser.Field{
+					{Name: "result", Type: parser.TypeExpr{Name: "string"}},
+				},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "expect_failure",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{
+							Target:   "error",
+							Expected: parser.LiteralString{Value: "something went wrong"},
+						},
+					},
+				},
+			}},
+		}},
+	}
+
+	adp := &failingAdapter{errorMsg: "something went wrong"}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+	if res.ScenariosPassed != 1 {
+		t.Errorf("expected 1 scenario passed, got %d", res.ScenariosPassed)
+	}
+}
+
+func TestErrorPseudoField_GivenScenario_ExpectedNull(t *testing.T) {
+	t.Parallel()
+
+	// Scenario asserts error: null but no error occurs — should pass.
+	spec := &parser.Spec{
+		Name: "ErrorNullTest",
+		Scopes: []*parser.Scope{{
+			Name: "ok_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/ok"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "no_error",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralNull{}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": mock}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+}
+
+func TestErrorPseudoField_GivenScenario_UnexpectedError(t *testing.T) {
+	t.Parallel()
+
+	// Scenario asserts error: null but an error occurs — should fail the assertion.
+	spec := &parser.Spec{
+		Name: "ErrorUnexpectedTest",
+		Scopes: []*parser.Scope{{
+			Name: "err_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/err"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "unexpected_error",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralNull{}},
+					},
+				},
+			}},
+		}},
+	}
+
+	adp := &failingAdapter{errorMsg: "oops"}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(res.Failures))
+	}
+	if res.Failures[0].Expected != "null" {
+		t.Errorf("expected null, got %q", res.Failures[0].Expected)
+	}
+}
+
+func TestErrorPseudoField_NoAssertion_ActionFails(t *testing.T) {
+	t.Parallel()
+
+	// Action fails but there's no error assertion — should be a test error.
+	spec := &parser.Spec{
+		Name: "ErrorNoAssertTest",
+		Scopes: []*parser.Scope{{
+			Name: "err_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/err"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "no_error_assertion",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				// No then block with error assertion.
+			}},
+		}},
+	}
+
+	adp := &failingAdapter{errorMsg: "oops"}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
+	_, err := r.Verify()
+	if err == nil {
+		t.Fatal("expected error when action fails without error assertion, got nil")
+	}
+}
+
+func TestErrorPseudoField_WrongMessage(t *testing.T) {
+	t.Parallel()
+
+	// Scenario expects error "foo" but gets "bar" — should fail assertion.
+	spec := &parser.Spec{
+		Name: "ErrorMismatchTest",
+		Scopes: []*parser.Scope{{
+			Name: "mismatch_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/fail"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "wrong_error",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "expected_error"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	adp := &failingAdapter{errorMsg: "different_error"}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(res.Failures))
+	}
+	if res.Failures[0].Expected != `"expected_error"` {
+		t.Errorf("expected %q, got %q", `"expected_error"`, res.Failures[0].Expected)
+	}
+	if res.Failures[0].Actual != `"different_error"` {
+		t.Errorf("actual %q, got %q", `"different_error"`, res.Failures[0].Actual)
+	}
+}
+
+func TestErrorPseudoField_ExpectedErrorButNoneOccurred(t *testing.T) {
+	t.Parallel()
+
+	// Scenario asserts error: "foo" but no error occurs — should fail.
+	spec := &parser.Spec{
+		Name: "ErrorExpectedButNone",
+		Scopes: []*parser.Scope{{
+			Name: "no_err_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/ok"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "expected_error_missing",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "should_fail"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": mock}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(res.Failures))
+	}
+}
+
+func TestErrorPseudoField_WithGivenCalls(t *testing.T) {
+	t.Parallel()
+
+	// Test error assertion with mixed given steps (calls + assignments).
+	spec := &parser.Spec{
+		Name: "ErrorCallTest",
+		Locators: map[string]string{
+			"submit": "[data-testid=submit]",
+		},
+		Scopes: []*parser.Scope{{
+			Name:   "call_scope",
+			Use:    "test",
+			Config: map[string]parser.Expr{},
+			Scenarios: []*parser.Scenario{{
+				Name: "call_fails",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						&parser.Call{
+							Namespace: "test",
+							Method:    "click",
+							Args:      []parser.Expr{parser.FieldRef{Path: "submit"}},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "click failed"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	adp := &failingAdapter{errorMsg: "click failed"}
+	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+}
+
+func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
+	t.Parallel()
+
+	// When "error" is a contract output field, it should go through the adapter's
+	// Assert method, not the pseudo-field handler. This test verifies the transfer
+	// spec pattern still works.
+	spec := &parser.Spec{
+		Name: "ContractErrorTest",
+		Scopes: []*parser.Scope{{
+			Name: "transfer",
+			Use:  "http",
+			Config: map[string]parser.Expr{
+				"path":   parser.LiteralString{Value: "/transfer"},
+				"method": parser.LiteralString{Value: "POST"},
+			},
+			Contract: &parser.Contract{
+				Input: []*parser.Field{
+					{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Output: []*parser.Field{
+					{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+				},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "check_error_field",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "amount", Value: parser.LiteralInt{Value: -1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "error", Expected: parser.LiteralString{Value: "invalid_amount"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /transfer", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"error": "invalid_amount"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	adp := adapter.NewHTTPAdapter()
+	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+}
