@@ -19,6 +19,9 @@ jobs:
       - name: Build
         run: go build -o ./specrun ./cmd/specrun
 
+      - name: Build echo_tool
+        run: go build -o ./echo_tool ./testdata/self/echo_tool
+
       - name: Test
         run: go test ./... -count=1
 
@@ -32,5 +35,16 @@ jobs:
           go run ./testdata/self/broken_server &
           sleep 1
 
+      - name: Start HTTP test server
+        run: |
+          go run ./testdata/self/http_server &
+          sleep 1
+
       - name: Self-verification
-        run: SPECRUN_BIN=./specrun APP_URL=http://localhost:8080 BROKEN_APP_URL=http://localhost:8081 ./specrun verify specs/speclang.spec
+        run: >-
+          SPECRUN_BIN=./specrun
+          APP_URL=http://localhost:8080
+          BROKEN_APP_URL=http://localhost:8081
+          HTTP_TEST_URL=http://localhost:8082
+          ECHO_TOOL_BIN=./echo_tool
+          ./specrun verify specs/speclang.spec
