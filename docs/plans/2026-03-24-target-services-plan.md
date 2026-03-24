@@ -25,6 +25,8 @@ In `pkg/parser/ast.go`, add after the `EnvRef` struct:
 ```go
 // ServiceRef references a named service from the target services block.
 // Resolves to the service's URL at runtime (e.g., "http://localhost:8080").
+// Docker must be available; if not, specrun errors. Use env() or a literal string
+// instead of service() for non-Docker environments.
 type ServiceRef struct {
 	Name string `json:"name"`
 }
@@ -480,7 +482,7 @@ case parser.ServiceRef:
 			return svc.URL
 		}
 	}
-	return fmt.Sprintf("service(%s)", e.Name) // unresolved — will error in adapter Init
+	return "" // service not running — adapter Init will error on empty URL
 ```
 
 **Step 3: Add `--keep-services` flag**
@@ -615,9 +617,7 @@ target {
 }
 ```
 
-Note: The `env()` fallback is removed. When services are declared, `service()` is the canonical way to reference them. Users without Docker can still override with `APP_URL` env var if we keep `env()` as a fallback, OR we document that Docker is required for this example. Decide: keep `env()` as a fallback alongside `service()`, or go all-in on services.
-
-**Recommended:** Keep backward compatibility. If `service()` can't start (no Docker), fall back gracefully. OR provide two example files: `examples/transfer.spec` (services) and `examples/transfer-external.spec` (env vars).
+`service(app)` starts the container and resolves to its URL. Docker is required. For environments without Docker, use the original `env(APP_URL, "http://localhost:8080")` form instead — the two are not mixed.
 
 **Step 2: Verify**
 
