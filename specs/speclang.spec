@@ -17,4 +17,5 @@ spec Speclang {
   include "enum.spec"
   include "exists.spec"
   include "error_assertions.spec"
+  include "shrinking.spec"
 }
