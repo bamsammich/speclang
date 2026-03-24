@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Playwright Test Page</title>
+</head>
+<body>
+  <h1 data-testid="heading">Test Page</h1>
+  <p data-testid="description">This page is used for Playwright adapter integration tests.</p>
+
+  <form data-testid="test-form">
+    <label for="name-input">Name:</label>
+    <input type="text" id="name-input" data-testid="name-input" value="" placeholder="Enter name">
+
+    <label for="email-input">Email:</label>
+    <input type="email" id="email-input" data-testid="email-input" value="" placeholder="Enter email">
+
+    <label for="color-select">Color:</label>
+    <select id="color-select" data-testid="color-select">
+      <option value="">--select--</option>
+      <option value="red">Red</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+    </select>
+
+    <label>
+      <input type="checkbox" id="agree-checkbox" data-testid="agree-checkbox">
+      I agree
+    </label>
+
+    <button type="button" id="submit-btn" data-testid="submit-btn" onclick="handleSubmit()">Submit</button>
+    <button type="button" id="disabled-btn" data-testid="disabled-btn" disabled>Disabled</button>
+  </form>
+
+  <div id="result" data-testid="result" style="display:none;"></div>
+
+  <ul data-testid="item-list">
+    <li class="item">Item 1</li>
+    <li class="item">Item 2</li>
+    <li class="item">Item 3</li>
+  </ul>
+
+  <script>
+    function handleSubmit() {
+      var name = document.getElementById('name-input').value;
+      var result = document.getElementById('result');
+      result.style.display = 'block';
+      result.textContent = 'Hello, ' + (name || 'anonymous') + '!';
+    }
+  </script>
+</body>
+</html>

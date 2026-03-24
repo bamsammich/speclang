@@ -13,4 +13,5 @@ spec Speclang {
   include "types.spec"
   include "generate_types.spec"
   include "cli_flags.spec"
+  include "adapters.spec"
 }

@@ -250,11 +250,18 @@ func TestSelfVerification_Parse(t *testing.T) {
 	brokenSrv := startBrokenTransferServer(t)
 	defer brokenSrv.Close()
 
+	httpTestSrv := startHTTPTestServer(t)
+	defer httpTestSrv.Close()
+
+	echoToolBin := buildEchoTool(t)
+
 	cmd := exec.Command(bin, "verify", "--json", "--iterations", "10", specFile)
 	cmd.Env = append(os.Environ(),
 		"SPECRUN_BIN="+bin,
 		"APP_URL="+srv.URL,
 		"BROKEN_APP_URL="+brokenSrv.URL,
+		"HTTP_TEST_URL="+httpTestSrv.URL,
+		"ECHO_TOOL_BIN="+echoToolBin,
 	)
 	// Set working dir to project root so relative paths in specs resolve correctly.
 	cmd.Dir = projectRoot
@@ -355,6 +362,90 @@ func startBrokenTransferServer(t *testing.T) *httptest.Server {
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+	return httptest.NewServer(mux)
+}
+
+// buildEchoTool builds the echo_tool binary for process adapter tests.
+func buildEchoTool(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "echo_tool")
+	absDir, err := filepath.Abs("../../testdata/self/echo_tool")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	cmd.Dir = absDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to build echo_tool: %v\n%s", err, out)
+	}
+	return bin
+}
+
+// startHTTPTestServer starts the HTTP adapter test server using httptest.
+func startHTTPTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /api/items", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "test-123")
+		w.Header().Set("Requestid", "test-123")
+		json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{
+				{"id": 1, "name": "alpha"},
+				{"id": 2, "name": "beta"},
+			},
+			"count": 2,
+		})
+	})
+
+	mux.HandleFunc("GET /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":   1,
+			"name": "alpha",
+			"tags": []string{"first", "primary"},
+		})
+	})
+
+	mux.HandleFunc("POST /api/items", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body["id"] = 42
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(body)
+	})
+
+	mux.HandleFunc("PUT /api/items/1", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body["id"] = 1
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(body)
+	})
+
+	mux.HandleFunc("DELETE /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"deleted": true})
+	})
+
+	mux.HandleFunc("GET /api/headers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"auth":         r.Header.Get("Authorization"),
+			"custom":       r.Header.Get("X-Custom"),
+			"content_type": r.Header.Get("Content-Type"),
+		})
 	})
 	return httptest.NewServer(mux)
 }
