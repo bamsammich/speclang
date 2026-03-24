@@ -35,7 +35,11 @@ func main() {
 	case "install":
 		os.Exit(runInstall(os.Args[2:]))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1]) //nolint:gosec // CLI writing to stderr, not a web response
+		fmt.Fprintf(
+			os.Stderr,
+			"unknown command: %s\n",
+			os.Args[1],
+		) //nolint:gosec // CLI writing to stderr, not a web response
 		os.Exit(1)
 	}
 }
@@ -43,7 +47,10 @@ func main() {
 func validateSpec(spec *parser.Spec) int {
 	errs := validator.Validate(spec)
 	if len(errs) > 0 {
-		fmt.Fprint(os.Stderr, validator.FormatErrors(errs)) //nolint:gosec // CLI writing to stderr, not a web response
+		fmt.Fprint(
+			os.Stderr,
+			validator.FormatErrors(errs),
+		) //nolint:gosec // CLI writing to stderr, not a web response
 		return 1
 	}
 	return 0
@@ -294,7 +301,11 @@ func runInstall(args []string) int {
 		fmt.Println("Playwright browsers installed successfully.")
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "unknown plugin %q (supported: playwright)\n", args[0]) //nolint:gosec // CLI writing to stderr, not a web response
+		fmt.Fprintf(
+			os.Stderr,
+			"unknown plugin %q (supported: playwright)\n",
+			args[0],
+		) //nolint:gosec // CLI writing to stderr, not a web response
 		return 1
 	}
 }

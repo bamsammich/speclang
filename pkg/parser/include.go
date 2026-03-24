@@ -51,7 +51,8 @@ func resolveIncludes(
 		// Consume include + string path
 		includeTok := tokens[i]
 		i++
-		if i >= len(tokens) || tokens[i].Type != TokenString { //nolint:gosec // bounds check on left side of || guards the access
+		if i >= len(tokens) ||
+			tokens[i].Type != TokenString { //nolint:gosec // bounds check on left side of || guards the access
 			return nil, fmt.Errorf("%s:%d:%d: include requires a string path",
 				includeTok.File, includeTok.Line, includeTok.Col)
 		}

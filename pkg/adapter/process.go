@@ -61,7 +61,9 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 		cmdArgs = append(cmdArgs, s)
 	}
 
-	cmd := exec.Command(a.Command, cmdArgs...) //nolint:gosec // process adapter intentionally executes user-specified commands from spec config
+	cmd := exec.Command(
+		a.Command,
+		cmdArgs...) //nolint:gosec // process adapter intentionally executes user-specified commands from spec config
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
