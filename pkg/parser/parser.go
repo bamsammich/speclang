@@ -978,7 +978,7 @@ func infixPrec(typ TokenType) int {
 		return precComparison
 	case TokenPlus, TokenMinus:
 		return precAdditive
-	case TokenStar:
+	case TokenStar, TokenSlash, TokenPercent:
 		return precMultiply
 	default:
 		return precNone
@@ -994,8 +994,10 @@ var opStrings = map[TokenType]string{
 	TokenLte:   "<=",
 	TokenPlus:  "+",
 	TokenMinus: "-",
-	TokenStar:  "*",
-	TokenAnd:   "&&",
+	TokenStar:    "*",
+	TokenSlash:   "/",
+	TokenPercent: "%",
+	TokenAnd:     "&&",
 	TokenOr:    "||",
 }
 

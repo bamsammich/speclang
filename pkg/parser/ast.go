@@ -159,7 +159,7 @@ type EnvRef struct {
 type BinaryOp struct {
 	Left  Expr   `json:"left,omitempty"`
 	Right Expr   `json:"right,omitempty"`
-	Op    string `json:"op"` // ==, !=, >, <, >=, <=, +, -, *, &&, ||
+	Op    string `json:"op"` // ==, !=, >, <, >=, <=, +, -, *, /, %, &&, ||
 }
 
 type UnaryOp struct {

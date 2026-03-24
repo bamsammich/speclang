@@ -69,13 +69,13 @@ func TestLexTransferSpec(t *testing.T) {
 }
 
 func TestLexOperators(t *testing.T) {
-	tokens, err := Lex("== != > < >= <= + - * && ||")
+	tokens, err := Lex("== != > < >= <= + - * / % && ||")
 	if err != nil {
 		t.Fatal(err)
 	}
 	expected := []TokenType{
 		TokenEq, TokenNeq, TokenGt, TokenLt, TokenGte, TokenLte,
-		TokenPlus, TokenMinus, TokenStar, TokenAnd, TokenOr, TokenEOF,
+		TokenPlus, TokenMinus, TokenStar, TokenSlash, TokenPercent, TokenAnd, TokenOr, TokenEOF,
 	}
 	if len(tokens) != len(expected) {
 		t.Fatalf("expected %d tokens, got %d", len(expected), len(tokens))

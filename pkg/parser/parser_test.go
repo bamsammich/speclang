@@ -471,6 +471,36 @@ func TestParseExprPrecedence(t *testing.T) {
 			},
 		},
 		{
+			name:  "division at multiplicative precedence",
+			input: "spec T { scope s { use http invariant i { a + b / c } } }",
+			checkFn: func(t *testing.T, expr parser.Expr) {
+				t.Helper()
+				plus, ok := expr.(parser.BinaryOp)
+				if !ok || plus.Op != "+" {
+					t.Fatalf("expected +, got %v", expr)
+				}
+				div, ok := plus.Right.(parser.BinaryOp)
+				if !ok || div.Op != "/" {
+					t.Errorf("expected / on right of +, got %v", plus.Right)
+				}
+			},
+		},
+		{
+			name:  "modulo at multiplicative precedence",
+			input: "spec T { scope s { use http invariant i { a + b % c } } }",
+			checkFn: func(t *testing.T, expr parser.Expr) {
+				t.Helper()
+				plus, ok := expr.(parser.BinaryOp)
+				if !ok || plus.Op != "+" {
+					t.Fatalf("expected +, got %v", expr)
+				}
+				mod, ok := plus.Right.(parser.BinaryOp)
+				if !ok || mod.Op != "%" {
+					t.Errorf("expected %% on right of +, got %v", plus.Right)
+				}
+			},
+		},
+		{
 			name:  "unary negation",
 			input: "spec T { scope s { use http invariant i { !a } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
