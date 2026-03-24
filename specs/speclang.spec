@@ -33,4 +33,5 @@ spec Speclang {
   include "error_assertions.spec"
   include "shrinking.spec"
   include "import.spec"
+  include "services.spec"
 }
