@@ -100,6 +100,7 @@ func doTransfer(t *testing.T, a *HTTPAdapter, fromBalance, toBalance, amount int
 // --- extractPath unit tests ---
 
 func TestExtractPath_TopLevel(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{"name": "alice"}
 	val, err := extractPath(obj, "name")
 	if err != nil {
@@ -111,6 +112,7 @@ func TestExtractPath_TopLevel(t *testing.T) {
 }
 
 func TestExtractPath_Nested(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"from": map[string]any{"balance": float64(70)},
 	}
@@ -124,6 +126,7 @@ func TestExtractPath_Nested(t *testing.T) {
 }
 
 func TestExtractPath_MissingKey(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{"name": "alice"}
 	_, err := extractPath(obj, "missing")
 	if err == nil {
@@ -132,6 +135,7 @@ func TestExtractPath_MissingKey(t *testing.T) {
 }
 
 func TestExtractPath_NonMapIntermediate(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{"name": "alice"}
 	_, err := extractPath(obj, "name.sub")
 	if err == nil {
@@ -140,6 +144,7 @@ func TestExtractPath_NonMapIntermediate(t *testing.T) {
 }
 
 func TestExtractPath_NullValue(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{"error": nil}
 	val, err := extractPath(obj, "error")
 	if err != nil {
@@ -151,6 +156,7 @@ func TestExtractPath_NullValue(t *testing.T) {
 }
 
 func TestExtractPath_ArrayIndex(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"items": []any{"alpha", "beta", "gamma"},
 	}
@@ -164,6 +170,7 @@ func TestExtractPath_ArrayIndex(t *testing.T) {
 }
 
 func TestExtractPath_ArrayIndexNested(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"scopes": []any{
 			map[string]any{"name": "transfer", "passed": true},
@@ -180,6 +187,7 @@ func TestExtractPath_ArrayIndexNested(t *testing.T) {
 }
 
 func TestExtractPath_ArrayIndexOutOfRange(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"items": []any{"alpha"},
 	}
@@ -190,6 +198,7 @@ func TestExtractPath_ArrayIndexOutOfRange(t *testing.T) {
 }
 
 func TestExtractPath_ArrayNegativeIndex(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"items": []any{"alpha"},
 	}
@@ -200,6 +209,7 @@ func TestExtractPath_ArrayNegativeIndex(t *testing.T) {
 }
 
 func TestExtractPath_ObjectInArray(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"failures": []any{
 			map[string]any{
@@ -219,6 +229,7 @@ func TestExtractPath_ObjectInArray(t *testing.T) {
 }
 
 func TestExtractPath_ArrayInArray(t *testing.T) {
+	t.Parallel()
 	obj := map[string]any{
 		"matrix": []any{
 			[]any{1, 2},
@@ -237,6 +248,7 @@ func TestExtractPath_ArrayInArray(t *testing.T) {
 // --- Integration tests ---
 
 func TestAction_PostSuccess(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -260,6 +272,7 @@ func TestAction_PostSuccess(t *testing.T) {
 }
 
 func TestAction_PostInsufficientFunds(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -275,6 +288,7 @@ func TestAction_PostInsufficientFunds(t *testing.T) {
 }
 
 func TestAssert_Status(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -290,6 +304,7 @@ func TestAssert_Status(t *testing.T) {
 }
 
 func TestAssert_NestedBodyField(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -305,6 +320,7 @@ func TestAssert_NestedBodyField(t *testing.T) {
 }
 
 func TestAssert_ErrorNull(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -320,6 +336,7 @@ func TestAssert_ErrorNull(t *testing.T) {
 }
 
 func TestAssert_ErrorString(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -335,6 +352,7 @@ func TestAssert_ErrorString(t *testing.T) {
 }
 
 func TestAssert_BeforeRequest(t *testing.T) {
+	t.Parallel()
 	a, err := NewHTTPAdapter()
 	if err != nil {
 		t.Fatal(err)
@@ -348,6 +366,7 @@ func TestAssert_BeforeRequest(t *testing.T) {
 }
 
 func TestAction_Header(t *testing.T) {
+	t.Parallel()
 	var receivedAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
@@ -383,6 +402,7 @@ func TestAction_Header(t *testing.T) {
 }
 
 func TestAction_Unknown(t *testing.T) {
+	t.Parallel()
 	a, err := NewHTTPAdapter()
 	if err != nil {
 		t.Fatal(err)
@@ -396,6 +416,7 @@ func TestAction_Unknown(t *testing.T) {
 }
 
 func TestAssert_Header(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -411,6 +432,7 @@ func TestAssert_Header(t *testing.T) {
 }
 
 func TestAssert_FailureMismatch(t *testing.T) {
+	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
@@ -490,6 +512,7 @@ func multiStepMux() *http.ServeMux {
 }
 
 func TestMultiStep_CreateThenVerify(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
@@ -540,6 +563,7 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 }
 
 func TestMultiStep_HeaderPersistence(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
@@ -585,6 +609,7 @@ func TestMultiStep_HeaderPersistence(t *testing.T) {
 }
 
 func TestMultiStep_CookiePersistence(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 
@@ -626,6 +651,7 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 }
 
 func TestMultiStep_ErrorInMiddle(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(multiStepMux())
 	defer srv.Close()
 

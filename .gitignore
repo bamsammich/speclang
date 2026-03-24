@@ -39,3 +39,4 @@ go.work.sum
 
 # Built binaries
 /specrun
+/echo_tool

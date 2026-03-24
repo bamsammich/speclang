@@ -268,28 +268,44 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	t.Run("failed login shows error", func(t *testing.T) {
 		// Navigate fresh.
 		gotoArgs := mustMarshal(t, []string{"/login"})
-		if _, err := adp.Action("goto", gotoArgs); err != nil {
-			t.Fatalf("goto: %v", err)
+		resp, err := adp.Action("goto", gotoArgs)
+		if err != nil {
+			t.Fatalf("setup action failed: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("setup action failed: %s", resp.Error)
 		}
 
 		fillUser := mustMarshal(t, []string{"[data-testid=username]", "bob"})
-		if _, err := adp.Action("fill", fillUser); err != nil {
-			t.Fatalf("fill username: %v", err)
+		resp, err = adp.Action("fill", fillUser)
+		if err != nil {
+			t.Fatalf("setup action failed: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("setup action failed: %s", resp.Error)
 		}
 
 		fillPass := mustMarshal(t, []string{"[data-testid=password]", "wrong"})
-		if _, err := adp.Action("fill", fillPass); err != nil {
-			t.Fatalf("fill password: %v", err)
+		resp, err = adp.Action("fill", fillPass)
+		if err != nil {
+			t.Fatalf("setup action failed: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("setup action failed: %s", resp.Error)
 		}
 
 		clickArgs := mustMarshal(t, []string{"[data-testid=submit]"})
-		if _, err := adp.Action("click", clickArgs); err != nil {
-			t.Fatalf("click: %v", err)
+		resp, err = adp.Action("click", clickArgs)
+		if err != nil {
+			t.Fatalf("setup action failed: %v", err)
+		}
+		if !resp.OK {
+			t.Fatalf("setup action failed: %s", resp.Error)
 		}
 
 		// Error should be visible.
 		expected := mustMarshal(t, true)
-		resp, err := adp.Assert("visible", "[data-testid=error]", expected)
+		resp, err = adp.Assert("visible", "[data-testid=error]", expected)
 		if err != nil {
 			t.Fatalf("assert error visible: %v", err)
 		}

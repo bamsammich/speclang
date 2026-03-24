@@ -6,6 +6,7 @@ import (
 )
 
 func TestLexTransferSpec(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile("../../examples/transfer.spec")
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
@@ -69,6 +70,7 @@ func TestLexTransferSpec(t *testing.T) {
 }
 
 func TestLexOperators(t *testing.T) {
+	t.Parallel()
 	tokens, err := Lex("== != > < >= <= + - * / % && ||")
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +90,7 @@ func TestLexOperators(t *testing.T) {
 }
 
 func TestLexStringEscape(t *testing.T) {
+	t.Parallel()
 	tokens, err := Lex(`"hello \"world\""`)
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +99,7 @@ func TestLexStringEscape(t *testing.T) {
 }
 
 func TestLexUnterminatedString(t *testing.T) {
+	t.Parallel()
 	_, err := Lex(`"unterminated`)
 	if err == nil {
 		t.Fatal("expected error for unterminated string")
@@ -103,6 +107,7 @@ func TestLexUnterminatedString(t *testing.T) {
 }
 
 func TestLexComments(t *testing.T) {
+	t.Parallel()
 	tokens, err := Lex("foo # this is a comment\nbar")
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +120,7 @@ func TestLexComments(t *testing.T) {
 }
 
 func TestLexInclude(t *testing.T) {
+	t.Parallel()
 	tokens, err := Lex(`include "models.spec"`)
 	if err != nil {
 		t.Fatal(err)
@@ -127,6 +133,7 @@ func TestLexInclude(t *testing.T) {
 }
 
 func TestTokenFileField(t *testing.T) {
+	t.Parallel()
 	tok := Token{Type: TokenIdent, Value: "foo", File: "test.spec", Line: 1, Col: 1}
 	if tok.File != "test.spec" {
 		t.Fatalf("expected File=test.spec, got %q", tok.File)

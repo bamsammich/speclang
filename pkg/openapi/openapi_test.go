@@ -14,6 +14,7 @@ func testdataPath(name string) string {
 }
 
 func TestResolve_Petstore(t *testing.T) {
+	t.Parallel()
 	r := &Resolver{}
 	models, scopes, err := r.Resolve(testdataPath("petstore.yaml"))
 	if err != nil {
@@ -34,6 +35,7 @@ func TestResolve_Petstore(t *testing.T) {
 }
 
 func TestConvertSchemas_Petstore(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("petstore.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +68,7 @@ func TestConvertSchemas_Petstore(t *testing.T) {
 }
 
 func TestConvertSchemas_Constraints(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("constraints.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +118,7 @@ func TestConvertSchemas_Constraints(t *testing.T) {
 }
 
 func TestConvertSchemas_Refs(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("refs.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +155,7 @@ func TestConvertSchemas_Refs(t *testing.T) {
 }
 
 func TestConvertSchemas_Empty(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("empty.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +168,7 @@ func TestConvertSchemas_Empty(t *testing.T) {
 }
 
 func TestConvertPaths_Petstore(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("petstore.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -200,6 +206,7 @@ func TestConvertPaths_Petstore(t *testing.T) {
 }
 
 func TestConvertPaths_Empty(t *testing.T) {
+	t.Parallel()
 	doc, err := loadDocument(testdataPath("empty.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -212,6 +219,7 @@ func TestConvertPaths_Empty(t *testing.T) {
 }
 
 func TestSanitizeScopeName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		method, path string
 		want         string
@@ -222,14 +230,21 @@ func TestSanitizeScopeName(t *testing.T) {
 		{"DELETE", "/api/v1/users/{id}/roles", "delete_api_v1_users_id_roles"},
 	}
 	for _, tt := range tests {
-		got := sanitizeScopeName(tt.method, tt.path)
-		if got != tt.want {
-			t.Errorf("sanitizeScopeName(%q, %q) = %q, want %q", tt.method, tt.path, got, tt.want)
-		}
+		t.Run(tt.method+"_"+tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := sanitizeScopeName(tt.method, tt.path)
+			if got != tt.want {
+				t.Errorf(
+					"sanitizeScopeName(%q, %q) = %q, want %q",
+					tt.method, tt.path, got, tt.want,
+				)
+			}
+		})
 	}
 }
 
 func TestLoadDocument_InvalidFile(t *testing.T) {
+	t.Parallel()
 	_, err := loadDocument("/nonexistent/file.yaml")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")

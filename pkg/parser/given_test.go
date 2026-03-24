@@ -3,6 +3,7 @@ package parser
 import "testing"
 
 func TestParseGivenBlock_Assignments(t *testing.T) {
+	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   scope test {
@@ -39,6 +40,7 @@ spec Test {
 }
 
 func TestParseGivenBlock_ActionCalls(t *testing.T) {
+	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   scope test {

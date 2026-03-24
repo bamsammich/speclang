@@ -3,6 +3,7 @@ package parser
 import "testing"
 
 func TestParseThenBlock_AtSyntax(t *testing.T) {
+	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   locators {
@@ -54,6 +55,7 @@ spec Test {
 }
 
 func TestParseThenBlock_PathAssertion_Unchanged(t *testing.T) {
+	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   scope test {
