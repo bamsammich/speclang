@@ -37,6 +37,42 @@ func specrunBin(t *testing.T) string {
 	return bin
 }
 
+func TestHelp_RootCommand(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+	cmd := exec.Command(bin, "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--help failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	for _, want := range []string{"parse", "generate", "verify", "install"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("--help missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHelp_VerifyCommand(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+	cmd := exec.Command(bin, "verify", "--help")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify --help failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	for _, want := range []string{"--seed", "--iterations", "--json", "--keep-services"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("verify --help missing %q:\n%s", want, output)
+		}
+	}
+	// --no-services should NOT appear (it's now an env var)
+	if strings.Contains(output, "--no-services") {
+		t.Errorf("verify --help should not contain --no-services:\n%s", output)
+	}
+}
+
 func TestParse_ValidSpec(t *testing.T) {
 	bin := specrunBin(t)
 
