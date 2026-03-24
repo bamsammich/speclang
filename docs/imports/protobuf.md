@@ -33,14 +33,14 @@ service UserService {
 Write a speclang spec that imports it:
 
 ```
-use http
-
 spec UserAPI {
   target {
     base_url: env(APP_URL, "http://localhost:8080")
   }
 
   import proto("api.proto")
+
+  # Each imported scope needs a `use <plugin>` declaration added.
 }
 ```
 
@@ -124,7 +124,7 @@ Each **unary** RPC method becomes a scope:
 
 ## Example
 
-See [`examples/proto/`](../examples/proto/) for a complete example importing a User service.
+See [`examples/proto/`](../../examples/proto/) for a complete example importing a User service.
 
 ## Technical Details
 
