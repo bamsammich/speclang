@@ -29,7 +29,7 @@ type HTTPAdapter struct {
 }
 
 func NewHTTPAdapter() *HTTPAdapter {
-	jar, _ := cookiejar.New(nil) // cookiejar.New only errors on invalid PublicSuffixList
+	jar, _ := cookiejar.New(nil) //nolint:errcheck // cookiejar.New only errors on invalid PublicSuffixList, nil is always valid
 	return &HTTPAdapter{
 		client:  &http.Client{Jar: jar},
 		headers: make(map[string]string),
@@ -64,7 +64,7 @@ func (a *HTTPAdapter) doRequest(method, path string, body json.RawMessage) (*Res
 		req.Header.Set(k, v)
 	}
 
-	resp, err := a.client.Do(req)
+	resp, err := a.client.Do(req) //nolint:gosec // HTTP adapter intentionally sends requests to user-configured URLs from spec
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}

@@ -51,11 +51,11 @@ func resolveIncludes(
 		// Consume include + string path
 		includeTok := tokens[i]
 		i++
-		if i >= len(tokens) || tokens[i].Type != TokenString {
+		if i >= len(tokens) || tokens[i].Type != TokenString { //nolint:gosec // bounds check on left side of || guards the access
 			return nil, fmt.Errorf("%s:%d:%d: include requires a string path",
 				includeTok.File, includeTok.Line, includeTok.Col)
 		}
-		relPath := tokens[i].Value
+		relPath := tokens[i].Value //nolint:gosec // i is bounds-checked on line above
 
 		// Resolve relative to the including file's directory
 		absInclude, err := filepath.Abs(filepath.Join(dir, relPath))

@@ -61,9 +61,7 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 		cmdArgs = append(cmdArgs, s)
 	}
 
-	cmd := exec.Command(
-		a.Command,
-		cmdArgs...) //nolint:gosec // process adapter intentionally executes user-specified commands from spec config
+	cmd := exec.Command(a.Command, cmdArgs...) //nolint:gosec // process adapter intentionally executes user-specified commands from spec config
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -83,10 +81,8 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	stderr := stderrBuf.String()
 
 	var parsed map[string]any
-	_ = json.Unmarshal(
-		[]byte(strings.TrimSpace(stdout)),
-		&parsed,
-	) //nolint:errcheck // intentional best-effort
+	//nolint:errcheck // best-effort JSON parse; stdout may not be JSON
+	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout)), &parsed)
 
 	// Build the result that gets returned as Actual (for the runner's executeInput)
 	result := map[string]any{

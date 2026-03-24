@@ -188,7 +188,7 @@ func generateBytes(rng *rand.Rand) string {
 	}
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = byte(rng.IntN(256))
+		b[i] = byte(rng.IntN(256)) //nolint:gosec // IntN(256) returns 0-255, always fits in byte
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
