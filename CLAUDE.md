@@ -12,215 +12,33 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 
 ## Core Language Design
 
+See [docs/language-reference.md](docs/language-reference.md) for the complete syntax reference.
+
 ### Settled Decisions
 
 - **Calling convention**: `verb(args)` universally — both built-in primitives and user-defined actions
-- **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout). Built-in plugins cover common use cases; external plugins extend the system without modifying specrun.
-- **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level. Each scope independently declares which plugin drives it.
+- **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout)
+- **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level
 - **Namespaced calls**: Plugin methods are called as `plugin.method()` (e.g., `playwright.fill(locator, value)`)
 - **Assertion syntax in `then` blocks**: `locator@plugin.property: expected` (e.g., `error_msg@playwright.visible: true`)
-- **Error pseudo-field**: `error` in `then` blocks asserts against action errors when `error` is NOT a contract output field. When an adapter action returns `{ok: false}`, the error string is captured and assertable via `then { error: "expected message" }`. Use `error: null` to assert no error occurred.
+- **Error pseudo-field**: `error` in `then` blocks asserts against action errors when `error` is NOT a contract output field
 - **Three scenario types** (ascending verification strength):
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
   - `invariant` — universal law, must hold for ALL valid inputs
-- **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC.
-- **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks. Each scope has an opaque `config` block for plugin-specific settings (e.g., HTTP path/method). The parser is agnostic to config semantics.
-- **Counterexample shrinking**: When a failure is found, the runtime performs binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively) to produce minimal counterexamples.
-- **Built-in functions**:
-  - `len(expr)` — returns length of string, array, or map
-  - `contains(haystack, needle)` — returns `bool`. String haystack + string needle performs substring check; `[]any` haystack + any needle performs element membership check.
-  - `exists(expr)` — returns `true` if path resolves to a value (including `null`), `false` if path doesn't exist
-  - `has_key(expr, "key")` — returns `true` if map contains the specified key
+- **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC
+- **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks with opaque `config` blocks
+- **Counterexample shrinking**: Binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively)
 
-### Spec File Structure
+### Language Features
 
-```
-include "<path>"                     # top-level include
-
-spec <Name> {
-
-  description: "<description>"            # optional, for AI context
-
-  target {
-    base_url: env(APP_URL)          # optional, plugin-dependent config
-  }
-
-  include "<path>"                   # spec-body include
-  import openapi("<path>")           # import models/scopes from OpenAPI schema
-  import proto("<path>")             # import models/scopes from protobuf schema
-
-  locators {                         # named selectors for UI specs
-    <name>: [<css-selector>]
-  }
-
-  model <Name> {
-    <field>: <type>                    # int, float, string, bytes, bool, any,
-                                       # []T, map[K,V], enum("a","b",...), ModelName
-                                       # append ? for optional: string?, enum(...)?
-    <field>: <type> { <constraint> }
-  }
-
-  action <name>(<args>) {
-    <plugin>.<verb>(<args>)
-  }
-
-  scope <name> {
-    use <plugin>                      # declares which plugin drives this scope
-
-    config {                          # opaque key-value pairs, passed to adapter
-      path: "/api/v1/resource"
-      method: "POST"
-    }
-
-    contract {
-      input {
-        <field>: <type>
-      }
-      output {
-        <field>: <type>
-      }
-    }
-
-    invariant <name> {
-      when <predicate>:
-        <assertion>
-    }
-
-    scenario <name> {
-      given {                        # concrete assignments and/or action calls
-        <field>: <value>
-        <plugin>.<verb>(<args>)
-      }
-      when { ... }                   # predicate (generative) OR action sequence
-      then {                         # assertions
-        <locator>@<plugin>.<property>: <expected>
-      }
-    }
-  }
-}
-```
-
-### Include Directive
-
-`include "path/to/file.spec"` splices the contents of another file at the point of inclusion. The included file's tokens are inserted directly into the token stream, so the content must be syntactically valid at that position.
-
-- **Paths are relative** to the including file's directory
-- **Recursive includes** are supported (A includes B which includes C)
-- **Circular includes** are detected and produce a clear error
-- **Duplicate model or scope names** across included files produce an error
-- **Downstream transparency**: generator, runner, and adapter see a single merged `*Spec` — no include-awareness needed
-
-The include is resolved at the token level (pass 1) before parsing (pass 2). The parser has zero awareness of includes.
-
-### Import Directive
-
-`import <adapter>("path")` imports models and scopes from an external schema file. The adapter name determines the format (currently only `openapi` is supported).
-
-```
-import openapi("schema.yaml")
-```
-
-- **Paths are relative** to the spec file's directory
-- **OpenAPI 3.x** (YAML or JSON) schemas are supported via [kin-openapi](https://github.com/getkin/kin-openapi)
-- **Models** are generated from `components/schemas` (object types with properties)
-- **Scopes** are generated from `paths` (each path+method → scope with config and contract)
-- **Type mapping**: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name
-- **Constraints**: `minimum`/`maximum` → field constraint expressions
-- **Unsupported types** (array, float, enum) are skipped with a warning
-- **Duplicate model or scope names** between imported and hand-written produce an error
-- **Downstream transparency**: generator, runner, and adapter see standard AST nodes — no import-awareness needed
-
-The import is resolved at parse time. The parser dispatches to a pluggable `ImportResolver` based on the adapter name.
-
-### Scope and Declaration Rules
-
-- **Scope**: A named grouping that owns a contract, invariants, and scenarios. Plugin-specific config (path, method for HTTP; selectors for Playwright) goes in an opaque `config` block. The parser has zero awareness of config semantics — they're passed through to the adapter.
-- Each scope must declare `use <plugin>` to specify which adapter drives it. Different scopes in the same spec can use different plugins.
-- Contracts, invariants, and scenarios must live inside a scope (not at spec top-level).
-
-### Expressions
-
-Expressions appear in constraints, invariants, `when` predicates, and `then` assertions.
-
-- **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
-- **Field references**: `from.balance`, `output.error`
-- **Environment**: `env(VAR)`, `env(VAR, "default")`
-- **Objects**: `{ id: "alice", balance: 100 }`
-- **Arrays**: `[1, 2, 3]`
-- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
-- **Functions**: `len(expr)`
-- **Conditionals**: `if condition then expr else expr` — condition must evaluate to bool, returns the then-branch or else-branch value. Nesting is supported with parentheses: `if a then (if b then x else y) else z`
-
-### Plugin Definition
-
-```
-plugin <name> {
-  adapter: "<binary-name>"          # must be on PATH
-
-  actions {
-    <verb>(<param>: <type>, ...)
-  }
-
-  assertions {
-    <property>: <type>
-  }
-}
-```
-
-### Adapter Protocol (JSON over stdin/stdout)
-
-This protocol applies to **external** adapters (subprocess communication). **Built-in adapters** (http, process, playwright) implement the same `Adapter` interface in Go directly — no JSON IPC, no subprocess.
-
-**Action request:**
-```json
-{"type": "action", "name": "goto", "args": ["/transfer"]}
-```
-
-**Action response:**
-```json
-{"ok": true}
-```
-
-**Assertion request:**
-```json
-{"type": "assert", "locator": "[data-testid=error-msg]", "property": "visible", "expected": true}
-```
-
-**Assertion response:**
-```json
-{"ok": true, "actual": true}
-```
-
-**Error response:**
-```json
-{"ok": false, "error": "element not found"}
-```
-
-### Error Pseudo-Field
-
-`error` is a special pseudo-field in `then` blocks that asserts against adapter action errors. It activates only when `error` is NOT declared in the scope's contract output fields. When `error` IS a contract output field, it behaves as a normal field assertion.
-
-When an adapter's `Action()` returns `{ok: false, error: "..."}`, the error string is captured instead of failing the test. The `then` block can then assert on it:
-
-```
-then {
-  error: "element not found"     # expect this specific error
-}
-```
-
-```
-then {
-  error: null                     # expect no error
-}
-```
-
-Behavior:
-- If `error` is asserted and the action fails, the error string is compared against the expected value.
-- If `error` is asserted as `null` and no error occurred, the assertion passes.
-- If `error` is asserted but no error occurred, the assertion fails.
-- If an action fails but `error` is NOT asserted in `then`, the test fails as before (backward compatible).
-- If `error` is declared in the contract's output fields, it's treated as a regular output field — not the pseudo-field.
+- **Types**: `int`, `float`, `string`, `bytes`, `bool`, `any`, `[]T` (array), `map[K,V]`, `enum("a","b",...)`, model references, `T?` (optional)
+- **Expressions**: all arithmetic/comparison/logical operators, chained comparisons (`0 < x <= y`), division (`/`), modulo (`%`)
+- **Built-in functions**: `len()`, `contains()`, `exists()`, `has_key()`, `all(arr, x => pred)`, `any(arr, x => pred)`
+- **Conditional expressions**: `if cond then a else b`
+- **Include/Import**: `include "path"`, `import openapi("path")`, `import proto("path")`
+- **Dot-path array indexing**: `items.0.name` for array element access
+- **Compile-time validation**: type checking, model resolution, given completeness, then field validation
 
 ### Anti-Gaming Properties
 
@@ -254,16 +72,18 @@ spec files (.spec)              implementation (black box)
          Verdict + Minimal Counterexamples
 ```
 
+## Adapters
+
+| Plugin | Use case | Docs |
+|--------|----------|------|
+| `http` | REST APIs | [docs/adapters/http.md](docs/adapters/http.md) |
+| `process` | CLI tools / subprocesses | [docs/adapters/process.md](docs/adapters/process.md) |
+| `playwright` | Browser UIs | [docs/adapters/playwright.md](docs/adapters/playwright.md) |
+
 ## Prototype Scope
 
 Phase 1: **HTTP plugin + runtime core**
-- Parser: spec files → AST
-- Generator: contract → random valid inputs
-- HTTP adapter: built-in (Go stdlib, no subprocess needed)
-- Runner: execute generated inputs, check assertions and invariants
-- Target: verify a trivial HTTP API (e.g., bank transfer endpoint)
-
-Phase 2: **Playwright plugin + built-in adapter** (scope-level `use`, locators, action sequences in `given`)
+Phase 2: **Playwright plugin + built-in adapter**
 Phase 3: Go unit plugin + adapter
 Phase 4: Metamorphic relation support
 
@@ -291,6 +111,17 @@ speclang/
 ├── cmd/
 │   └── specrun/          # CLI entrypoint
 │       └── main.go
+├── docs/
+│   ├── getting-started.md
+│   ├── language-reference.md
+│   ├── self-verification.md
+│   ├── adapters/
+│   │   ├── http.md
+│   │   ├── process.md
+│   │   └── playwright.md
+│   └── imports/
+│       ├── openapi.md
+│       └── protobuf.md
 ├── pkg/
 │   ├── parser/           # spec file → AST
 │   │   ├── lexer.go
@@ -382,141 +213,22 @@ go test ./...                                                   # run all tests
 ./specrun install playwright                                    # install playwright browsers (chromium)
 ```
 
-## HTTP Adapter
-
-The HTTP adapter (`use http`) tests HTTP APIs. It supports single-request scopes (via `config` with `path` and `method`) and multi-step workflows (via action calls in `given` blocks).
-
-### Config (from `target` block)
-
-- `base_url` — API base URL (required); supports `env()` expressions
-
-### Config (from scope `config` block)
-
-- `path` — request path (for single-request scopes)
-- `method` — HTTP method: GET, POST, PUT, DELETE (for single-request scopes)
-
-### Actions
-
-- `http.get(path)` — GET request
-- `http.post(path, body)` — POST request with JSON body
-- `http.put(path, body)` — PUT request with JSON body
-- `http.delete(path)` — DELETE request
-- `http.header(name, value)` — set a persistent header for all subsequent requests
-
-### Assertions
-
-- `status` — HTTP status code (int)
-- `body` — full response body (parsed JSON)
-- `header.<name>` — response header value
-- `<field.path>` — dot-path traversal into JSON response body
-
-### Multi-step `given` blocks
-
-HTTP scopes support action calls in `given` blocks for multi-step workflows. Headers and cookies persist across calls within a scenario. `then` assertions apply to the last response.
-
-```
-scope create_and_verify {
-  use http
-
-  scenario create_then_get {
-    given {
-      http.post("/api/resources", { name: "widget" })
-      http.get("/api/resources/1")
-    }
-    then {
-      status: 200
-      name: "widget"
-    }
-  }
-}
-```
-
-When `given` contains only field assignments (no action calls), the scope's `config` block `path` and `method` determine the single request. When `given` contains action calls, each call executes independently and `config` is not used for request dispatch.
-
-## Process Adapter
-
-The process adapter (`use process`) executes subprocesses and asserts against their output. It mirrors the HTTP adapter's pattern.
-
-### Config (from `target` block)
-
-- `command` — binary to run (required)
-
-### Config (from scope `config` block)
-
-- `args` — base arguments prepended to every exec call (optional, space-separated)
-
-### Action: `exec`
-
-Runs `command [...args] [...input_fields]`. Captures exit code, stdout (best-effort JSON parse), and stderr.
-
-### Assertions
-
-- `exit_code` — integer comparison
-- `stdout` — full parsed JSON body (or raw string if not JSON)
-- `stdout.field.path` — dot-path traversal into parsed JSON
-- `stdout.items.0.name` — numeric segment in dot-path indexes into a JSON array by position
-- `stderr` — raw string
-
-## Playwright Adapter
-
-The playwright adapter (`use playwright`) drives a browser via [playwright-go](https://github.com/playwright-community/playwright-go) and is compiled into specrun (no subprocess). It uses the `locators` block for named CSS selectors and supports interleaved action calls and field assignments in `given` blocks.
-
-### Config (from `target` block)
-
-- `base_url` — browser start URL (required)
-
-### Actions
-
-- `playwright.goto(url)` — navigate to URL
-- `playwright.fill(locator, value)` — fill an input
-- `playwright.click(locator)` — click an element
-
-### Assertions
-
-- `<locator>@playwright.visible: <bool>` — element visibility
-- `<locator>@playwright.text: <string>` — element text content
-- `<locator>@playwright.value: <string>` — input value
-
-`<locator>` is either a named locator from the spec's `locators` block or a raw CSS selector string.
-
-### Mixed `given` blocks
-
-`given` blocks may interleave field assignments and action calls. This works with any adapter that supports action calls (Playwright and HTTP):
-
-```
-# Playwright example
-given {
-  amount: 1000
-  playwright.goto("/transfer")
-  playwright.fill(amount_input, amount)
-  playwright.click(submit_btn)
-}
-
-# HTTP multi-step example
-given {
-  http.header("Authorization", "Bearer token")
-  http.post("/api/items", { name: "widget" })
-  http.get("/api/items/1")
-}
-```
-
 ## Self-Verification
 
-Speclang verifies itself with its own specs via `specs/speclang.spec`. This is black-box verification through the runtime — speclang is both the verifier and the system under test.
+Speclang verifies itself with its own specs via `specs/speclang.spec`. See [docs/self-verification.md](docs/self-verification.md) for details.
 
 The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior:
 
-- **parse_valid** — verifies the parser accepts valid specs and produces expected AST structure
-- **parse_invalid** — verifies the parser rejects malformed specs with exit code 1
-- **import_openapi** — verifies OpenAPI imports produce correct models (names, fields, types, optionality) and scopes
-- **import_openapi_constraints** — verifies minimum/maximum constraints are preserved from OpenAPI schemas
-- **import_openapi_refs** — verifies $ref fields resolve to correct model type names
-- **import_proto** — verifies protobuf imports produce correct models (names, fields, types) and scopes from service RPCs
-- **import_proto_streaming** — verifies streaming RPCs are skipped, only unary RPCs produce scopes
-- **generate** — verifies the generator produces constraint-satisfying outputs across seeds
-- **verify_pass** — verifies that `specrun verify` passes correct implementations
-- **verify_fail** — verifies that `specrun verify` detects incorrect implementations
-- **shrinking** — verifies that counterexample shrinking produces minimal values (ints near boundary, empty strings, zero balances)
+- **parse_valid** — parser accepts valid specs and produces expected AST structure
+- **parse_invalid** — parser rejects malformed specs with exit code 1
+- **parse_validation** — parser validates types and produces type errors
+- **import_openapi_*** — OpenAPI imports produce correct models, constraints, and refs
+- **import_proto_*** — protobuf imports produce correct models and scopes
+- **generate** — generator produces constraint-satisfying outputs across seeds
+- **generate_types** — generator handles all types (float, bytes, arrays, maps, optionals)
+- **verify_pass** — `specrun verify` passes correct implementations
+- **verify_fail** — `specrun verify` detects incorrect implementations
+- **shrinking** — counterexample shrinking produces minimal values
 
 Run self-verification:
 ```bash
