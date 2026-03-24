@@ -1146,6 +1146,9 @@ func (p *parser) parseAtom() (Expr, error) {
 		}
 		return expr, nil
 
+	case TokenIf:
+		return p.parseIfExpr()
+
 	default:
 		// Built-in functions: len(expr), exists(expr), has_key(expr, key)
 		if tok.Type == TokenIdent && tok.Value == "len" {
@@ -1258,6 +1261,30 @@ func (p *parser) parseHasKeyExpr() (Expr, error) {
 		return nil, err
 	}
 	return HasKeyExpr{Arg: arg, Key: key}, nil
+}
+
+// parseIfExpr parses: if expr then expr else expr
+func (p *parser) parseIfExpr() (Expr, error) {
+	p.advance() // consume "if"
+	cond, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenThen); err != nil {
+		return nil, err
+	}
+	thenExpr, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenElse); err != nil {
+		return nil, err
+	}
+	elseExpr, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return IfExpr{Condition: cond, Then: thenExpr, Else: elseExpr}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")

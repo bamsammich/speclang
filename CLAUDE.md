@@ -139,6 +139,19 @@ The import is resolved at parse time. The parser dispatches to a pluggable `Impo
 - Each scope must declare `use <plugin>` to specify which adapter drives it. Different scopes in the same spec can use different plugins.
 - Contracts, invariants, and scenarios must live inside a scope (not at spec top-level).
 
+### Expressions
+
+Expressions appear in constraints, invariants, `when` predicates, and `then` assertions.
+
+- **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
+- **Field references**: `from.balance`, `output.error`
+- **Environment**: `env(VAR)`, `env(VAR, "default")`
+- **Objects**: `{ id: "alice", balance: 100 }`
+- **Arrays**: `[1, 2, 3]`
+- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `&&`, `||`, `!`
+- **Functions**: `len(expr)`
+- **Conditionals**: `if condition then expr else expr` — condition must evaluate to bool, returns the then-branch or else-branch value. Nesting is supported with parentheses: `if a then (if b then x else y) else z`
+
 ### Plugin Definition
 
 ```

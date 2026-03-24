@@ -68,6 +68,17 @@ scope parse_valid {
     }
   }
 
+  # Verifies that if/then/else conditional expressions parse correctly.
+  scenario if_expr {
+    given {
+      file: "testdata/self/if_expr.spec"
+    }
+    then {
+      exit_code: 0
+      name: "IfExprTest"
+    }
+  }
+
   # Verifies that playwright spec syntax (locators, @assertions, mixed given) parses.
   scenario playwright_spec {
     given {

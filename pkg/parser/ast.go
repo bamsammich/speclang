@@ -203,6 +203,12 @@ type RegexLiteral struct {
 	Pattern string `json:"pattern"`
 }
 
+type IfExpr struct {
+	Condition Expr `json:"condition"`
+	Then      Expr `json:"then"`
+	Else      Expr `json:"else"`
+}
+
 func (LiteralInt) exprNode()    {}
 func (LiteralFloat) exprNode()  {}
 func (LiteralString) exprNode() {}
@@ -219,3 +225,4 @@ func (ContainsExpr) exprNode()  {}
 func (ExistsExpr) exprNode()    {}
 func (HasKeyExpr) exprNode()    {}
 func (RegexLiteral) exprNode()  {}
+func (IfExpr) exprNode()        {}
