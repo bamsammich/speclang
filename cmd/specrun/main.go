@@ -166,6 +166,7 @@ type verifyOpts struct {
 	iterations   int
 	jsonOutput   bool
 	keepServices bool
+	noServices   bool
 }
 
 func parseVerifyOpts(args []string) (*verifyOpts, error) {
@@ -177,12 +178,13 @@ func parseVerifyOpts(args []string) (*verifyOpts, error) {
 	fs.BoolVar(
 		&opts.keepServices, "keep-services", false, "keep containers running after verification",
 	)
+	fs.BoolVar(&opts.noServices, "no-services", false, "skip service lifecycle management")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	if fs.NArg() < 1 {
 		return nil, errors.New(
-			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services]",
+			"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services] [--no-services]",
 		)
 	}
 	opts.specFile = fs.Arg(0)
@@ -270,6 +272,9 @@ func startServices(
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
+	if opts.noServices {
+		return nil, nil, nil
+	}
 	cfg := buildInfraConfig(spec, opts.specFile)
 	manager, err := infra.NewManager(cfg)
 	if err != nil {
@@ -463,18 +468,25 @@ func closeAdapters(adapters map[string]adapter.Adapter) {
 	}
 }
 
-func resolveTargetConfig(target *parser.Target, services []infra.RunningService) map[string]string {
+func resolveTargetConfig(
+	target *parser.Target,
+	services []infra.RunningService,
+) map[string]string {
 	config := make(map[string]string)
 	if target == nil {
 		return config
 	}
 	for key, expr := range target.Fields {
-		config[key] = resolveExprToString(expr, services)
+		config[key] = resolveExprToString(expr, target, services)
 	}
 	return config
 }
 
-func resolveExprToString(expr parser.Expr, services []infra.RunningService) string {
+func resolveExprToString(
+	expr parser.Expr,
+	target *parser.Target,
+	services []infra.RunningService,
+) string {
 	switch e := expr.(type) {
 	case parser.LiteralString:
 		return e.Value
@@ -484,15 +496,32 @@ func resolveExprToString(expr parser.Expr, services []infra.RunningService) stri
 		}
 		return e.Default
 	case parser.ServiceRef:
-		for _, svc := range services {
-			if svc.Name == e.Name {
-				return svc.URL
-			}
-		}
-		return "" // service not running
+		return resolveServiceURL(e.Name, target, services)
 	default:
 		return fmt.Sprintf("%v", e)
 	}
+}
+
+// resolveServiceURL finds the URL for a named service. It checks running
+// services first, then falls back to the declared port (for --no-services mode).
+func resolveServiceURL(
+	name string,
+	target *parser.Target,
+	services []infra.RunningService,
+) string {
+	for _, svc := range services {
+		if svc.Name == name {
+			return svc.URL
+		}
+	}
+	if target != nil {
+		for _, svc := range target.Services {
+			if svc.Name == name && svc.Port > 0 {
+				return fmt.Sprintf("http://localhost:%d", svc.Port)
+			}
+		}
+	}
+	return ""
 }
 
 // buildInfraConfig constructs an infra.Config from the spec's target block.
