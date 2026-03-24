@@ -21,6 +21,8 @@ func Validate(spec *parser.Spec) []error {
 		models: buildModelRegistry(spec.Models),
 	}
 
+	v.validateServiceRefs(spec)
+
 	for _, scope := range spec.Scopes {
 		v.scope = scope.Name
 		v.validateContract(scope)
@@ -292,12 +294,41 @@ func (v *validator) checkModelType(expr parser.Expr, te parser.TypeExpr, context
 func isNonLiteral(expr parser.Expr) bool {
 	switch expr.(type) {
 	case parser.FieldRef, parser.BinaryOp, parser.UnaryOp,
-		parser.EnvRef, parser.LenExpr, parser.AllExpr, parser.AnyExpr,
+		parser.EnvRef, parser.ServiceRef, parser.LenExpr, parser.AllExpr, parser.AnyExpr,
 		parser.ContainsExpr, parser.ExistsExpr, parser.HasKeyExpr,
 		parser.RegexLiteral, parser.IfExpr:
 		return true
 	}
 	return false
+}
+
+// validateServiceRefs checks that every service() reference in target fields
+// refers to a declared service or that a compose file is set (compose services
+// are external and not declared inline).
+func (v *validator) validateServiceRefs(spec *parser.Spec) {
+	if spec.Target == nil {
+		return
+	}
+
+	// Build set of declared service names.
+	declared := make(map[string]bool, len(spec.Target.Services))
+	for _, svc := range spec.Target.Services {
+		declared[svc.Name] = true
+	}
+
+	hasCompose := spec.Target.Compose != ""
+
+	for key, expr := range spec.Target.Fields {
+		ref, ok := expr.(parser.ServiceRef)
+		if !ok {
+			continue
+		}
+		if hasCompose || declared[ref.Name] {
+			continue
+		}
+		v.errs = append(v.errs,
+			fmt.Errorf("target field %q: service(%s) references undeclared service", key, ref.Name))
+	}
 }
 
 func typeName(te parser.TypeExpr) string {
