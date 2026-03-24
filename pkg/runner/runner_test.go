@@ -142,9 +142,14 @@ func TestRelationalAssertions(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]int
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]int{"sum": req["a"] + req["b"]})
+		if err := json.NewEncoder(w).Encode(map[string]int{"sum": req["a"] + req["b"]}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -367,7 +372,9 @@ func TestGivenStepExecution(t *testing.T) {
 		t.Errorf("action 0: name = %q, want 'fill'", mock.actionCalls[0].Name)
 	}
 	var fillArgs []any
-	json.Unmarshal(mock.actionCalls[0].Args, &fillArgs)
+	if err := json.Unmarshal(mock.actionCalls[0].Args, &fillArgs); err != nil {
+		t.Fatalf("unmarshal fill args: %v", err)
+	}
 	if len(fillArgs) != 2 {
 		t.Fatalf("fill: expected 2 args, got %d", len(fillArgs))
 	}
@@ -383,7 +390,9 @@ func TestGivenStepExecution(t *testing.T) {
 		t.Errorf("action 1: name = %q, want 'click'", mock.actionCalls[1].Name)
 	}
 	var clickArgs []any
-	json.Unmarshal(mock.actionCalls[1].Args, &clickArgs)
+	if err := json.Unmarshal(mock.actionCalls[1].Args, &clickArgs); err != nil {
+		t.Fatalf("unmarshal click args: %v", err)
+	}
 	if len(clickArgs) != 1 || clickArgs[0] != "[data-testid=submit]" {
 		t.Errorf("click args = %v, want [[data-testid=submit]]", clickArgs)
 	}
@@ -455,20 +464,29 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		created = map[string]any{"id": 1, "name": body["name"]}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
-		json.NewEncoder(w).Encode(created)
+		if err := json.NewEncoder(w).Encode(created); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
 		if created == nil {
 			w.WriteHeader(404)
-			w.Write([]byte(`{"error":"not_found"}`))
+			if _, err := w.Write([]byte(`{"error":"not_found"}`)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(created)
+		if err := json.NewEncoder(w).Encode(created); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

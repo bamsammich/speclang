@@ -486,7 +486,10 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 
 	url := resolveConfigString(sr.scopeDef.Config, "url")
 	if url != "" {
-		args, _ := json.Marshal([]string{url})
+		args, err := json.Marshal([]string{url})
+		if err != nil {
+			return fmt.Errorf("marshaling goto args: %w", err)
+		}
 		resp, err := sr.adapter.Action("goto", args)
 		if err != nil {
 			return fmt.Errorf("navigating to %q: %w", url, err)
@@ -646,7 +649,8 @@ func (sr *scopeRunner) checkErrorAssertion(
 	}
 
 	// Asserting error: "some string" — expect that specific error.
-	actualJSON, _ := json.Marshal(sr.lastActionError) //nolint:errcheck
+	//nolint:errcheck // json.Marshal on a string value cannot fail
+	actualJSON, _ := json.Marshal(sr.lastActionError)
 
 	if sr.lastActionError == "" {
 		return &Failure{

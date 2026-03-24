@@ -29,9 +29,11 @@ type HTTPAdapter struct {
 }
 
 func NewHTTPAdapter() *HTTPAdapter {
-	jar, _ := cookiejar.New(
-		nil,
-	) //nolint:errcheck // cookiejar.New only errors on invalid PublicSuffixList, nil is always valid
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		// cookiejar.New only errors on invalid PublicSuffixList; nil is always valid.
+		panic(fmt.Sprintf("cookiejar.New: %v", err))
+	}
 	return &HTTPAdapter{
 		client:  &http.Client{Jar: jar},
 		headers: make(map[string]string),
