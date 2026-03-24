@@ -11,6 +11,13 @@ import (
 	"github.com/bamsammich/speclang/v2/pkg/runner"
 )
 
+// writeJSON encodes v as JSON to w, falling back to a 500 error if encoding fails.
+func writeJSON(w http.ResponseWriter, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func transferHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		From struct {
@@ -147,7 +154,8 @@ func TestRelationalAssertions(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]int{"sum": req["a"] + req["b"]}); err != nil {
+		if err := json.NewEncoder(w).
+			Encode(map[string]int{"sum": req["a"] + req["b"]}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
@@ -553,7 +561,7 @@ func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/echo-headers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, map[string]any{
 			"auth": r.Header.Get("Authorization"),
 		})
 	})
@@ -1006,7 +1014,7 @@ func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /transfer", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"error": "invalid_amount"})
+		writeJSON(w, map[string]any{"error": "invalid_amount"})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

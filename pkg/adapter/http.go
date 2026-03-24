@@ -68,9 +68,8 @@ func (a *HTTPAdapter) doRequest(method, path string, body json.RawMessage) (*Res
 		req.Header.Set(k, v)
 	}
 
-	resp, err := a.client.Do(
-		req,
-	) //nolint:gosec // HTTP adapter intentionally sends requests to user-configured URLs from spec
+	//nolint:gosec // HTTP adapter intentionally sends requests to user-configured URLs from spec
+	resp, err := a.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
