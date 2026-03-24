@@ -24,6 +24,12 @@ type Config struct {
 	Services    []ServiceDef // inline service definitions
 }
 
+// compile-time interface checks.
+var (
+	_ ServiceManager = (*DockerManager)(nil)
+	_ ServiceManager = (*ComposeManager)(nil)
+)
+
 // ServiceDef mirrors parser.Service with resolved paths.
 type ServiceDef struct {
 	Env     map[string]string
@@ -33,4 +39,16 @@ type ServiceDef struct {
 	Image   string // pre-built image
 	Health  string // HTTP health path
 	Port    int    // static port (0 = dynamic)
+}
+
+// NewManager creates a ServiceManager based on the config.
+// Returns nil if no services are declared.
+func NewManager(cfg Config) (ServiceManager, error) {
+	if cfg.ComposePath != "" {
+		return NewComposeManager(cfg)
+	}
+	if len(cfg.Services) > 0 {
+		return NewDockerManager(cfg)
+	}
+	return nil, nil
 }
