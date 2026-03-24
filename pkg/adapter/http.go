@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"reflect"
 	"strconv"
 	"strings"
@@ -28,8 +29,9 @@ type HTTPAdapter struct {
 }
 
 func NewHTTPAdapter() *HTTPAdapter {
+	jar, _ := cookiejar.New(nil) // cookiejar.New only errors on invalid PublicSuffixList
 	return &HTTPAdapter{
-		client:  &http.Client{},
+		client:  &http.Client{Jar: jar},
 		headers: make(map[string]string),
 	}
 }

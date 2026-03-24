@@ -151,6 +151,62 @@ spec HTTPAdapterTest {
     }
   }
 
+  # Multi-step workflow — POST to create, then GET to verify
+  scope http_multi_step {
+    use http
+
+    contract {
+      input {
+        name: string
+      }
+      output {
+        status: any
+        id: int
+        name: string
+      }
+    }
+
+    scenario create_then_verify {
+      given {
+        name: "widget"
+        http.post("/api/resources", { name: "widget" })
+        http.get("/api/resources/1")
+      }
+      then {
+        status: 200
+        id: 1
+        name: "widget"
+      }
+    }
+  }
+
+  # Multi-step with header persistence — set header, then make two requests
+  scope http_multi_step_headers {
+    use http
+
+    contract {
+      input {}
+      output {
+        status: any
+        auth: string
+        custom: string
+      }
+    }
+
+    scenario headers_persist_across_calls {
+      given {
+        http.header("Authorization", "Bearer multi-token")
+        http.header("X-Custom", "persistent-value")
+        http.get("/api/headers")
+      }
+      then {
+        status: 200
+        auth: "Bearer multi-token"
+        custom: "persistent-value"
+      }
+    }
+  }
+
   # Header action — set persistent headers then make a request
   scope http_header {
     use http

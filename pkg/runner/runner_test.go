@@ -392,6 +392,160 @@ func TestGivenStepExecution(t *testing.T) {
 	}
 }
 
+func TestMultiStepHTTPGivenBlock(t *testing.T) {
+	t.Parallel()
+
+	// Spec with multi-step HTTP given block: POST to create, then GET to verify.
+	spec := &parser.Spec{
+		Name: "MultiStepHTTP",
+		Scopes: []*parser.Scope{{
+			Name:   "workflow",
+			Use:    "http",
+			Config: map[string]parser.Expr{},
+			Scenarios: []*parser.Scenario{{
+				Name: "create_then_verify",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						// http.post("/api/resources", { name: "widget" })
+						&parser.Call{
+							Namespace: "http",
+							Method:    "post",
+							Args: []parser.Expr{
+								parser.LiteralString{Value: "/api/resources"},
+								parser.ObjectLiteral{Fields: []*parser.ObjField{
+									{Key: "name", Value: parser.LiteralString{Value: "widget"}},
+								}},
+							},
+						},
+						// http.get("/api/resources/1")
+						&parser.Call{
+							Namespace: "http",
+							Method:    "get",
+							Args: []parser.Expr{
+								parser.LiteralString{Value: "/api/resources/1"},
+							},
+						},
+						// name: "widget" (for assertion evaluation)
+						&parser.Assignment{Path: "name", Value: parser.LiteralString{Value: "widget"}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "name", Expected: parser.FieldRef{Path: "name"}},
+						{Target: "id", Expected: parser.LiteralInt{Value: 1}},
+					},
+				},
+			}},
+		}},
+	}
+
+	// Server with state: POST creates, GET retrieves
+	var created map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		created = map[string]any{"id": 1, "name": body["name"]}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		json.NewEncoder(w).Encode(created)
+	})
+	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
+		if created == nil {
+			w.WriteHeader(404)
+			w.Write([]byte(`{"error":"not_found"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(created)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	adp := adapter.NewHTTPAdapter()
+	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+	if res.ScenariosRun != 1 || res.ScenariosPassed != 1 {
+		t.Errorf("expected 1/1 scenarios passed, got %d/%d", res.ScenariosPassed, res.ScenariosRun)
+	}
+}
+
+func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
+	t.Parallel()
+
+	spec := &parser.Spec{
+		Name: "HeaderPersist",
+		Scopes: []*parser.Scope{{
+			Name:   "auth_flow",
+			Use:    "http",
+			Config: map[string]parser.Expr{},
+			Scenarios: []*parser.Scenario{{
+				Name: "headers_persist",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						// http.header("Authorization", "Bearer tok")
+						&parser.Call{
+							Namespace: "http",
+							Method:    "header",
+							Args: []parser.Expr{
+								parser.LiteralString{Value: "Authorization"},
+								parser.LiteralString{Value: "Bearer tok"},
+							},
+						},
+						// http.get("/api/echo-headers")
+						&parser.Call{
+							Namespace: "http",
+							Method:    "get",
+							Args: []parser.Expr{
+								parser.LiteralString{Value: "/api/echo-headers"},
+							},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "auth", Expected: parser.LiteralString{Value: "Bearer tok"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/echo-headers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"auth": r.Header.Get("Authorization"),
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	adp := adapter.NewHTTPAdapter()
+	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
+	res, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(res.Failures) > 0 {
+		t.Errorf("expected no failures, got: %s", res.Failures[0].Description)
+	}
+}
+
 func TestVerifyTransferSpec(t *testing.T) {
 	spec, err := parser.ParseFile("../../examples/transfer.spec")
 	if err != nil {
