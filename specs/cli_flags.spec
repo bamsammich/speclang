@@ -1,4 +1,47 @@
-# Verifies CLI flag behaviors: seeds, iterations, JSON output, error handling, flag positioning.
+# Verifies CLI flag behaviors: seeds, iterations, JSON output, error handling, flag positioning, help output.
+
+# --help exits zero and is handled by urfave/cli.
+scope cli_help {
+  use process
+  config {
+    args: "--help"
+  }
+
+  contract {
+    input {}
+    output {
+      exit_code: int
+    }
+  }
+
+  scenario help_exits_zero {
+    given {}
+    then {
+      exit_code: 0
+    }
+  }
+}
+
+scope cli_verify_help {
+  use process
+  config {
+    args: "verify --help"
+  }
+
+  contract {
+    input {}
+    output {
+      exit_code: int
+    }
+  }
+
+  scenario verify_help_exits_zero {
+    given {}
+    then {
+      exit_code: 0
+    }
+  }
+}
 
 # Different seeds produce different generated output.
 # Seed 1 and seed 2 produce different amounts for the transfer scope.
@@ -176,7 +219,7 @@ scope cli_missing_args_parse {
 }
 
 # Flag position flexibility: flags before or after spec file produce same output.
-# generate supports flexible flag positioning via splitFlagsAndPositional.
+# urfave/cli handles interspersed flags natively.
 scope generate_flags_after {
   use process
   config {
