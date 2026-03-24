@@ -295,7 +295,8 @@ speclang/
 │   ├── speclang.spec     # root: use process, includes parse/generate/verify
 │   ├── parse.spec        # parse_valid + parse_invalid scopes
 │   ├── generate.spec     # generator constraint satisfaction
-│   └── verify.spec       # verify_pass scope
+│   ├── verify.spec       # verify_pass scope
+│   └── verify_fail.spec  # verify_fail scope (broken implementation detection)
 └── testdata/
     ├── include/          # multi-file include test fixtures
     │   ├── basic/        # root includes models + scopes
@@ -400,6 +401,7 @@ The self-verification spec uses the process adapter to invoke `specrun` subcomma
 - **parse_invalid** — verifies the parser rejects malformed specs with exit code 1
 - **generate** — verifies the generator produces constraint-satisfying outputs across seeds
 - **verify_pass** — verifies that `specrun verify` passes correct implementations
+- **verify_fail** — verifies that `specrun verify` detects incorrect implementations
 
 Run self-verification:
 ```bash

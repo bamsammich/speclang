@@ -27,5 +27,10 @@ jobs:
           go run ./examples/server &
           sleep 1
 
+      - name: Start broken server
+        run: |
+          go run ./testdata/self/broken_server &
+          sleep 1
+
       - name: Self-verification
-        run: SPECRUN_BIN=./specrun APP_URL=http://localhost:8080 ./specrun verify specs/speclang.spec
+        run: SPECRUN_BIN=./specrun APP_URL=http://localhost:8080 BROKEN_APP_URL=http://localhost:8081 ./specrun verify specs/speclang.spec
