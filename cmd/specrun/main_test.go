@@ -2,22 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// writeJSON is a test helper that encodes v as JSON to the response writer,
-// falling back to a 500 error if encoding fails.
-func writeJSON(w http.ResponseWriter, v any) {
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
 
 // specrunBin builds the specrun binary to a temp dir and returns its path.
 func specrunBin(t *testing.T) string {
@@ -202,10 +192,9 @@ func TestGenerate_Reproducible(t *testing.T) {
 }
 
 func TestVerify_JSON(t *testing.T) {
-	bin := specrunBin(t)
+	skipIfNoDocker(t)
 
-	srv := startTransferServer(t)
-	defer srv.Close()
+	bin := specrunBin(t)
 
 	specFile, err := filepath.Abs("../../examples/transfer.spec")
 	if err != nil {
@@ -213,7 +202,6 @@ func TestVerify_JSON(t *testing.T) {
 	}
 
 	cmd := exec.Command(bin, "verify", "--json", "--seed", "42", "--iterations", "10", specFile)
-	cmd.Env = append(os.Environ(), "APP_URL="+srv.URL)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("specrun verify --json failed: %v\n%s", err, out)
@@ -317,10 +305,9 @@ func TestSelfVerification_Parse(t *testing.T) {
 }
 
 func TestVerify_HumanOutput(t *testing.T) {
-	bin := specrunBin(t)
+	skipIfNoDocker(t)
 
-	srv := startTransferServer(t)
-	defer srv.Close()
+	bin := specrunBin(t)
 
 	specFile, err := filepath.Abs("../../examples/transfer.spec")
 	if err != nil {
@@ -328,7 +315,6 @@ func TestVerify_HumanOutput(t *testing.T) {
 	}
 
 	cmd := exec.Command(bin, "verify", "--seed", "42", "--iterations", "10", specFile)
-	cmd.Env = append(os.Environ(), "APP_URL="+srv.URL)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("verify failed: %v\n%s", err, out)
@@ -355,51 +341,6 @@ func TestVerify_HumanOutput(t *testing.T) {
 	}
 }
 
-// startBrokenTransferServer returns a test server that credits the to-account
-// but never debits the from-account (conservation invariant violation).
-func startBrokenTransferServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			From struct {
-				ID      string `json:"id"`
-				Balance int    `json:"balance"`
-			} `json:"from"`
-			To struct {
-				ID      string `json:"id"`
-				Balance int    `json:"balance"`
-			} `json:"to"`
-			Amount int `json:"amount"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := map[string]any{
-			"from":  map[string]any{"id": req.From.ID, "balance": req.From.Balance},
-			"to":    map[string]any{"id": req.To.ID, "balance": req.To.Balance},
-			"error": nil,
-		}
-		switch {
-		case req.Amount <= 0:
-			resp["error"] = "invalid_amount"
-		case req.Amount > req.From.Balance:
-			resp["error"] = "insufficient_funds"
-		default:
-			// BUG: only credits to-account, does NOT debit from-account
-			resp["to"] = map[string]any{
-				"id": req.To.ID, "balance": req.To.Balance + req.Amount,
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-	return httptest.NewServer(mux)
-}
-
 // buildEchoTool builds the echo_tool binary for process adapter tests.
 func buildEchoTool(t *testing.T) string {
 	t.Helper()
@@ -418,99 +359,6 @@ func buildEchoTool(t *testing.T) string {
 	return bin
 }
 
-// startHTTPTestServer starts the HTTP adapter test server using httptest.
-func startHTTPTestServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /api/items", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Request-Id", "test-123")
-		w.Header().Set("Requestid", "test-123")
-		writeJSON(w, map[string]any{
-			"items": []map[string]any{
-				{"id": 1, "name": "alpha"},
-				{"id": 2, "name": "beta"},
-			},
-			"count": 2,
-		})
-	})
-
-	mux.HandleFunc("GET /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, map[string]any{
-			"id":   1,
-			"name": "alpha",
-			"tags": []string{"first", "primary"},
-		})
-	})
-
-	mux.HandleFunc("POST /api/items", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		body["id"] = 42
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, body)
-	})
-
-	mux.HandleFunc("PUT /api/items/1", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		body["id"] = 1
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, body)
-	})
-
-	mux.HandleFunc("DELETE /api/items/1", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, map[string]any{"deleted": true})
-	})
-
-	mux.HandleFunc("GET /api/headers", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, map[string]any{
-			"auth":         r.Header.Get("Authorization"),
-			"custom":       r.Header.Get("X-Custom"),
-			"content_type": r.Header.Get("Content-Type"),
-		})
-	})
-
-	// Multi-step workflow endpoints
-	var createdResource map[string]any
-
-	mux.HandleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		createdResource = map[string]any{"id": 1, "name": body["name"]}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, createdResource)
-	})
-
-	mux.HandleFunc("GET /api/resources/1", func(w http.ResponseWriter, _ *http.Request) {
-		if createdResource == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			writeJSON(w, map[string]any{"error": "not_found"})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, createdResource)
-	})
-
-	return httptest.NewServer(mux)
-}
-
 // skipIfNoDocker skips the test if Docker is not available.
 func skipIfNoDocker(t *testing.T) {
 	t.Helper()
@@ -522,49 +370,4 @@ func skipIfNoDocker(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Skip("skipping: docker daemon not running")
 	}
-}
-
-func startTransferServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			From struct {
-				ID      string `json:"id"`
-				Balance int    `json:"balance"`
-			} `json:"from"`
-			To struct {
-				ID      string `json:"id"`
-				Balance int    `json:"balance"`
-			} `json:"to"`
-			Amount int `json:"amount"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := map[string]any{
-			"from":  map[string]any{"id": req.From.ID, "balance": req.From.Balance},
-			"to":    map[string]any{"id": req.To.ID, "balance": req.To.Balance},
-			"error": nil,
-		}
-		switch {
-		case req.Amount <= 0:
-			resp["error"] = "invalid_amount"
-		case req.Amount > req.From.Balance:
-			resp["error"] = "insufficient_funds"
-		default:
-			resp["from"] = map[string]any{
-				"id": req.From.ID, "balance": req.From.Balance - req.Amount,
-			}
-			resp["to"] = map[string]any{
-				"id": req.To.ID, "balance": req.To.Balance + req.Amount,
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-	return httptest.NewServer(mux)
 }

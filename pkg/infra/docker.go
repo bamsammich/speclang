@@ -508,7 +508,8 @@ func wrapPortError(svc ServiceDef, err error) error {
 	if strings.Contains(msg, "port is already allocated") ||
 		strings.Contains(msg, "address already in use") {
 		return fmt.Errorf(
-			"starting service %q: port %d is already in use — stop the conflicting process or change the port",
+			"starting service %q: port %d is already in use"+
+				" — stop the conflicting process or change the port",
 			svc.Name, svc.Port,
 		)
 	}
