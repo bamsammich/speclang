@@ -95,6 +95,22 @@ Failures show shrunk counterexamples -- the minimal input that reproduces the bu
 | `scenario` with `when` | A class of inputs | Predicate over input space, runtime generates many |
 | `invariant` | A universal law | Must hold for ALL valid inputs |
 
+## Library Usage
+
+SpecLang is available as a Go package for programmatic verification:
+
+```go
+import (
+	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v2/pkg/specrun"
+)
+
+s, _ := specrun.ParseFile("my.spec", nil)
+result, _ := specrun.Verify(s, nil, specrun.Options{Seed: 42, Iterations: 100})
+```
+
+See [Package Guide](docs/package.md) for full documentation including custom adapters, programmatic spec construction, and result handling.
+
 ## Documentation
 
 | Guide | Description |
@@ -107,6 +123,7 @@ Failures show shrunk counterexamples -- the minimal input that reproduces the bu
 | [OpenAPI Import](docs/imports/openapi.md) | Import from OpenAPI schemas |
 | [Protobuf Import](docs/imports/protobuf.md) | Import from proto files |
 | [Target Services](docs/services.md) | Docker containers as test infrastructure |
+| [Package Guide](docs/package.md) | Go library integration (programmatic use) |
 | [Self-Verification](docs/self-verification.md) | How speclang tests itself |
 
 ## Claude Code Plugin
