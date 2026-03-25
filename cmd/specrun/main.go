@@ -14,14 +14,13 @@ import (
 	playwright "github.com/playwright-community/playwright-go"
 	"github.com/urfave/cli/v3"
 
-	"github.com/bamsammich/speclang/v2/pkg/adapter"
-	"github.com/bamsammich/speclang/v2/pkg/generator"
-	"github.com/bamsammich/speclang/v2/pkg/infra"
-	"github.com/bamsammich/speclang/v2/pkg/openapi"
-	"github.com/bamsammich/speclang/v2/pkg/parser"
-	protoresolver "github.com/bamsammich/speclang/v2/pkg/proto"
-	"github.com/bamsammich/speclang/v2/pkg/runner"
-	"github.com/bamsammich/speclang/v2/pkg/validator"
+	"github.com/bamsammich/speclang/v2/internal/adapter"
+	"github.com/bamsammich/speclang/v2/internal/infra"
+	"github.com/bamsammich/speclang/v2/internal/openapi"
+	protoresolver "github.com/bamsammich/speclang/v2/internal/proto"
+	"github.com/bamsammich/speclang/v2/internal/runner"
+	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v2/pkg/specrun"
 )
 
 var (
@@ -187,61 +186,48 @@ func installCmd() *cli.Command {
 	}
 }
 
-func validateSpec(spec *parser.Spec) int {
-	errs := validator.Validate(spec)
+func validateSpec(s *spec.Spec) int {
+	errs := specrun.Validate(s)
 	if len(errs) > 0 {
 		//nolint:gosec // CLI writing to stderr, not a web response
-		fmt.Fprint(os.Stderr, validator.FormatErrors(errs))
+		fmt.Fprint(os.Stderr, specrun.FormatErrors(errs))
 		return 1
 	}
 	return 0
 }
 
 func runParse(specFile string) int {
-	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
+	s, err := specrun.ParseFile(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
 	}
 
-	if code := validateSpec(spec); code != 0 {
+	if code := validateSpec(s); code != 0 {
 		return code
 	}
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(spec); err != nil {
+	if err := enc.Encode(s); err != nil {
 		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-func runGenerate(specFile, scope string, seed uint64) int {
-	spec, err := parser.ParseFileWithImports(specFile, defaultImports())
+func runGenerate(specFile, scopeName string, seed uint64) int {
+	s, err := specrun.ParseFile(specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
 	}
 
-	if code := validateSpec(spec); code != 0 {
+	if code := validateSpec(s); code != 0 {
 		return code
 	}
 
-	var scopeDef *parser.Scope
-	for _, s := range spec.Scopes {
-		if s.Name == scope {
-			scopeDef = s
-			break
-		}
-	}
-	if scopeDef == nil {
-		fmt.Fprintf(os.Stderr, "scope %q not found\n", scope)
-		return 1
-	}
-
-	gen := generator.New(scopeDef.Contract, spec.Models, seed)
-	input, err := gen.GenerateInput()
+	input, err := specrun.Generate(s, scopeName, seed)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "generation error: %v\n", err)
 		return 1
@@ -266,20 +252,20 @@ type verifyOpts struct {
 }
 
 func runVerify(opts *verifyOpts) int {
-	spec, err := parser.ParseFileWithImports(opts.specFile, defaultImports())
+	s, err := specrun.ParseFile(opts.specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		return 1
 	}
 
-	if code := validateSpec(spec); code != 0 {
+	if code := validateSpec(s); code != 0 {
 		return code
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	runningServices, cleanup, err := startServices(ctx, spec, opts)
+	runningServices, cleanup, err := startServices(ctx, s, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
@@ -288,20 +274,20 @@ func runVerify(opts *verifyOpts) int {
 		defer cleanup()
 	}
 
-	config := resolveTargetConfig(spec.Target, runningServices)
+	config := resolveTargetConfig(s.Target, runningServices)
 
-	adapters, err := createAdapters(spec, config)
+	adapters, err := createAdapters(s, config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
 	}
 	defer closeAdapters(adapters)
 
-	r := runner.New(spec, adapters, opts.seed)
+	r := runner.New(s, adapters, opts.seed)
 	r.SetN(opts.iterations)
 
 	if !opts.jsonOutput {
-		colorBold.Printf("Verifying %s", spec.Name)
+		colorBold.Printf("Verifying %s", s.Name)
 		colorDim.Printf(" (seed=%d, iterations=%d)\n\n", opts.seed, opts.iterations)
 	}
 
@@ -382,10 +368,10 @@ func resolveInheritedServices(
 // SPECRUN_SVC_PORT_* env vars) are reused without starting new containers.
 func startServices(
 	ctx context.Context,
-	spec *parser.Spec,
+	s *spec.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
-	cfg := buildInfraConfig(spec, opts.specFile)
+	cfg := buildInfraConfig(s, opts.specFile)
 
 	// Check if all declared services are already provided by a parent process.
 	inherited := resolveInheritedServices(cfg.Services)
@@ -538,10 +524,10 @@ func runInstall(plugin string) int {
 }
 
 // collectPlugins returns the unique set of plugin names from all scopes.
-func collectPlugins(spec *parser.Spec) []string {
+func collectPlugins(s *spec.Spec) []string {
 	seen := make(map[string]bool)
 	var plugins []string
-	for _, scope := range spec.Scopes {
+	for _, scope := range s.Scopes {
 		if scope.Use != "" && !seen[scope.Use] {
 			seen[scope.Use] = true
 			plugins = append(plugins, scope.Use)
@@ -551,10 +537,10 @@ func collectPlugins(spec *parser.Spec) []string {
 }
 
 func createAdapters(
-	spec *parser.Spec,
+	s *spec.Spec,
 	targetConfig map[string]string,
 ) (map[string]adapter.Adapter, error) {
-	plugins := collectPlugins(spec)
+	plugins := collectPlugins(s)
 	if len(plugins) == 0 {
 		return nil, errors.New("no scopes declare a 'use' directive")
 	}
@@ -609,7 +595,7 @@ func closeAdapters(adapters map[string]adapter.Adapter) {
 }
 
 func resolveTargetConfig(
-	target *parser.Target,
+	target *spec.Target,
 	services []infra.RunningService,
 ) map[string]string {
 	config := make(map[string]string)
@@ -623,19 +609,19 @@ func resolveTargetConfig(
 }
 
 func resolveExprToString(
-	expr parser.Expr,
-	target *parser.Target,
+	expr spec.Expr,
+	target *spec.Target,
 	services []infra.RunningService,
 ) string {
 	switch e := expr.(type) {
-	case parser.LiteralString:
+	case spec.LiteralString:
 		return e.Value
-	case parser.EnvRef:
+	case spec.EnvRef:
 		if val := os.Getenv(e.Var); val != "" {
 			return val
 		}
 		return e.Default
-	case parser.ServiceRef:
+	case spec.ServiceRef:
 		return resolveServiceURL(e.Name, target, services)
 	default:
 		return fmt.Sprintf("%v", e)
@@ -647,7 +633,7 @@ func resolveExprToString(
 // specrun process that started the container on a declared port).
 func resolveServiceURL(
 	name string,
-	target *parser.Target,
+	target *spec.Target,
 	services []infra.RunningService,
 ) string {
 	for _, svc := range services {
@@ -669,17 +655,17 @@ func resolveServiceURL(
 }
 
 // buildInfraConfig constructs an infra.Config from the spec's target block.
-func buildInfraConfig(spec *parser.Spec, specFile string) infra.Config {
+func buildInfraConfig(s *spec.Spec, specFile string) infra.Config {
 	specDir := filepath.Dir(specFile)
 	cfg := infra.Config{
-		SpecName: spec.Name,
+		SpecName: s.Name,
 		SpecDir:  specDir,
 	}
-	if spec.Target == nil {
+	if s.Target == nil {
 		return cfg
 	}
-	cfg.ComposePath = resolveRelPath(specDir, spec.Target.Compose)
-	for _, svc := range spec.Target.Services {
+	cfg.ComposePath = resolveRelPath(specDir, s.Target.Compose)
+	for _, svc := range s.Target.Services {
 		cfg.Services = append(cfg.Services, convertServiceDef(specDir, svc))
 	}
 	return cfg
@@ -687,7 +673,7 @@ func buildInfraConfig(spec *parser.Spec, specFile string) infra.Config {
 
 // convertServiceDef converts a parsed Service into an infra.ServiceDef,
 // resolving relative paths and copying maps to avoid aliasing the AST.
-func convertServiceDef(specDir string, svc *parser.Service) infra.ServiceDef {
+func convertServiceDef(specDir string, svc *spec.Service) infra.ServiceDef {
 	def := infra.ServiceDef{
 		Name:   svc.Name,
 		Build:  resolveRelPath(specDir, svc.Build),
@@ -726,8 +712,8 @@ func copyMap(m map[string]string) map[string]string {
 }
 
 // defaultImports returns the built-in import registry with all supported adapters.
-func defaultImports() parser.ImportRegistry {
-	return parser.ImportRegistry{
+func defaultImports() spec.ImportRegistry {
+	return spec.ImportRegistry{
 		"openapi": &openapi.Resolver{},
 		"proto":   &protoresolver.Resolver{},
 	}
