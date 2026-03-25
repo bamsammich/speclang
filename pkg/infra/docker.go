@@ -156,13 +156,13 @@ func (dm *DockerManager) startService(ctx context.Context, svc ServiceDef) (Runn
 		nil, nil, containerName,
 	)
 	if err != nil {
-		return RunningService{}, fmt.Errorf("creating container: %w", err)
+		return RunningService{}, wrapPortError(svc, fmt.Errorf("creating container: %w", err))
 	}
 
 	dm.containers = append(dm.containers, resp.ID)
 
 	if err := dm.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return RunningService{}, fmt.Errorf("starting container: %w", err)
+		return RunningService{}, wrapPortError(svc, fmt.Errorf("starting container: %w", err))
 	}
 
 	port, err := dm.resolveHostPort(ctx, resp.ID, containerPort)
@@ -499,6 +499,21 @@ func addToTar(tw *tar.Writer, baseDir, path string, d os.DirEntry) error {
 	}
 
 	return nil
+}
+
+// wrapPortError checks if err indicates a port collision and wraps it with
+// a clearer, actionable message.
+func wrapPortError(svc ServiceDef, err error) error {
+	msg := err.Error()
+	if strings.Contains(msg, "port is already allocated") ||
+		strings.Contains(msg, "address already in use") {
+		return fmt.Errorf(
+			"starting service %q: port %d is already in use"+
+				" — stop the conflicting process or change the port",
+			svc.Name, svc.Port,
+		)
+	}
+	return err
 }
 
 func newFilterArgs(key, value string) filters.Args {
