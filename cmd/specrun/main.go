@@ -325,59 +325,15 @@ func logProgress(jsonOutput bool, format string, args ...any) {
 	}
 }
 
-// svcPortEnvKey returns the env var name used to propagate a running service's
-// URL by port (e.g., "SPECRUN_SVC_PORT_8080" for port 8080).
-func svcPortEnvKey(port int) string {
-	return fmt.Sprintf("SPECRUN_SVC_PORT_%d", port)
-}
-
-// inheritedServiceURL returns the URL of a service already started by a parent
-// specrun process, identified by declared port. Returns "" if not inherited.
-func inheritedServiceURL(port int) string {
-	return os.Getenv(svcPortEnvKey(port))
-}
-
-// resolveInheritedServices checks if ALL declared services have URLs inherited
-// from a parent specrun process (via SPECRUN_SVC_PORT_* env vars). Returns
-// RunningService entries if all are inherited, nil otherwise.
-func resolveInheritedServices(
-	defs []infra.ServiceDef,
-) []infra.RunningService {
-	if len(defs) == 0 {
-		return nil
-	}
-	var services []infra.RunningService
-	for _, def := range defs {
-		url := inheritedServiceURL(def.Port)
-		if url == "" {
-			return nil
-		}
-		services = append(services, infra.RunningService{
-			Name: def.Name,
-			URL:  url,
-			Port: def.Port,
-		})
-	}
-	return services
-}
-
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
-// Services already started by a parent specrun process (identified by
-// SPECRUN_SVC_PORT_* env vars) are reused without starting new containers.
 func startServices(
 	ctx context.Context,
 	s *spec.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
 	cfg := buildInfraConfig(s, opts.specFile)
-
-	// Check if all declared services are already provided by a parent process.
-	inherited := resolveInheritedServices(cfg.Services)
-	if inherited != nil {
-		return inherited, nil, nil
-	}
 
 	manager, err := infra.NewManager(cfg)
 	if err != nil {
@@ -397,13 +353,6 @@ func startServices(
 	services, err := manager.Start(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
-	}
-
-	// Propagate service URLs by port to child processes so nested specrun
-	// invocations reuse the already-running containers.
-	for _, svc := range services {
-		//nolint:errcheck // env propagation is best-effort
-		os.Setenv(svcPortEnvKey(svc.Port), svc.URL)
 	}
 
 	for _, svc := range services {
@@ -603,14 +552,13 @@ func resolveTargetConfig(
 		return config
 	}
 	for key, expr := range target.Fields {
-		config[key] = resolveExprToString(expr, target, services)
+		config[key] = resolveExprToString(expr, services)
 	}
 	return config
 }
 
 func resolveExprToString(
 	expr spec.Expr,
-	target *spec.Target,
 	services []infra.RunningService,
 ) string {
 	switch e := expr.(type) {
@@ -622,33 +570,20 @@ func resolveExprToString(
 		}
 		return e.Default
 	case spec.ServiceRef:
-		return resolveServiceURL(e.Name, target, services)
+		return resolveServiceURL(e.Name, services)
 	default:
 		return fmt.Sprintf("%v", e)
 	}
 }
 
-// resolveServiceURL finds the URL for a named service. It checks running
-// services first, then checks SPECRUN_SVC_PORT_* env vars (set by a parent
-// specrun process that started the container on a declared port).
+// resolveServiceURL finds the URL for a named service from running services.
 func resolveServiceURL(
 	name string,
-	target *spec.Target,
 	services []infra.RunningService,
 ) string {
 	for _, svc := range services {
 		if svc.Name == name {
 			return svc.URL
-		}
-	}
-	// Check if a parent process started a container on this service's port.
-	if target != nil {
-		for _, svc := range target.Services {
-			if svc.Name == name && svc.Port > 0 {
-				if url := inheritedServiceURL(svc.Port); url != "" {
-					return url
-				}
-			}
 		}
 	}
 	return ""

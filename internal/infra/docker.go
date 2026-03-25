@@ -126,6 +126,15 @@ func (dm *DockerManager) Cleanup(ctx context.Context) error {
 }
 
 func (dm *DockerManager) startService(ctx context.Context, svc ServiceDef) (RunningService, error) {
+	// If the declared port is already listening and healthy, reuse it.
+	// This handles nested specrun invocations where a parent process already
+	// started a container on the same port.
+	if svc.Port > 0 {
+		if rs, ok := adoptExistingPort(svc); ok {
+			return rs, nil
+		}
+	}
+
 	if err := dm.ensureImage(ctx, svc); err != nil {
 		return RunningService{}, err
 	}
@@ -179,6 +188,28 @@ func (dm *DockerManager) startService(ctx context.Context, svc ServiceDef) (Runn
 		URL:  fmt.Sprintf("http://localhost:%d", port),
 		Port: port,
 	}, nil
+}
+
+// adoptExistingPort checks if the declared port already has a healthy listener.
+// If so, returns a RunningService pointing at it. This allows nested specrun
+// invocations to reuse containers started by a parent process without needing
+// env var propagation.
+func adoptExistingPort(svc ServiceDef) (RunningService, bool) {
+	healthy := false
+	if svc.Health != "" {
+		healthy = httpHealthCheck(svc.Port, svc.Health)
+	} else {
+		healthy = tcpHealthCheck(svc.Port)
+	}
+	if !healthy {
+		return RunningService{}, false
+	}
+
+	return RunningService{
+		Name: svc.Name,
+		URL:  fmt.Sprintf("http://localhost:%d", svc.Port),
+		Port: svc.Port,
+	}, true
 }
 
 func (dm *DockerManager) ensureImage(ctx context.Context, svc ServiceDef) error {
