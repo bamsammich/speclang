@@ -346,26 +346,15 @@ func svcEnvKey(name string) string {
 	return "SPECRUN_SVC_" + strings.ToUpper(name)
 }
 
-// inheritedServices checks whether all declared services have URLs propagated
-// via SPECRUN_SVC_* env vars (set by a parent specrun process). If so, it
-// returns RunningService entries for each. If any service is missing, returns nil.
-func inheritedServices(spec *parser.Spec) []infra.RunningService {
-	if spec.Target == nil || len(spec.Target.Services) == 0 {
-		return nil
-	}
-	var services []infra.RunningService
-	for _, svc := range spec.Target.Services {
-		url := os.Getenv(svcEnvKey(svc.Name))
-		if url == "" {
-			return nil
+// hasParentServices checks whether any SPECRUN_SVC_* env vars are set,
+// indicating a parent specrun process is managing containers.
+func hasParentServices() bool {
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "SPECRUN_SVC_") {
+			return true
 		}
-		services = append(services, infra.RunningService{
-			Name: svc.Name,
-			URL:  url,
-			Port: svc.Port,
-		})
 	}
-	return services
+	return false
 }
 
 // startServices builds infra config, starts services if declared, and returns
@@ -378,9 +367,9 @@ func startServices(
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
-	// If a parent process already started all declared services, reuse them.
-	if inherited := inheritedServices(spec); inherited != nil {
-		return inherited, nil, nil
+	// If a parent specrun process is managing services, skip startup.
+	if hasParentServices() {
+		return nil, nil, nil
 	}
 
 	cfg := buildInfraConfig(spec, opts.specFile)
@@ -634,11 +623,13 @@ func resolveExprToString(
 }
 
 // resolveServiceURL finds the URL for a named service. It checks running
-// services first, then falls back to SPECRUN_SVC_* env vars (set by a
-// parent specrun process).
+// services first, then checks SPECRUN_SVC_* env vars (set by a parent
+// specrun process). If a parent is managing services but the name doesn't
+// match any env var, falls back to the declared port (the parent started
+// the container on that port under a different name).
 func resolveServiceURL(
 	name string,
-	_ *parser.Target,
+	target *parser.Target,
 	services []infra.RunningService,
 ) string {
 	for _, svc := range services {
@@ -648,6 +639,16 @@ func resolveServiceURL(
 	}
 	if url := os.Getenv(svcEnvKey(name)); url != "" {
 		return url
+	}
+	// When a parent specrun manages containers, the inner spec may name the
+	// service differently. Fall back to the declared port since the parent
+	// already bound it.
+	if hasParentServices() && target != nil {
+		for _, svc := range target.Services {
+			if svc.Name == name && svc.Port > 0 {
+				return fmt.Sprintf("http://localhost:%d", svc.Port)
+			}
+		}
 	}
 	return ""
 }
