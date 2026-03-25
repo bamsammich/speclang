@@ -313,105 +313,59 @@ fmt.Printf("Generated: %+v\n", input)
 
 Different seeds produce different inputs. The generator respects type constraints, value ranges, and model references.
 
-## Real-World Example: Conformance Testing
+## Putting It Together: Custom Adapter Example
 
-This example shows how an external system would use speclang programmatically to run conformance tests against a tool's HTTP API. The tool publishes a manifest describing its endpoints, and we build a spec and custom adapter to verify it.
-
-### The manifest
-
-Suppose a tool serves a manifest at `/manifest.json`:
-
-```json
-{
-  "name": "WidgetService",
-  "version": "2.1.0",
-  "endpoints": [
-    {
-      "name": "create_widget",
-      "method": "POST",
-      "path": "/api/widgets",
-      "input": {"name": "string", "weight": "int"},
-      "output": {"id": "string", "name": "string", "weight": "int"},
-      "constraints": {"weight_positive": "weight > 0"}
-    },
-    {
-      "name": "get_widget",
-      "method": "GET",
-      "path": "/api/widgets/{id}",
-      "input": {"id": "string"},
-      "output": {"id": "string", "name": "string", "weight": "int"}
-    }
-  ]
-}
-```
+This example shows a complete integration: a custom adapter that tests a calculator REST API, with the spec constructed programmatically.
 
 ### The adapter
 
 ```go
-package conformance
+package main
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"reflect"
 
 	"github.com/bamsammich/speclang/v2/pkg/spec"
 )
 
-type Manifest struct {
-	Name      string     `json:"name"`
-	Version   string     `json:"version"`
-	Endpoints []Endpoint `json:"endpoints"`
+// CalcAdapter implements spec.Adapter for a calculator HTTP API.
+type CalcAdapter struct {
+	baseURL  string
+	client   *http.Client
+	lastBody map[string]any
 }
 
-type Endpoint struct {
-	Name        string            `json:"name"`
-	Method      string            `json:"method"`
-	Path        string            `json:"path"`
-	Input       map[string]string `json:"input"`
-	Output      map[string]string `json:"output"`
-	Constraints map[string]string `json:"constraints"`
-}
-
-// ToolAdapter implements spec.Adapter for the tool's HTTP API.
-type ToolAdapter struct {
-	BaseURL    string
-	client     *http.Client
-	lastStatus int
-	lastBody   map[string]any
-}
-
-func (a *ToolAdapter) Init(config map[string]string) error {
-	a.BaseURL = config["base_url"]
+func (a *CalcAdapter) Init(config map[string]string) error {
+	a.baseURL = config["base_url"]
 	a.client = &http.Client{}
 	return nil
 }
 
-func (a *ToolAdapter) Action(name string, argsRaw json.RawMessage) (*spec.Response, error) {
-	var args struct {
-		Method string         `json:"method"`
-		Path   string         `json:"path"`
-		Body   map[string]any `json:"body"`
-	}
+func (a *CalcAdapter) Action(name string, argsRaw json.RawMessage) (*spec.Response, error) {
+	var args []json.RawMessage
 	if err := json.Unmarshal(argsRaw, &args); err != nil {
 		return nil, fmt.Errorf("unmarshal args: %w", err)
 	}
 
-	var bodyReader io.Reader
-	if args.Body != nil {
-		b, _ := json.Marshal(args.Body)
-		bodyReader = bytes.NewReader(b)
+	var path string
+	if err := json.Unmarshal(args[0], &path); err != nil {
+		return nil, fmt.Errorf("unmarshal path: %w", err)
 	}
 
-	req, err := http.NewRequest(args.Method, a.BaseURL+args.Path, bodyReader)
+	var body json.RawMessage
+	if len(args) > 1 {
+		body = args[1]
+	}
+
+	req, err := http.NewRequest("POST", a.baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	if bodyReader != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -419,7 +373,6 @@ func (a *ToolAdapter) Action(name string, argsRaw json.RawMessage) (*spec.Respon
 	}
 	defer resp.Body.Close()
 
-	a.lastStatus = resp.StatusCode
 	a.lastBody = make(map[string]any)
 	json.NewDecoder(resp.Body).Decode(&a.lastBody)
 
@@ -427,284 +380,122 @@ func (a *ToolAdapter) Action(name string, argsRaw json.RawMessage) (*spec.Respon
 	return &spec.Response{OK: true, Actual: actual}, nil
 }
 
-func (a *ToolAdapter) Assert(property, locator string, expected json.RawMessage) (*spec.Response, error) {
-	switch property {
-	case "status":
-		actual, _ := json.Marshal(a.lastStatus)
-		var exp int
-		json.Unmarshal(expected, &exp)
-		return &spec.Response{OK: a.lastStatus == exp, Actual: actual}, nil
-	case "body":
-		actual, _ := json.Marshal(a.lastBody)
-		return &spec.Response{OK: true, Actual: actual}, nil
-	default:
-		// Field-level assertion: check a.lastBody[property]
-		val, ok := a.lastBody[property]
-		if !ok {
-			return &spec.Response{OK: false, Error: fmt.Sprintf("field %q not in response", property)}, nil
-		}
-		actual, _ := json.Marshal(val)
+func (a *CalcAdapter) Assert(property, _ string, expected json.RawMessage) (*spec.Response, error) {
+	val, ok := a.lastBody[property]
+	if !ok {
+		return &spec.Response{OK: false, Error: fmt.Sprintf("field %q not found", property)}, nil
+	}
+
+	actual, _ := json.Marshal(val)
+
+	var actualNorm, expectedNorm any
+	json.Unmarshal(actual, &actualNorm)
+	json.Unmarshal(expected, &expectedNorm)
+
+	if reflect.DeepEqual(actualNorm, expectedNorm) {
 		return &spec.Response{OK: true, Actual: actual}, nil
 	}
+	return &spec.Response{
+		OK:    false,
+		Actual: actual,
+		Error: fmt.Sprintf("expected %s, got %s", expected, actual),
+	}, nil
 }
 
-func (a *ToolAdapter) Close() error {
-	return nil
-}
+func (a *CalcAdapter) Close() error { return nil }
 ```
 
-### Building the spec from the manifest
+### Building the spec and running verification
 
 ```go
-package conformance
+package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
-
-	"github.com/bamsammich/speclang/v2/pkg/spec"
-)
-
-func typeExprFrom(t string) spec.TypeExpr {
-	return spec.TypeExpr{Name: t}
-}
-
-func BuildSpec(manifest Manifest, baseURL string) *spec.Spec {
-	s := &spec.Spec{
-		Name: manifest.Name + "Conformance",
-		Target: &spec.Target{
-			Fields: map[string]spec.Expr{
-				"base_url": spec.LiteralString{Value: baseURL},
-			},
-		},
-	}
-
-	for _, ep := range manifest.Endpoints {
-		scope := &spec.Scope{
-			Name: ep.Name,
-			Use:  "tool",
-			Config: map[string]spec.Expr{
-				"base_url": spec.LiteralString{Value: baseURL},
-			},
-			Contract: &spec.Contract{},
-		}
-
-		// Build input fields
-		for name, typ := range ep.Input {
-			scope.Contract.Input = append(scope.Contract.Input, &spec.Field{
-				Name: name,
-				Type: typeExprFrom(typ),
-			})
-		}
-
-		// Build output fields
-		for name, typ := range ep.Output {
-			scope.Contract.Output = append(scope.Contract.Output, &spec.Field{
-				Name: name,
-				Type: typeExprFrom(typ),
-			})
-		}
-
-		// Add an invariant for each declared constraint
-		for name, expr := range ep.Constraints {
-			// Parse the constraint expression from the manifest
-			constraintSpec := fmt.Sprintf(`spec _tmp {
-				scope _s {
-					use tool
-					contract { input { x: int } }
-					invariant %s { %s }
-				}
-			}`, name, expr)
-			tmp, err := Parse(constraintSpec)
-			if err == nil && len(tmp.Scopes) > 0 && len(tmp.Scopes[0].Invariants) > 0 {
-				scope.Invariants = append(scope.Invariants, tmp.Scopes[0].Invariants[0])
-			}
-		}
-
-		s.Scopes = append(s.Scopes, scope)
-	}
-
-	return s
-}
-
-// Parse is a local alias for convenience.
-var Parse = func(source string) (*spec.Spec, error) {
-	// Import here to avoid circular reference in the example.
-	// In real code, import specrun directly.
-	return nil, fmt.Errorf("placeholder — use specrun.Parse")
-}
-```
-
-### Running the conformance check
-
-```go
-package conformance
-
-import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"os"
 
 	"github.com/bamsammich/speclang/v2/pkg/spec"
 	"github.com/bamsammich/speclang/v2/pkg/specrun"
 )
 
-type ConformanceReport struct {
-	Tool       string        `json:"tool"`
-	Version    string        `json:"version"`
-	BaseURL    string        `json:"base_url"`
-	Passed     bool          `json:"passed"`
-	Summary    string        `json:"summary"`
-	Scopes     []ScopeReport `json:"scopes"`
-	TotalRun   int           `json:"total_run"`
-	TotalPass  int           `json:"total_passed"`
-	TotalFail  int           `json:"total_failed"`
-}
-
-type ScopeReport struct {
-	Name     string         `json:"name"`
-	Passed   bool           `json:"passed"`
-	Checks   []CheckReport  `json:"checks"`
-}
-
-type CheckReport struct {
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	Passed   bool   `json:"passed"`
-	Detail   string `json:"detail,omitempty"`
-}
-
-func RunConformance(baseURL string) (*ConformanceReport, error) {
-	// 1. Fetch the manifest
-	resp, err := http.Get(baseURL + "/manifest.json")
-	if err != nil {
-		return nil, fmt.Errorf("fetch manifest: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	var manifest Manifest
-	if err := json.Unmarshal(body, &manifest); err != nil {
-		return nil, fmt.Errorf("parse manifest: %w", err)
-	}
-
-	// 2. Build a spec from the manifest
-	s := BuildSpec(manifest, baseURL)
-
-	// 3. Register the custom adapter
-	reg := specrun.DefaultRegistry()
-	reg.Register("tool", spec.PluginDef{
-		Actions: map[string]spec.ActionDef{
-			"call": {
-				Params: []spec.Param{
-					{Name: "method", Type: spec.TypeExpr{Name: "string"}},
-					{Name: "path", Type: spec.TypeExpr{Name: "string"}},
-					{Name: "body", Type: spec.TypeExpr{Name: "any"}},
+func main() {
+	// Build the spec programmatically
+	s := &spec.Spec{
+		Name: "CalculatorAPI",
+		Scopes: []*spec.Scope{
+			{
+				Name: "add",
+				Use:  "calc",
+				Contract: &spec.Contract{
+					Input: []*spec.Field{
+						{Name: "a", Type: spec.TypeExpr{Name: "int"}},
+						{Name: "b", Type: spec.TypeExpr{Name: "int"}},
+					},
+					Output: []*spec.Field{
+						{Name: "result", Type: spec.TypeExpr{Name: "int"}},
+					},
+				},
+				Invariants: []*spec.Invariant{
+					{
+						Name: "correct_sum",
+						Assertions: []*spec.Assertion{
+							{Expr: &spec.BinaryOp{
+								Left: &spec.FieldRef{Path: "output.result"},
+								Op:   "==",
+								Right: &spec.BinaryOp{
+									Left:  &spec.FieldRef{Path: "input.a"},
+									Op:    "+",
+									Right: &spec.FieldRef{Path: "input.b"},
+								},
+							}},
+						},
+					},
 				},
 			},
 		},
-		Assertions: map[string]spec.AssertionDef{
-			"status": {Type: "int"},
-			"body":   {Type: "any"},
+	}
+
+	// Register the custom adapter
+	reg := specrun.DefaultRegistry()
+	reg.Register("calc", spec.PluginDef{
+		Actions: map[string]spec.ActionDef{
+			"compute": {Params: []spec.Param{
+				{Name: "path", Type: spec.TypeExpr{Name: "string"}},
+				{Name: "body", Type: spec.TypeExpr{Name: "any"}},
+			}},
 		},
-		Adapter: &ToolAdapter{},
+		Assertions: map[string]spec.AssertionDef{
+			"result": {Type: "int"},
+		},
+		Adapter: &CalcAdapter{},
 	})
 
-	// 4. Run verification
-	result, err := specrun.Verify(s, reg, specrun.Options{
+	// Run verification
+	result, err := specrun.Verify(context.Background(), s, reg, spec.Options{
 		Seed:       42,
 		Iterations: 100,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("verify: %w", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 
-	// 5. Build the conformance report
-	report := &ConformanceReport{
-		Tool:    manifest.Name,
-		Version: manifest.Version,
-		BaseURL: baseURL,
-		Passed:  len(result.Failures) == 0,
-		Summary: fmt.Sprintf("%d/%d scenarios, %d/%d invariants",
-			result.ScenariosPassed, result.ScenariosRun,
-			result.InvariantsPassed, result.InvariantsChecked),
-	}
-
-	for _, sr := range result.Scopes {
-		scopeReport := ScopeReport{Name: sr.Name, Passed: true}
-		for _, cr := range sr.Checks {
-			check := CheckReport{
-				Name:   cr.Name,
-				Kind:   cr.Kind,
-				Passed: cr.Passed,
+	// Print results
+	for _, scope := range result.Scopes {
+		for _, check := range scope.Checks {
+			status := "PASS"
+			if !check.Passed {
+				status = "FAIL"
 			}
-			if !cr.Passed && cr.Failure != nil {
-				check.Detail = cr.Failure.Description
-				scopeReport.Passed = false
-			}
-			scopeReport.Checks = append(scopeReport.Checks, check)
-			report.TotalRun++
-			if cr.Passed {
-				report.TotalPass++
-			} else {
-				report.TotalFail++
-			}
+			fmt.Printf("[%s] %s/%s\n", status, scope.Name, check.Name)
 		}
-		report.Scopes = append(report.Scopes, scopeReport)
 	}
 
-	return report, nil
-}
-
-func main() {
-	baseURL := os.Getenv("TOOL_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:9090"
-	}
-
-	report, err := RunConformance(baseURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(report)
-
-	if !report.Passed {
+	if len(result.Failures) > 0 {
 		os.Exit(1)
 	}
 }
 ```
 
-This produces structured JSON output:
-
-```json
-{
-  "tool": "WidgetService",
-  "version": "2.1.0",
-  "base_url": "http://localhost:9090",
-  "passed": false,
-  "summary": "2/2 scenarios, 1/2 invariants",
-  "scopes": [
-    {
-      "name": "create_widget",
-      "passed": false,
-      "checks": [
-        {"name": "weight_positive", "kind": "invariant", "passed": false, "detail": "..."}
-      ]
-    }
-  ],
-  "total_run": 3,
-  "total_passed": 2,
-  "total_failed": 1
-}
-```
+This demonstrates the full pattern: construct types, implement an adapter, register it, run verification, and read structured results. The same approach works for any protocol — gRPC, WebSocket, message queues, or custom binary protocols.
