@@ -150,7 +150,6 @@ The compose path is relative to the spec file. Service names in `service()` refe
 ### CLI Flags
 
 - `--keep-services` -- leave containers running after verification (useful for debugging)
-- `SPECRUN_NO_SERVICES=1` (env var) -- skip all service lifecycle management; services must be started manually or by an outer process. Set automatically by `specrun` after starting services, so nested invocations inherit it.
 
 ## Models
 

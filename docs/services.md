@@ -160,17 +160,6 @@ docker logs specrun-transfer-app    # inspect logs
 docker stop specrun-transfer-app    # manual cleanup when done
 ```
 
-### `SPECRUN_NO_SERVICES=1`
-
-Skip all service lifecycle management. Services must be started manually or by an outer `specrun` process. This environment variable is set automatically by `specrun` after starting services, so nested subprocess invocations inherit it and skip redundant service management.
-
-```bash
-# Start servers manually, then verify without service management
-SPECRUN_NO_SERVICES=1 APP_URL=http://localhost:8080 specrun verify transfer.spec
-```
-
-When `SPECRUN_NO_SERVICES=1` is set and a spec uses `service(name)`, the expression falls back to `http://localhost:<declared-port>` using the port from the service definition. This allows specs to work both with and without Docker.
-
 ## Volume Mounts
 
 Use volumes to inject fixture data (seed files, config, etc.) into containers:

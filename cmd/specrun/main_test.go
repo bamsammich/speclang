@@ -67,7 +67,7 @@ func TestHelp_VerifyCommand(t *testing.T) {
 			t.Errorf("verify --help missing %q:\n%s", want, output)
 		}
 	}
-	// --no-services should NOT appear (it's now an env var)
+	// --no-services was removed; should not appear
 	if strings.Contains(output, "--no-services") {
 		t.Errorf("verify --help should not contain --no-services:\n%s", output)
 	}
