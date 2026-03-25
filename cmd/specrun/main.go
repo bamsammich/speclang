@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/fatih/color"
@@ -339,14 +340,49 @@ func logProgress(jsonOutput bool, format string, args ...any) {
 	}
 }
 
+// svcEnvKey returns the env var name used to propagate a running service's URL
+// to child processes (e.g., "SPECRUN_SVC_APP" for service "app").
+func svcEnvKey(name string) string {
+	return "SPECRUN_SVC_" + strings.ToUpper(name)
+}
+
+// inheritedServices checks whether all declared services have URLs propagated
+// via SPECRUN_SVC_* env vars (set by a parent specrun process). If so, it
+// returns RunningService entries for each. If any service is missing, returns nil.
+func inheritedServices(spec *parser.Spec) []infra.RunningService {
+	if spec.Target == nil || len(spec.Target.Services) == 0 {
+		return nil
+	}
+	var services []infra.RunningService
+	for _, svc := range spec.Target.Services {
+		url := os.Getenv(svcEnvKey(svc.Name))
+		if url == "" {
+			return nil
+		}
+		services = append(services, infra.RunningService{
+			Name: svc.Name,
+			URL:  url,
+			Port: svc.Port,
+		})
+	}
+	return services
+}
+
 // startServices builds infra config, starts services if declared, and returns
 // running services and a cleanup function. The cleanup function is nil when
 // no services are running or --keep-services is set.
+// If a parent specrun process already started services (indicated by
+// SPECRUN_SVC_* env vars), those URLs are reused and no containers are started.
 func startServices(
 	ctx context.Context,
 	spec *parser.Spec,
 	opts *verifyOpts,
 ) ([]infra.RunningService, func(), error) {
+	// If a parent process already started all declared services, reuse them.
+	if inherited := inheritedServices(spec); inherited != nil {
+		return inherited, nil, nil
+	}
+
 	cfg := buildInfraConfig(spec, opts.specFile)
 	manager, err := infra.NewManager(cfg)
 	if err != nil {
@@ -366,6 +402,13 @@ func startServices(
 	services, err := manager.Start(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("service start error: %w", err)
+	}
+
+	// Propagate service URLs to child processes so nested specrun invocations
+	// reuse the already-running containers instead of starting new ones.
+	for _, svc := range services {
+		//nolint:errcheck // env propagation is best-effort
+		os.Setenv(svcEnvKey(svc.Name), svc.URL)
 	}
 
 	for _, svc := range services {
@@ -590,7 +633,9 @@ func resolveExprToString(
 	}
 }
 
-// resolveServiceURL finds the URL for a named service from running containers.
+// resolveServiceURL finds the URL for a named service. It checks running
+// services first, then falls back to SPECRUN_SVC_* env vars (set by a
+// parent specrun process).
 func resolveServiceURL(
 	name string,
 	_ *parser.Target,
@@ -600,6 +645,9 @@ func resolveServiceURL(
 		if svc.Name == name {
 			return svc.URL
 		}
+	}
+	if url := os.Getenv(svcEnvKey(name)); url != "" {
+		return url
 	}
 	return ""
 }
