@@ -100,22 +100,22 @@ linters:
         text: 'struct-tag: unknown option "(omitempty|optional)" in validate tag'
       - linters:
           - ireturn # AST expression parser must return Expr interface by design
-        path: pkg/parser/
+        path: internal/parser/
       - linters:
           - ireturn # OpenAPI importer constructs AST Expr nodes by design
-        path: pkg/openapi/
+        path: internal/openapi/
       - linters:
           - ireturn # protobuf importer constructs AST Expr nodes by design
-        path: pkg/proto/
+        path: internal/proto/
       - linters:
           - ireturn # plugin registry must return Adapter interface by design
-        path: pkg/plugin/
+        path: internal/plugin/
       - linters:
           - ireturn # CLI wiring must return Adapter interface by design
         path: cmd/specrun/
       - linters:
           - ireturn # factory must return ServiceManager interface by design
-        path: pkg/infra/
+        path: internal/infra/
       - linters:
           - gocyclo
           - revive

@@ -124,37 +124,25 @@ speclang/
 │       ├── openapi.md
 │       └── protobuf.md
 ├── pkg/
-│   ├── parser/           # spec file → AST
-│   │   ├── lexer.go
-│   │   ├── parser.go
-│   │   ├── ast.go
-│   │   ├── include.go    # include resolution + duplicate validation
-│   │   └── import.go     # import directive + ImportResolver interface
-│   ├── generator/        # AST → test inputs
-│   │   ├── generator.go
-│   │   └── shrink.go     # counterexample shrinking
+│   ├── spec/             # Public API — types, interfaces, registry
+│   │   ├── ast.go        # Spec, Scope, Model, Field, Expr types
+│   │   ├── adapter.go    # Adapter interface, Request, Response
+│   │   ├── registry.go   # Registry, PluginDef, ActionDef, AssertionDef
+│   │   ├── result.go     # Result, ScopeResult, CheckResult, Failure
+│   │   └── import.go     # ImportResolver, ImportRegistry
+│   └── specrun/          # Public API — Verify, Generate, Parse, DefaultRegistry
+│       ├── specrun.go    # Parse, ParseFile, Validate, Verify, Generate
+│       └── registry.go   # DefaultRegistry (http, process, playwright)
+├── internal/
+│   ├── parser/           # spec file → AST (lexer, parser, includes, imports)
+│   ├── generator/        # AST → test inputs + counterexample shrinking
 │   ├── runner/           # orchestrates generate → execute → check
-│   │   └── runner.go
-│   ├── adapter/          # adapter protocol + built-in adapters
-│   │   ├── protocol.go   # JSON IPC types
-│   │   ├── http.go       # built-in HTTP adapter
-│   │   ├── process.go    # built-in process adapter (subprocess execution)
-│   │   └── playwright.go # built-in Playwright adapter (compiled into specrun)
+│   ├── validator/        # compile-time type checking and semantic validation
+│   ├── adapter/          # built-in adapters (http, process, playwright)
 │   ├── infra/            # Docker/compose service lifecycle management
-│   │   ├── infra.go      # ServiceManager interface and types
-│   │   ├── docker.go     # Docker SDK container management
-│   │   └── compose.go    # docker compose CLI integration
 │   ├── openapi/          # OpenAPI import resolver
-│   │   ├── openapi.go    # Resolver implementing ImportResolver
-│   │   ├── document.go   # OpenAPI doc loading via kin-openapi
-│   │   ├── models.go     # schema → Model conversion
-│   │   └── scopes.go     # path → Scope conversion
 │   ├── proto/            # Protobuf import resolver
-│   │   ├── proto.go      # Resolver implementing ImportResolver
-│   │   ├── models.go     # message → Model conversion
-│   │   └── scopes.go     # service/RPC → Scope conversion
-│   └── plugin/           # plugin spec loading
-│       └── plugin.go
+│   └── plugin/           # plugin spec file loading
 ├── plugins/
 │   ├── http.plugin       # HTTP plugin definition
 │   ├── process.plugin    # process plugin definition (subprocess execution)
