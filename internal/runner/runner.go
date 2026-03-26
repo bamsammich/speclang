@@ -88,14 +88,14 @@ func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
 		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", scope.Use, scope.Name)
 	}
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
-	method := strings.ToUpper(resolveConfigString(scope.Config, "method"))
+	method := strings.ToUpper(evalConfigString(scope.Config, "method"))
 	return &scopeRunner{
 		runner:    r,
 		adapter:   adp,
 		generator: gen,
 		scopeDef:  scope,
 		scope:     scope.Name,
-		path:      resolveConfigString(scope.Config, "path"),
+		path:      evalConfigString(scope.Config, "path"),
 		method:    method,
 	}, nil
 }
@@ -148,8 +148,8 @@ func (sr *scopeRunner) run(res *Result) error {
 	return nil
 }
 
-// resolveConfigString extracts a string value from a scope's config map.
-func resolveConfigString(config map[string]parser.Expr, key string) string {
+// evalConfigString evaluates a config key to a string via generator.Eval.
+func evalConfigString(config map[string]parser.Expr, key string) string {
 	if config == nil {
 		return ""
 	}
@@ -157,12 +157,14 @@ func resolveConfigString(config map[string]parser.Expr, key string) string {
 	if !ok {
 		return ""
 	}
-	switch e := expr.(type) {
-	case parser.LiteralString:
-		return e.Value
-	default:
-		return fmt.Sprintf("%v", e)
+	val, ok := generator.Eval(expr, nil)
+	if !ok {
+		return ""
 	}
+	if s, isStr := val.(string); isStr {
+		return s
+	}
+	return fmt.Sprintf("%v", val)
 }
 
 // executeInput sends an input map to the adapter and returns the parsed response.
@@ -233,7 +235,7 @@ func (sr *scopeRunner) buildExecAction(inputJSON json.RawMessage) (string, json.
 
 func (sr *scopeRunner) collectExecArgs(inputMap map[string]any) []any {
 	var execArgs []any
-	if configArgs := resolveConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
+	if configArgs := evalConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
 		for _, a := range strings.Fields(configArgs) {
 			execArgs = append(execArgs, a)
 		}
@@ -474,7 +476,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 		return fmt.Errorf("creating new page: %s", resp.Error)
 	}
 
-	url := resolveConfigString(sr.scopeDef.Config, "url")
+	url := evalConfigString(sr.scopeDef.Config, "url")
 	if url != "" {
 		args, err := json.Marshal([]string{url})
 		if err != nil {
