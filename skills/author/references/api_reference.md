@@ -437,7 +437,13 @@ scope create_and_verify {
 
 ### `use process`
 
-For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Target uses `command`. Scope config uses `args`.
+For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Target uses `command`. Scope config uses `args` (string or array form).
+
+Config `args` accepts two forms: string (split on whitespace) or array (each element is one argument, preferred). Array form preserves spaces:
+```
+config { args: "verify --json" }                                    # string form
+config { args: ["verify", "--json", "path with spaces/file.spec"] } # array form
+```
 
 Dot-paths in `then` blocks support numeric array indexing. `stdout.items.0.name` accesses the first element of the `items` array in the parsed JSON response, then its `name` field. Out-of-range indices produce an assertion failure. This also applies to the `http` adapter when asserting against JSON response bodies.
 

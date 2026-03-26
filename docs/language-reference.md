@@ -358,6 +358,11 @@ scope transfer {
 - `use <plugin>` is **required** in every scope and appears at the **scope** level, not spec level
 - Different scopes in the same spec can use different plugins
 - The parser is agnostic to `config` block semantics -- they're passed through to the adapter
+- Config `args` accepts string form (split on whitespace) or array form (each element is one argument):
+  ```
+  config { args: "verify --json" }                                    # string form
+  config { args: ["verify", "--json", "path with spaces/file.spec"] } # array form (preferred)
+  ```
 
 ### Contract
 

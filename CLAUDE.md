@@ -39,6 +39,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - **Conditional expressions**: `if cond then a else b`
 - **Include/Import**: `include "path"`, `import openapi("path")`, `import proto("path")`
 - **Dot-path array indexing**: `items.0.name` for array element access
+- **Config args**: `args` accepts `[]T` array form (preferred) or string form (whitespace-split)
 - **Compile-time validation**: type checking, model resolution, given completeness, then field validation
 
 ### Anti-Gaming Properties
