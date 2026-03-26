@@ -632,7 +632,7 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 
 // evalStringConcat handles string concatenation. If either operand is a string,
 // the other is converted via fmt.Sprint and the results are concatenated.
-func evalStringConcat(left, right any) (string, bool) {
+func evalStringConcat(left, right any) (any, bool) {
 	ls, lok := left.(string)
 	rs, rok := right.(string)
 	if lok && rok {
