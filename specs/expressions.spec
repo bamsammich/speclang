@@ -54,6 +54,34 @@ scope string_concat {
   }
 }
 
+# Verifies that array-form args in config blocks work correctly.
+scope array_args {
+  use process
+  config {
+    args: ["parse"]
+  }
+
+  contract {
+    input {
+      file: string
+    }
+    output {
+      exit_code: int
+      name: string
+    }
+  }
+
+  scenario parse_with_array_args {
+    given {
+      file: "testdata/self/minimal.spec"
+    }
+    then {
+      exit_code: 0
+      name: "Minimal"
+    }
+  }
+}
+
 scope env_in_given {
   use process
   config {

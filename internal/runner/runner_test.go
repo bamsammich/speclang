@@ -307,6 +307,78 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 	}
 }
 
+func TestCollectExecArgs_ArrayConfig(t *testing.T) {
+	t.Parallel()
+
+	sp := &parser.Spec{
+		Name: "ArrayArgsTest",
+		Scopes: []*parser.Scope{{
+			Name: "arr_scope",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"args": parser.ArrayLiteral{
+					Elements: []parser.Expr{
+						parser.LiteralString{Value: "verify"},
+						parser.LiteralString{Value: "--json"},
+						parser.LiteralString{Value: "path with spaces/file.spec"},
+					},
+				},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "array_args_scenario",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{
+							Path:  "x",
+							Value: parser.LiteralInt{Value: 1},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
+	_, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if len(mock.actionCalls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	}
+
+	var execArgs []any
+	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+		t.Fatalf("unmarshal args: %v", err)
+	}
+
+	// Array form: 3 config args + 1 input field = 4 total
+	if len(execArgs) != 4 {
+		t.Fatalf("expected 4 exec args, got %d: %v", len(execArgs), execArgs)
+	}
+	if execArgs[0] != "verify" {
+		t.Errorf("arg 0 = %v, want 'verify'", execArgs[0])
+	}
+	if execArgs[1] != "--json" {
+		t.Errorf("arg 1 = %v, want '--json'", execArgs[1])
+	}
+	// The space-containing path must be preserved as a single argument
+	if execArgs[2] != "path with spaces/file.spec" {
+		t.Errorf("arg 2 = %v, want 'path with spaces/file.spec'", execArgs[2])
+	}
+}
+
 // mockAdapter records Action and Assert calls for testing.
 type mockAdapter struct {
 	actionCalls []actionCall

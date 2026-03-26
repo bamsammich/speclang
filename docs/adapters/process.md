@@ -20,13 +20,18 @@ target {
 
 | Key | Description |
 |-----|-------------|
-| `args` | Base arguments prepended to every exec call (space-separated) |
+| `args` | Base arguments prepended to every exec call. String (space-split) or array (preferred). |
+
+`args` accepts two forms:
 
 ```
 config {
-  args: "verify --json"
+  args: "verify --json"                                    # string form: split on whitespace
+  args: ["verify", "--json", "path with spaces/file.spec"] # array form (preferred): each element is one arg
 }
 ```
+
+Array form preserves arguments containing spaces as single arguments. Each element is evaluated as an expression, so `env()` refs and string concatenation work inside array elements.
 
 ## Action: `exec`
 
