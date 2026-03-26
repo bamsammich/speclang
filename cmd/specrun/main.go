@@ -15,6 +15,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/speclang/v2/internal/adapter"
+	"github.com/bamsammich/speclang/v2/internal/generator"
 	"github.com/bamsammich/speclang/v2/internal/infra"
 	"github.com/bamsammich/speclang/v2/internal/openapi"
 	protoresolver "github.com/bamsammich/speclang/v2/internal/proto"
@@ -561,19 +562,17 @@ func resolveExprToString(
 	expr spec.Expr,
 	services []infra.RunningService,
 ) string {
-	switch e := expr.(type) {
-	case spec.LiteralString:
-		return e.Value
-	case spec.EnvRef:
-		if val := os.Getenv(e.Var); val != "" {
-			return val
-		}
-		return e.Default
-	case spec.ServiceRef:
+	if e, ok := expr.(spec.ServiceRef); ok {
 		return resolveServiceURL(e.Name, services)
-	default:
-		return fmt.Sprintf("%v", e)
 	}
+	val, ok := generator.Eval(expr, nil)
+	if !ok {
+		return ""
+	}
+	if s, isStr := val.(string); isStr {
+		return s
+	}
+	return fmt.Sprintf("%v", val)
 }
 
 // resolveServiceURL finds the URL for a named service from running services.
