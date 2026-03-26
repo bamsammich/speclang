@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
+	"os"
 	"reflect"
 	"strings"
 
@@ -312,6 +313,11 @@ func evalLiteral(expr parser.Expr) (any, bool) {
 		return e.Value, true
 	case parser.LiteralNull:
 		return nil, true
+	case parser.EnvRef:
+		if val := os.Getenv(e.Var); val != "" {
+			return val, true
+		}
+		return e.Default, true
 	default:
 		return nil, false
 	}
