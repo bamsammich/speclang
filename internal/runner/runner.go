@@ -332,7 +332,8 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 	for _, step := range steps {
 		switch s := step.(type) {
 		case *parser.Assignment:
-			setPath(input, s.Path, exprToValue(s.Value))
+			val, _ := generator.Eval(s.Value, nil)
+			setPath(input, s.Path, val)
 		case *parser.Call:
 			args, err := sr.marshalCallArgs(s)
 			if err != nil {
@@ -371,7 +372,8 @@ func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, erro
 				resolved = append(resolved, a.Path)
 			}
 		default:
-			resolved = append(resolved, exprToValue(arg))
+			val, _ := generator.Eval(arg, nil)
+			resolved = append(resolved, val)
 		}
 	}
 	return json.Marshal(resolved)
@@ -868,7 +870,8 @@ func stepsToMap(steps []parser.GivenStep) map[string]any {
 	result := make(map[string]any)
 	for _, s := range steps {
 		if a, ok := s.(*parser.Assignment); ok {
-			setPath(result, a.Path, exprToValue(a.Value))
+			val, _ := generator.Eval(a.Value, nil)
+			setPath(result, a.Path, val)
 		}
 	}
 	return result
@@ -887,34 +890,4 @@ func setPath(m map[string]any, path string, value any) {
 		current = next
 	}
 	current[parts[len(parts)-1]] = value
-}
-
-// exprToValue converts an AST expression to a Go value.
-func exprToValue(expr parser.Expr) any {
-	switch e := expr.(type) {
-	case parser.LiteralInt:
-		return e.Value
-	case parser.LiteralFloat:
-		return e.Value
-	case parser.LiteralString:
-		return e.Value
-	case parser.LiteralBool:
-		return e.Value
-	case parser.LiteralNull:
-		return nil
-	case parser.ObjectLiteral:
-		m := make(map[string]any, len(e.Fields))
-		for _, f := range e.Fields {
-			m[f.Key] = exprToValue(f.Value)
-		}
-		return m
-	case parser.ArrayLiteral:
-		result := make([]any, len(e.Elements))
-		for i, elem := range e.Elements {
-			result[i] = exprToValue(elem)
-		}
-		return result
-	default:
-		return nil
-	}
 }
