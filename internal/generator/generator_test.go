@@ -41,6 +41,72 @@ func TestEval_EnvRef_UnsetNoDefault(t *testing.T) {
 	}
 }
 
+func TestEval_StringConcat(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		expr parser.Expr
+		want any
+		name string
+	}{
+		{
+			name: "string + string",
+			expr: parser.BinaryOp{
+				Left: parser.LiteralString{Value: "hello"}, Op: "+",
+				Right: parser.LiteralString{Value: " world"},
+			},
+			want: "hello world",
+		},
+		{
+			name: "string + int auto-coerce",
+			expr: parser.BinaryOp{
+				Left: parser.LiteralString{Value: "count: "}, Op: "+",
+				Right: parser.LiteralInt{Value: 42},
+			},
+			want: "count: 42",
+		},
+		{
+			name: "int + string auto-coerce",
+			expr: parser.BinaryOp{
+				Left: parser.LiteralInt{Value: 42}, Op: "+",
+				Right: parser.LiteralString{Value: " items"},
+			},
+			want: "42 items",
+		},
+		{
+			name: "string + bool auto-coerce",
+			expr: parser.BinaryOp{
+				Left: parser.LiteralString{Value: "flag: "}, Op: "+",
+				Right: parser.LiteralBool{Value: true},
+			},
+			want: "flag: true",
+		},
+		{
+			name: "chained concat",
+			expr: parser.BinaryOp{
+				Left: parser.BinaryOp{
+					Left: parser.LiteralString{Value: "a"}, Op: "+",
+					Right: parser.LiteralString{Value: "b"},
+				},
+				Op:    "+",
+				Right: parser.LiteralString{Value: "c"},
+			},
+			want: "abc",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, ok := Eval(tt.expr, nil)
+			if !ok {
+				t.Fatal("Eval returned not-ok")
+			}
+			if result != tt.want {
+				t.Fatalf("got %v (%T), want %v (%T)", result, result, tt.want, tt.want)
+			}
+		})
+	}
+}
+
 func transferContract() (*parser.Contract, []*parser.Model) {
 	models := []*parser.Model{
 		{
