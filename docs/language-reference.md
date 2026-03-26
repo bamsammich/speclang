@@ -236,9 +236,11 @@ Resolves at runtime to the URL of a running container declared in the `target` `
 ### Environment Variables
 
 ```
-env(APP_URL)                  # required, fails if unset
+env(APP_URL)                  # returns "" if unset
 env(APP_URL, "http://localhost:8080")  # with default
 ```
+
+`env()` expressions work everywhere: target config, scope config blocks, given block values, and call arguments. When the variable is unset and no default is provided, the expression evaluates to an empty string.
 
 ### Operators
 

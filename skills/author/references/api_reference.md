@@ -89,7 +89,7 @@ spec <Name> {
 
 - **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
 - **Field references**: `from.balance`, `output.error`
-- **Environment**: `env(VAR)`, `env(VAR, "default")`
+- **Environment**: `env(VAR)`, `env(VAR, "default")` — works in all positions (target config, scope config, given values, call args); returns `""` if unset with no default
 - **Service reference**: `service(name)` -- resolves to running container URL from `services` block
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
