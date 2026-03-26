@@ -34,4 +34,5 @@ spec Speclang {
   include "shrinking.spec"
   include "import.spec"
   include "services.spec"
+  include "expressions.spec"
 }

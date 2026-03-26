@@ -183,6 +183,130 @@ func TestRelationalAssertions(t *testing.T) {
 	}
 }
 
+func TestEnvRefInGivenBlock(t *testing.T) {
+	t.Setenv("SPECTEST_RUNNER_VAL", "resolved_value")
+
+	sp := &parser.Spec{
+		Name: "EnvRefTest",
+		Scopes: []*parser.Scope{{
+			Name:   "env_scope",
+			Use:    "test",
+			Config: map[string]parser.Expr{},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "env_given",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{
+							Path:  "file",
+							Value: parser.EnvRef{Var: "SPECTEST_RUNNER_VAL", Default: "fallback"},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
+	_, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if len(mock.actionCalls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	}
+
+	// The exec action should contain "resolved_value" from the env var.
+	args := string(mock.actionCalls[0].Args)
+	if !json.Valid(mock.actionCalls[0].Args) {
+		t.Fatalf("invalid JSON in action args: %s", args)
+	}
+	// The process adapter receives exec args as a JSON array.
+	// The input field "file" should have the resolved env value.
+	var execArgs []any
+	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+		t.Fatalf("unmarshal args: %v", err)
+	}
+	found := false
+	for _, a := range execArgs {
+		if s, ok := a.(string); ok && s == "resolved_value" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected env-resolved value 'resolved_value' in args, got %s", args)
+	}
+}
+
+func TestEnvRefInConfigBlock(t *testing.T) {
+	t.Setenv("SPECTEST_CONFIG_ARGS", "parse")
+
+	sp := &parser.Spec{
+		Name: "EnvConfigTest",
+		Scopes: []*parser.Scope{{
+			Name: "env_config",
+			Use:  "test",
+			Config: map[string]parser.Expr{
+				"args": parser.EnvRef{Var: "SPECTEST_CONFIG_ARGS", Default: "help"},
+			},
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
+				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name: "env_config_scenario",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{
+							Path:  "file",
+							Value: parser.LiteralString{Value: "test.spec"},
+						},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	mock := &mockAdapter{}
+	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
+	_, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if len(mock.actionCalls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	}
+
+	// The exec args should start with "parse" from the env-resolved config.
+	var execArgs []any
+	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+		t.Fatalf("unmarshal args: %v", err)
+	}
+	if len(execArgs) < 1 {
+		t.Fatal("expected at least 1 exec arg")
+	}
+	if execArgs[0] != "parse" {
+		t.Errorf("first exec arg = %v, want 'parse'", execArgs[0])
+	}
+}
+
 // mockAdapter records Action and Assert calls for testing.
 type mockAdapter struct {
 	actionCalls []actionCall

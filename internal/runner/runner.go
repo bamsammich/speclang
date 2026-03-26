@@ -88,14 +88,14 @@ func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
 		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", scope.Use, scope.Name)
 	}
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
-	method := strings.ToUpper(resolveConfigString(scope.Config, "method"))
+	method := strings.ToUpper(evalConfigString(scope.Config, "method"))
 	return &scopeRunner{
 		runner:    r,
 		adapter:   adp,
 		generator: gen,
 		scopeDef:  scope,
 		scope:     scope.Name,
-		path:      resolveConfigString(scope.Config, "path"),
+		path:      evalConfigString(scope.Config, "path"),
 		method:    method,
 	}, nil
 }
@@ -148,8 +148,8 @@ func (sr *scopeRunner) run(res *Result) error {
 	return nil
 }
 
-// resolveConfigString extracts a string value from a scope's config map.
-func resolveConfigString(config map[string]parser.Expr, key string) string {
+// evalConfigString evaluates a config key to a string via generator.Eval.
+func evalConfigString(config map[string]parser.Expr, key string) string {
 	if config == nil {
 		return ""
 	}
@@ -157,12 +157,14 @@ func resolveConfigString(config map[string]parser.Expr, key string) string {
 	if !ok {
 		return ""
 	}
-	switch e := expr.(type) {
-	case parser.LiteralString:
-		return e.Value
-	default:
-		return fmt.Sprintf("%v", e)
+	val, ok := generator.Eval(expr, nil)
+	if !ok {
+		return ""
 	}
+	if s, isStr := val.(string); isStr {
+		return s
+	}
+	return fmt.Sprintf("%v", val)
 }
 
 // executeInput sends an input map to the adapter and returns the parsed response.
@@ -233,7 +235,7 @@ func (sr *scopeRunner) buildExecAction(inputJSON json.RawMessage) (string, json.
 
 func (sr *scopeRunner) collectExecArgs(inputMap map[string]any) []any {
 	var execArgs []any
-	if configArgs := resolveConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
+	if configArgs := evalConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
 		for _, a := range strings.Fields(configArgs) {
 			execArgs = append(execArgs, a)
 		}
@@ -332,7 +334,8 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 	for _, step := range steps {
 		switch s := step.(type) {
 		case *parser.Assignment:
-			setPath(input, s.Path, exprToValue(s.Value))
+			val, _ := generator.Eval(s.Value, nil)
+			setPath(input, s.Path, val)
 		case *parser.Call:
 			args, err := sr.marshalCallArgs(s)
 			if err != nil {
@@ -371,7 +374,8 @@ func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, erro
 				resolved = append(resolved, a.Path)
 			}
 		default:
-			resolved = append(resolved, exprToValue(arg))
+			val, _ := generator.Eval(arg, nil)
+			resolved = append(resolved, val)
 		}
 	}
 	return json.Marshal(resolved)
@@ -472,7 +476,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 		return fmt.Errorf("creating new page: %s", resp.Error)
 	}
 
-	url := resolveConfigString(sr.scopeDef.Config, "url")
+	url := evalConfigString(sr.scopeDef.Config, "url")
 	if url != "" {
 		args, err := json.Marshal([]string{url})
 		if err != nil {
@@ -868,7 +872,8 @@ func stepsToMap(steps []parser.GivenStep) map[string]any {
 	result := make(map[string]any)
 	for _, s := range steps {
 		if a, ok := s.(*parser.Assignment); ok {
-			setPath(result, a.Path, exprToValue(a.Value))
+			val, _ := generator.Eval(a.Value, nil)
+			setPath(result, a.Path, val)
 		}
 	}
 	return result
@@ -887,34 +892,4 @@ func setPath(m map[string]any, path string, value any) {
 		current = next
 	}
 	current[parts[len(parts)-1]] = value
-}
-
-// exprToValue converts an AST expression to a Go value.
-func exprToValue(expr parser.Expr) any {
-	switch e := expr.(type) {
-	case parser.LiteralInt:
-		return e.Value
-	case parser.LiteralFloat:
-		return e.Value
-	case parser.LiteralString:
-		return e.Value
-	case parser.LiteralBool:
-		return e.Value
-	case parser.LiteralNull:
-		return nil
-	case parser.ObjectLiteral:
-		m := make(map[string]any, len(e.Fields))
-		for _, f := range e.Fields {
-			m[f.Key] = exprToValue(f.Value)
-		}
-		return m
-	case parser.ArrayLiteral:
-		result := make([]any, len(e.Elements))
-		for i, elem := range e.Elements {
-			result[i] = exprToValue(elem)
-		}
-		return result
-	default:
-		return nil
-	}
 }

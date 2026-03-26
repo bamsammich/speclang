@@ -6,6 +6,41 @@ import (
 	"github.com/bamsammich/speclang/v2/internal/parser"
 )
 
+func TestEval_EnvRef_SetVar(t *testing.T) {
+	t.Setenv("SPECTEST_EVAL_SET", "hello")
+	val, ok := Eval(parser.EnvRef{Var: "SPECTEST_EVAL_SET"}, nil)
+	if !ok {
+		t.Fatal("Eval returned ok=false for EnvRef")
+	}
+	if val != "hello" {
+		t.Errorf("got %q, want %q", val, "hello")
+	}
+}
+
+func TestEval_EnvRef_UnsetWithDefault(t *testing.T) {
+	t.Parallel()
+
+	val, ok := Eval(parser.EnvRef{Var: "SPECTEST_EVAL_UNSET_12345", Default: "fallback"}, nil)
+	if !ok {
+		t.Fatal("Eval returned ok=false for EnvRef with default")
+	}
+	if val != "fallback" {
+		t.Errorf("got %q, want %q", val, "fallback")
+	}
+}
+
+func TestEval_EnvRef_UnsetNoDefault(t *testing.T) {
+	t.Parallel()
+
+	val, ok := Eval(parser.EnvRef{Var: "SPECTEST_EVAL_UNSET_12345"}, nil)
+	if !ok {
+		t.Fatal("Eval returned ok=false for EnvRef without default")
+	}
+	if val != "" {
+		t.Errorf("got %q, want empty string", val)
+	}
+}
+
 func transferContract() (*parser.Contract, []*parser.Model) {
 	models := []*parser.Model{
 		{
