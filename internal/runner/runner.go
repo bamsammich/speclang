@@ -233,12 +233,39 @@ func (sr *scopeRunner) buildExecAction(inputJSON json.RawMessage) (string, json.
 	return "exec", args, nil
 }
 
+// evalConfigArgs evaluates the "args" config expression into exec arguments.
+// Array form preserves each element as a separate argument; string form splits on whitespace.
+func evalConfigArgs(argsExpr parser.Expr, inputMap map[string]any) []any {
+	switch e := argsExpr.(type) {
+	case parser.ArrayLiteral:
+		var args []any
+		for _, elem := range e.Elements {
+			if val, ok := generator.Eval(elem, inputMap); ok {
+				args = append(args, val)
+			}
+		}
+		return args
+	default:
+		val, ok := generator.Eval(e, inputMap)
+		if !ok {
+			return nil
+		}
+		s, isStr := val.(string)
+		if !isStr {
+			return nil
+		}
+		var args []any
+		for _, a := range strings.Fields(s) {
+			args = append(args, a)
+		}
+		return args
+	}
+}
+
 func (sr *scopeRunner) collectExecArgs(inputMap map[string]any) []any {
 	var execArgs []any
-	if configArgs := evalConfigString(sr.scopeDef.Config, "args"); configArgs != "" {
-		for _, a := range strings.Fields(configArgs) {
-			execArgs = append(execArgs, a)
-		}
+	if argsExpr, ok := sr.scopeDef.Config["args"]; ok {
+		execArgs = append(execArgs, evalConfigArgs(argsExpr, inputMap)...)
 	}
 	if sr.scopeDef.Contract != nil {
 		for _, field := range sr.scopeDef.Contract.Input {
