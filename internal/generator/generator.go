@@ -601,6 +601,13 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
 	case "<", "<=", ">", ">=", "+", "-", "*", "/", "%":
+		// String concatenation: if either operand is a string and op is +,
+		// stringify the other and concatenate.
+		if op == "+" {
+			if result, ok := evalStringConcat(left, right); ok {
+				return result, true
+			}
+		}
 		// If both sides are native int, use int arithmetic (avoids float precision issues).
 		ln, lok := left.(int)
 		rn, rok := right.(int)
@@ -621,6 +628,23 @@ func evalBinaryValues(op string, left, right any) (any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// evalStringConcat handles string concatenation. If either operand is a string,
+// the other is converted via fmt.Sprint and the results are concatenated.
+func evalStringConcat(left, right any) (any, bool) {
+	ls, lok := left.(string)
+	rs, rok := right.(string)
+	if lok && rok {
+		return ls + rs, true
+	}
+	if lok {
+		return ls + fmt.Sprint(right), true
+	}
+	if rok {
+		return fmt.Sprint(left) + rs, true
+	}
+	return "", false
 }
 
 func evalBoolOp(op string, left, right any) (any, bool) {

@@ -246,7 +246,7 @@ env(APP_URL, "http://localhost:8080")  # with default
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `+` | Addition | `a + b` |
+| `+` | Addition / String concatenation | `a + b`, `"hello" + " world"` |
 | `-` | Subtraction | `a - b` |
 | `*` | Multiplication | `a * b` |
 | `/` | Division | `a / b` |
@@ -260,6 +260,8 @@ env(APP_URL, "http://localhost:8080")  # with default
 | `&&` | Logical AND | `a > 0 && b > 0` |
 | `\|\|` | Logical OR | `error != null \|\| status == 200` |
 | `!` | Logical NOT | `!exists(field)` |
+
+The `+` operator performs string concatenation when either operand is a string. Non-string operands are automatically converted: `"count: " + 42` produces `"count: 42"`.
 
 Chained comparisons are supported: `0 < amount <= from.balance` is equivalent to `0 < amount && amount <= from.balance`.
 
