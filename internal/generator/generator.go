@@ -314,6 +314,8 @@ func evalLiteral(expr parser.Expr) (any, bool) {
 	case parser.LiteralNull:
 		return nil, true
 	case parser.EnvRef:
+		// Intentionally treat "" the same as unset — in a spec language there is
+		// no meaningful distinction between "variable not set" and "set to empty."
 		if val := os.Getenv(e.Var); val != "" {
 			return val, true
 		}
