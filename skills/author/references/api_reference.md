@@ -93,7 +93,7 @@ spec <Name> {
 - **Service reference**: `service(name)` -- resolves to running container URL from `services` block
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
-- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`
+- **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!` — the `+` operator also performs string concatenation when either operand is a string (non-string operands are auto-converted: `"count: " + 42` produces `"count: 42"`)
 - **Functions**:
   - `len(expr)` — returns length of array, map, or string
   - `all(array, elem => predicate)` — true if predicate holds for every element
