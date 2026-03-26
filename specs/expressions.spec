@@ -26,6 +26,34 @@ scope env_in_config {
   }
 }
 
+# Verifies that string concatenation with + works in then block assertions.
+scope string_concat {
+  use process
+  config {
+    args: "parse"
+  }
+
+  contract {
+    input {
+      file: string
+    }
+    output {
+      exit_code: int
+      name: string
+    }
+  }
+
+  scenario concat_in_then {
+    given {
+      file: "testdata/self/minimal.spec"
+    }
+    then {
+      exit_code: 0
+      name: "Mini" + "mal"
+    }
+  }
+}
+
 scope env_in_given {
   use process
   config {
