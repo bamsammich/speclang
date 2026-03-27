@@ -30,6 +30,9 @@ type Adapter interface {
 	// Assert checks an assertion against the system under test.
 	Assert(property string, locator string, expected json.RawMessage) (*Response, error)
 
+	// Reset clears accumulated state (headers, cookies, responses) for a fresh iteration.
+	Reset() error
+
 	// Close cleans up resources.
 	Close() error
 }

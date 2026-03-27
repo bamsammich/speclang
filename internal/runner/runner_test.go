@@ -414,6 +414,7 @@ func (m *mockAdapter) Assert(
 	})
 	return &adapter.Response{OK: true, Actual: expected}, nil
 }
+func (m *mockAdapter) Reset() error { return nil }
 func (m *mockAdapter) Close() error { return nil }
 
 func TestLocatorResolution(t *testing.T) {
@@ -859,6 +860,7 @@ func (f *failingAdapter) Assert(
 ) (*adapter.Response, error) {
 	return &adapter.Response{OK: true, Actual: expected}, nil
 }
+func (f *failingAdapter) Reset() error { return nil }
 func (f *failingAdapter) Close() error { return nil }
 
 func TestErrorPseudoField_GivenScenario_ExpectedError(t *testing.T) {

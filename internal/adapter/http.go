@@ -203,6 +203,17 @@ func (a *HTTPAdapter) Assert(
 	}, nil
 }
 
+func (a *HTTPAdapter) Reset() error {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return fmt.Errorf("creating cookie jar: %w", err)
+	}
+	a.client = &http.Client{Jar: jar}
+	a.headers = make(map[string]string)
+	a.last = nil
+	return nil
+}
+
 func (*HTTPAdapter) Close() error {
 	return nil
 }
