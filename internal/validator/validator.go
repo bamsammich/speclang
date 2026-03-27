@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v2/pkg/spec"
 )
 
 // primitives are type names that don't need model resolution.
@@ -15,15 +16,17 @@ var primitives = map[string]bool{
 }
 
 // Validate performs post-parse semantic validation on a spec.
-// It returns all errors found (not just the first).
-func Validate(spec *parser.Spec) []error {
+// The registry is used to look up plugin-specific assertion targets
+// (e.g., "status" for http, "exit_code" for process). It must not be nil.
+func Validate(s *parser.Spec, registry *spec.Registry) []error {
 	v := &validator{
-		models: buildModelRegistry(spec.Models),
+		models:   buildModelRegistry(s.Models),
+		registry: registry,
 	}
 
-	v.validateServiceRefs(spec)
+	v.validateServiceRefs(s)
 
-	for _, scope := range spec.Scopes {
+	for _, scope := range s.Scopes {
 		v.scope = scope.Name
 		v.validateContract(scope)
 		v.validateScenarios(scope)
@@ -33,9 +36,10 @@ func Validate(spec *parser.Spec) []error {
 }
 
 type validator struct {
-	models map[string]*parser.Model
-	scope  string
-	errs   []error
+	models   map[string]*parser.Model
+	registry *spec.Registry
+	scope    string
+	errs     []error
 }
 
 func buildModelRegistry(models []*parser.Model) map[string]*parser.Model {
@@ -81,6 +85,9 @@ func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) 
 
 	outputFields := buildFieldMap(scope.Contract.Output)
 
+	// Build set of plugin assertion targets (e.g., "status", "body", "header" for http).
+	pluginAssertions := v.pluginAssertionTargets(scope.Use)
+
 	for _, a := range sc.Then.Assertions {
 		// Skip plugin assertions (e.g., welcome@playwright.visible)
 		if a.Plugin != "" {
@@ -95,12 +102,37 @@ func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) 
 		if a.Target == "error" {
 			continue
 		}
+
 		fieldName := topLevelField(a.Target)
+
+		// Check plugin-specific built-in targets (e.g., "status" for http).
+		if pluginAssertions[fieldName] {
+			continue
+		}
+
 		if _, ok := outputFields[fieldName]; !ok {
 			v.errorf("scope %q, scenario %q: then target %q does not match any output field",
 				v.scope, sc.Name, a.Target)
 		}
 	}
+}
+
+// pluginAssertionTargets returns the set of built-in assertion target names
+// for the given plugin (from the registry). Returns nil if the plugin is
+// not found or has no assertions.
+func (v *validator) pluginAssertionTargets(pluginName string) map[string]bool {
+	if v.registry == nil || pluginName == "" {
+		return nil
+	}
+	def, ok := v.registry.Plugin(pluginName)
+	if !ok {
+		return nil
+	}
+	targets := make(map[string]bool, len(def.Assertions))
+	for name := range def.Assertions {
+		targets[name] = true
+	}
+	return targets
 }
 
 func buildFieldMap(fields []*parser.Field) map[string]*parser.Field {

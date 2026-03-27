@@ -112,7 +112,7 @@ Import support:
 |----------|-------------|
 | `Parse(source string)` | Parse a spec from source text |
 | `ParseFile(path string, imports ImportRegistry)` | Parse from file with include/import resolution |
-| `Validate(s *Spec)` | Check for semantic errors (returns `[]error`) |
+| `Validate(s *Spec, registry *Registry)` | Check for semantic errors (returns `[]error`); nil registry uses DefaultRegistry() |
 | `FormatErrors(errs []error)` | Format validation errors for display |
 | `Verify(s *Spec, registry *Registry, opts Options)` | Run full verification pipeline |
 | `Generate(s *Spec, scopeName string, seed uint64)` | Produce one random input for a scope |
@@ -160,7 +160,7 @@ s, err := specrun.Parse(source)
 After parsing, check for semantic errors:
 
 ```go
-errs := specrun.Validate(s)
+errs := specrun.Validate(s, nil) // nil uses DefaultRegistry()
 if len(errs) > 0 {
 	fmt.Fprintln(os.Stderr, specrun.FormatErrors(errs))
 	os.Exit(1)

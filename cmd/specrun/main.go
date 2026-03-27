@@ -188,7 +188,7 @@ func installCmd() *cli.Command {
 }
 
 func validateSpec(s *spec.Spec) int {
-	errs := specrun.Validate(s)
+	errs := specrun.Validate(s, nil)
 	if len(errs) > 0 {
 		//nolint:gosec // CLI writing to stderr, not a web response
 		fmt.Fprint(os.Stderr, specrun.FormatErrors(errs))
