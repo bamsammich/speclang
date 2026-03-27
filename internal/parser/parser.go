@@ -498,6 +498,16 @@ func (p *parser) parseScopeMember(scope *Scope) error {
 			return err
 		}
 		scope.Scenarios = append(scope.Scenarios, sc)
+	case TokenBefore:
+		if scope.Before != nil {
+			return p.errAt(tok, fmt.Sprintf("scope %q has multiple 'before' blocks", scope.Name))
+		}
+		p.advance() // consume "before"
+		block, err := p.parseGivenBlock()
+		if err != nil {
+			return err
+		}
+		scope.Before = block
 	default:
 		return p.errAt(tok, fmt.Sprintf("unexpected token %s in scope body", tok.Type))
 	}
