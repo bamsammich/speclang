@@ -1137,9 +1137,20 @@ func (p *parser) parseAssertion() (*Assertion, error) {
 		a.Property = property.Value
 	}
 
-	if _, err := p.expect(TokenColon); err != nil {
-		return nil, err
+	// Accept ':' (sugar for ==) or a comparison operator.
+	op := "=="
+	tok := p.peek()
+	switch tok.Type {
+	case TokenColon:
+		p.advance()
+	case TokenGt, TokenGte, TokenLt, TokenLte, TokenEq, TokenNeq:
+		p.advance()
+		op = tok.Value
+	default:
+		return nil, p.errAt(tok, "expected ':' or comparison operator in assertion")
 	}
+	a.Operator = op
+
 	val, err := p.parseExpr()
 	if err != nil {
 		return nil, err

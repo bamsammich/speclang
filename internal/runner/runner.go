@@ -622,17 +622,80 @@ func (sr *scopeRunner) checkSingleAssertion(
 	if err != nil {
 		return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
 	}
-	if !resp.OK {
+
+	op := a.Operator
+	if op == "" {
+		op = "=="
+	}
+
+	if op == "==" {
+		// Equality: use adapter's built-in comparison.
+		if !resp.OK {
+			return &Failure{
+				Name:        name,
+				Scope:       sr.scope,
+				Input:       input,
+				Expected:    string(expected),
+				Actual:      string(resp.Actual),
+				Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+			}, nil
+		}
+		return nil, nil
+	}
+
+	// Non-equality operator: compare actual vs expected in the runner.
+	ok, cmpErr := compareAssertion(op, resp.Actual, expected)
+	if cmpErr != nil {
+		return nil, fmt.Errorf("comparing %q with %s: %w", a.Target, op, cmpErr)
+	}
+	if !ok {
 		return &Failure{
 			Name:        name,
 			Scope:       sr.scope,
 			Input:       input,
-			Expected:    string(expected),
+			Expected:    fmt.Sprintf("%s %s", op, string(expected)),
 			Actual:      string(resp.Actual),
-			Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+			Description: fmt.Sprintf("assertion %q failed: got %s, expected %s %s", a.Target, string(resp.Actual), op, string(expected)),
 		}, nil
 	}
 	return nil, nil
+}
+
+// compareAssertion evaluates a non-equality comparison between actual and expected
+// JSON values. Supports !=, >, >=, <, <=. Relational operators require numeric values.
+func compareAssertion(op string, actual, expected json.RawMessage) (bool, error) {
+	if op == "!=" {
+		var a, e any
+		if err := json.Unmarshal(actual, &a); err != nil {
+			return false, fmt.Errorf("unmarshaling actual: %w", err)
+		}
+		if err := json.Unmarshal(expected, &e); err != nil {
+			return false, fmt.Errorf("unmarshaling expected: %w", err)
+		}
+		return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", e), nil
+	}
+
+	// Relational operators require numeric values.
+	var a, e float64
+	if err := json.Unmarshal(actual, &a); err != nil {
+		return false, fmt.Errorf("operator %s requires numeric actual, got %s", op, string(actual))
+	}
+	if err := json.Unmarshal(expected, &e); err != nil {
+		return false, fmt.Errorf("operator %s requires numeric expected, got %s", op, string(expected))
+	}
+
+	switch op {
+	case ">":
+		return a > e, nil
+	case ">=":
+		return a >= e, nil
+	case "<":
+		return a < e, nil
+	case "<=":
+		return a <= e, nil
+	default:
+		return false, fmt.Errorf("unsupported operator %q", op)
+	}
 }
 
 func (sr *scopeRunner) resolveAssertionTarget(a *parser.Assertion) (string, string, error) {

@@ -82,4 +82,74 @@ spec Test {
 			a.Property,
 		)
 	}
+	if a.Operator != "==" {
+		t.Errorf("colon assertion Operator = %q, want '=='", a.Operator)
+	}
+}
+
+func TestParseThenBlock_ComparisonOperators(t *testing.T) {
+	t.Parallel()
+	spec, err := Parse(`
+spec Test {
+  locators {
+    items: [data-testid=items]
+  }
+  scope test {
+    use playwright
+    contract {
+      input { x: int }
+      output { score: int }
+    }
+    scenario ops {
+      given { x: 1 }
+      then {
+        items@playwright.count >= 1
+        items@playwright.count > 0
+        items@playwright.count <= 100
+        items@playwright.count < 101
+        score != 0
+        score == 42
+      }
+    }
+  }
+}
+`)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+
+	if len(assertions) != 6 {
+		t.Fatalf("expected 6 assertions, got %d", len(assertions))
+	}
+
+	tests := []struct {
+		target   string
+		plugin   string
+		property string
+		operator string
+	}{
+		{"items", "playwright", "count", ">="},
+		{"items", "playwright", "count", ">"},
+		{"items", "playwright", "count", "<="},
+		{"items", "playwright", "count", "<"},
+		{"score", "", "", "!="},
+		{"score", "", "", "=="},
+	}
+
+	for i, tt := range tests {
+		a := assertions[i]
+		if a.Target != tt.target {
+			t.Errorf("assertion[%d] Target = %q, want %q", i, a.Target, tt.target)
+		}
+		if a.Plugin != tt.plugin {
+			t.Errorf("assertion[%d] Plugin = %q, want %q", i, a.Plugin, tt.plugin)
+		}
+		if a.Property != tt.property {
+			t.Errorf("assertion[%d] Property = %q, want %q", i, a.Property, tt.property)
+		}
+		if a.Operator != tt.operator {
+			t.Errorf("assertion[%d] Operator = %q, want %q", i, a.Operator, tt.operator)
+		}
+	}
 }

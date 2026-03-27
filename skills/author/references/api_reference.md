@@ -207,6 +207,18 @@ then {
 
 This syntax is available to all adapters but is primarily used with `playwright`.
 
+## Comparison Operators in Assertions
+
+Assertions support comparison operators (`==`, `!=`, `>`, `>=`, `<`, `<=`). `:` is sugar for `==`. Relational operators (`>`, `>=`, `<`, `<=`) require numeric values.
+
+```
+then {
+  status: 200                        # equality (: is sugar for ==)
+  items@playwright.count >= 1        # relational
+  score != 0                         # inequality
+}
+```
+
 ## Mixed `given` Block Syntax
 
 `given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written. This works with any adapter that supports action calls (Playwright and HTTP).
