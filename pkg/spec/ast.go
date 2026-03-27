@@ -130,6 +130,7 @@ type Assertion struct {
 	Target   string `json:"target,omitempty"`   // field path or locator name
 	Plugin   string `json:"plugin,omitempty"`   // plugin namespace (from @ syntax)
 	Property string `json:"property,omitempty"` // assertion property name
+	Operator string `json:"operator,omitempty"` // comparison operator: ==, !=, >, >=, <, <= (default ==)
 }
 
 // Assignment sets a concrete value: field: value

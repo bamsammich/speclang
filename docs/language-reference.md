@@ -477,13 +477,26 @@ given {
 
 ### Plain Assertions
 
-In `then` blocks, assert output field values:
+In `then` blocks, assert output field values. `:` is sugar for equality (`==`):
 
 ```
 then {
   status: 200
   from.balance: from.balance - amount
   error: null
+}
+```
+
+### Comparison Operators
+
+Assertions support comparison operators (`==`, `!=`, `>`, `>=`, `<`, `<=`). `:` is equivalent to `==`. Relational operators (`>`, `>=`, `<`, `<=`) require numeric values.
+
+```
+then {
+  status: 200                        # equality (: is sugar for ==)
+  items@playwright.count >= 1        # relational
+  score != 0                         # inequality
+  from.balance <= from.balance       # relational on fields
 }
 ```
 
@@ -496,6 +509,7 @@ then {
   welcome@playwright.visible: true
   welcome@playwright.text: "Welcome, alice"
   error_msg@playwright.visible: false
+  items@playwright.count >= 1
 }
 ```
 
