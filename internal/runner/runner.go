@@ -288,7 +288,26 @@ func fieldToString(val any) string {
 	return string(b)
 }
 
+// executeBefore resets the adapter to clean state, then executes the scope's
+// before block steps. Returns the input context from before assignments.
+func (sr *scopeRunner) executeBefore() (map[string]any, error) {
+	if err := sr.adapter.Reset(); err != nil {
+		return nil, fmt.Errorf("resetting adapter: %w", err)
+	}
+	sr.lastActionError = ""
+
+	if sr.scopeDef.Before == nil {
+		return nil, nil
+	}
+
+	return sr.executeGivenSteps(sr.scopeDef.Before.Steps)
+}
+
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
+	if _, err := sr.executeBefore(); err != nil {
+		return CheckResult{}, fmt.Errorf("before block: %w", err)
+	}
+
 	input, err := sr.executeGivenInput(sc)
 	if err != nil {
 		return CheckResult{}, err
@@ -446,6 +465,10 @@ func (sr *scopeRunner) runWhenIteration(
 	expectsError bool,
 	i int,
 ) (*Failure, error) {
+	if _, err := sr.executeBefore(); err != nil {
+		return nil, fmt.Errorf("before block: %w", err)
+	}
+
 	input, err := sr.generator.GenerateMatching(predicate)
 	if err != nil {
 		return nil, err
@@ -793,6 +816,10 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 	}
 
 	for i := range sr.runner.n {
+		if _, err := sr.executeBefore(); err != nil {
+			return CheckResult{}, fmt.Errorf("before block: %w", err)
+		}
+
 		input, err := sr.generator.GenerateInput()
 		if err != nil {
 			return CheckResult{}, err
@@ -843,6 +870,9 @@ func (sr *scopeRunner) shrinkFailure(f *Failure, then *parser.Block) *Failure {
 	shrunk := generator.Shrink(
 		input, fields, models,
 		func(candidate map[string]any) bool {
+			if _, err := sr.executeBefore(); err != nil {
+				return false
+			}
 			if _, err := sr.executeInput(candidate); err != nil {
 				return false
 			}
@@ -877,6 +907,9 @@ func (sr *scopeRunner) shrinkInvariantFailure(f *Failure, inv *parser.Invariant)
 	shrunk := generator.Shrink(
 		input, fields, models,
 		func(candidate map[string]any) bool {
+			if _, err := sr.executeBefore(); err != nil {
+				return false
+			}
 			output, err := sr.executeInput(candidate)
 			if err != nil || sr.lastActionError != "" {
 				return false
