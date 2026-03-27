@@ -101,6 +101,17 @@ scope parse_valid {
     }
   }
 
+  # Verifies that before blocks parse correctly.
+  scenario before_block {
+    given {
+      file: "testdata/self/before_block.spec"
+    }
+    then {
+      exit_code: 0
+      name: "BeforeBlock"
+    }
+  }
+
   # Verifies that plugin assertion targets (e.g., "status" for http) pass validation.
   scenario plugin_assertion_target {
     given {
