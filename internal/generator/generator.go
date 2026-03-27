@@ -8,6 +8,7 @@ import (
 	"math/rand/v2" //nolint:gosec // intentional use of math/rand for reproducible test generation
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/bamsammich/speclang/v2/internal/parser"
@@ -533,15 +534,22 @@ func (c *evalCtx) resolveRef(path string) (any, bool) {
 	var current any = c.input
 
 	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
+		switch v := current.(type) {
+		case map[string]any:
+			val, exists := v[part]
+			if !exists {
+				return nil, false
+			}
+			current = val
+		case []any:
+			idx, err := strconv.Atoi(part)
+			if err != nil || idx < 0 || idx >= len(v) {
+				return nil, false
+			}
+			current = v[idx]
+		default:
 			return nil, false
 		}
-		val, exists := m[part]
-		if !exists {
-			return nil, false
-		}
-		current = val
 	}
 
 	return current, true
