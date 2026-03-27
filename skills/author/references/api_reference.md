@@ -46,6 +46,10 @@ spec <Name> {
       method: "POST"
     }
 
+    before {                         # optional: runs before each scenario/invariant
+      <plugin>.<verb>(<args>)
+    }
+
     contract {
       input {
         <field>: <type>
@@ -218,6 +222,32 @@ then {
   score != 0                         # inequality
 }
 ```
+
+## Before Block
+
+A `before` block runs before each scenario's `given` and each invariant iteration. The adapter state is reset to a clean slate before `before` executes, ensuring isolation between iterations.
+
+`before` uses the same syntax as `given` — data assignments and action calls:
+
+```
+scope create_group {
+  use http
+  config { ... }
+
+  before {
+    http.post("/auth/login", { token: "test" })
+    http.header("Authorization", "Bearer " + body.access_token)
+  }
+
+  contract { ... }
+}
+```
+
+**Composition:** `before` + `given` compose by concatenation — before steps run first, then given steps. State established in `before` (headers, cookies) carries into `given` and the request.
+
+**Failure:** If any `before` step fails, the entire scope is aborted.
+
+**Reset:** Each iteration starts with a clean adapter state — fresh HTTP client, empty headers, new cookie jar. For Playwright, cookies and localStorage are cleared.
 
 ## Mixed `given` Block Syntax
 

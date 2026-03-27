@@ -195,6 +195,15 @@ func (a *PlaywrightAdapter) Assert(
 	}, nil
 }
 
+func (a *PlaywrightAdapter) Reset() error {
+	if a.page != nil {
+		if _, err := a.doClearState(); err != nil {
+			return fmt.Errorf("clearing state: %w", err)
+		}
+	}
+	return nil
+}
+
 func (a *PlaywrightAdapter) Close() error {
 	var errs []error
 	for _, p := range a.pages {

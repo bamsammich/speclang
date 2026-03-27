@@ -20,6 +20,7 @@ func (stubAdapter) Assert(string, string, json.RawMessage) (*spec.Response, erro
 	return nil, nil
 }
 
+func (stubAdapter) Reset() error { return nil }
 func (stubAdapter) Close() error { return nil }
 
 func TestRegistry_RegisterAndLookup(t *testing.T) {

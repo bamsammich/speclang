@@ -161,6 +161,11 @@ func (a *ProcessAdapter) Assert(
 	}, nil
 }
 
+func (a *ProcessAdapter) Reset() error {
+	a.last = nil
+	return nil
+}
+
 func (*ProcessAdapter) Close() error {
 	return nil
 }
