@@ -18,6 +18,7 @@ type Scope struct {
 	Name       string          `json:"name"`
 	Use        string          `json:"use"`              // plugin binding (e.g. "http", "playwright")
 	Config     map[string]Expr `json:"config,omitempty"` // opaque key-value pairs, interpreted by adapter
+	Before     *Block          `json:"before,omitempty"`
 	Contract   *Contract       `json:"contract,omitempty"`
 	Invariants []*Invariant    `json:"invariants,omitempty"`
 	Scenarios  []*Scenario     `json:"scenarios,omitempty"`
