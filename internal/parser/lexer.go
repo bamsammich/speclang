@@ -57,6 +57,7 @@ const (
 	TokenIf
 	TokenElse
 	TokenService
+	TokenBefore
 
 	// Symbols
 	TokenLBrace   // {
@@ -123,6 +124,7 @@ var tokenNames = map[TokenType]string{
 	TokenIf:        "If",
 	TokenElse:      "Else",
 	TokenService:   "Service",
+	TokenBefore:    "Before",
 	TokenLBrace:    "LBrace",
 	TokenRBrace:    "RBrace",
 	TokenLParen:    "LParen",
@@ -185,6 +187,7 @@ var keywords = map[string]TokenType{
 	"if":        TokenIf,
 	"else":      TokenElse,
 	"service":   TokenService,
+	"before":    TokenBefore,
 	"true":      TokenBool,
 	"false":     TokenBool,
 }

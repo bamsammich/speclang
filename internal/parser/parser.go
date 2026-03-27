@@ -105,7 +105,8 @@ func isIdentLike(typ TokenType) bool {
 		TokenModel, TokenAction,
 		TokenTarget, TokenLocators,
 		TokenGiven, TokenThen,
-		TokenScope, TokenConfig:
+		TokenScope, TokenConfig,
+		TokenBefore:
 		return true
 	default:
 		return false
