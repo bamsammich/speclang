@@ -613,7 +613,7 @@ func (p *parser) parseModel() (*Model, error) {
 
 // parseField parses: name: type {constraint}?
 func (p *parser) parseField() (*Field, error) {
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1388,6 +1388,12 @@ func (p *parser) parseFieldRefExpr() (Expr, error) {
 	path := first.Value
 	for p.peek().Type == TokenDot {
 		p.advance() // consume .
+		// Accept integer tokens as array index segments (e.g., "output.items.0").
+		if p.peek().Type == TokenInt {
+			seg := p.advance()
+			path += "." + seg.Value
+			continue
+		}
 		next, err := p.expectIdent()
 		if err != nil {
 			return nil, err
