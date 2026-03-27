@@ -100,6 +100,17 @@ scope parse_valid {
       name: "Quantifiers"
     }
   }
+
+  # Verifies that plugin assertion targets (e.g., "status" for http) pass validation.
+  scenario plugin_assertion_target {
+    given {
+      file: "testdata/self/plugin_assertion_target.spec"
+    }
+    then {
+      exit_code: 0
+      name: "PluginAssertionTarget"
+    }
+  }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.

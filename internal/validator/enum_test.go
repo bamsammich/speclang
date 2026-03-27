@@ -41,7 +41,7 @@ func TestValidate_EnumValidVariant(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -82,7 +82,7 @@ func TestValidate_EnumInvalidVariant(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for invalid variant, got %d: %v", len(errs), errs)
 	}
@@ -126,7 +126,7 @@ func TestValidate_EnumWrongLiteralType(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for non-string assigned to enum, got %d: %v", len(errs), errs)
 	}
@@ -151,7 +151,7 @@ func TestValidate_EnumInContractPasses(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -190,7 +190,7 @@ func TestValidate_EnumNullForOptional(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors for null on optional enum, got: %v", errs)
 	}

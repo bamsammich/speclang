@@ -30,8 +30,13 @@ func ParseFile(path string, imports spec.ImportRegistry) (*spec.Spec, error) {
 }
 
 // Validate checks a spec for semantic errors.
-func Validate(s *spec.Spec) []error {
-	return validator.Validate(s)
+// The registry is used to look up plugin-specific assertion targets.
+// If nil, DefaultRegistry() is used.
+func Validate(s *spec.Spec, registry *spec.Registry) []error {
+	if registry == nil {
+		registry = DefaultRegistry()
+	}
+	return validator.Validate(s, registry)
 }
 
 // FormatErrors formats validation errors into a human-readable string.

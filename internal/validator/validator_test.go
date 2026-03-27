@@ -6,7 +6,36 @@ import (
 	"testing"
 
 	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v2/pkg/spec"
 )
+
+// testRegistry returns a registry with http and process plugin assertions
+// registered, matching the built-in plugin definitions.
+func testRegistry() *spec.Registry {
+	r := spec.NewRegistry()
+	r.Register("http", spec.PluginDef{
+		Assertions: map[string]spec.AssertionDef{
+			"status": {Type: "int"},
+			"body":   {Type: "any"},
+			"header": {Type: "string"},
+		},
+	})
+	r.Register("process", spec.PluginDef{
+		Assertions: map[string]spec.AssertionDef{
+			"exit_code": {Type: "int"},
+			"stdout":    {Type: "any"},
+			"stderr":    {Type: "string"},
+		},
+	})
+	r.Register("playwright", spec.PluginDef{
+		Assertions: map[string]spec.AssertionDef{
+			"visible": {Type: "bool"},
+			"text":    {Type: "string"},
+			"count":   {Type: "int"},
+		},
+	})
+	return r
+}
 
 func TestValidate_UnknownTypeInContract(t *testing.T) {
 	t.Parallel()
@@ -24,7 +53,7 @@ func TestValidate_UnknownTypeInContract(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) == 0 {
 		t.Fatal("expected validation error for unknown type Widget")
 	}
@@ -60,7 +89,7 @@ func TestValidate_KnownModelPasses(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -85,7 +114,7 @@ func TestValidate_UnknownArrayElementType(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) == 0 {
 		t.Fatal("expected validation error for unknown array element type Widget")
 	}
@@ -120,7 +149,7 @@ func TestValidate_GivenLiteralTypeMismatch(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) == 0 {
 		t.Fatal("expected validation error for type mismatch")
 	}
@@ -165,7 +194,7 @@ func TestValidate_GivenLiteralCorrectType(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -208,7 +237,7 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error (null on required), got %d: %v", len(errs), errs)
 	}
@@ -252,7 +281,7 @@ func TestValidate_ArrayElementTypeMismatch(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for string in []int, got %d: %v", len(errs), errs)
 	}
@@ -319,7 +348,7 @@ func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) == 0 {
 		t.Fatal("expected errors for unknown field 'colour'")
 	}
@@ -378,7 +407,7 @@ func TestValidate_NestedArrays(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for string in nested [][]int, got %d: %v", len(errs), errs)
 	}
@@ -426,7 +455,7 @@ func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for unknown field email, got %d: %v", len(errs), errs)
 	}
@@ -476,7 +505,7 @@ func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for balance type mismatch, got %d: %v", len(errs), errs)
 	}
@@ -520,7 +549,7 @@ func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -559,7 +588,7 @@ func TestValidate_GivenMissingRequiredField(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for missing 'to', got %d: %v", len(errs), errs)
 	}
@@ -594,7 +623,7 @@ func TestValidate_GivenWithCallsSkipsCompleteness(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (given with calls skips completeness), got: %v", errs)
 	}
@@ -630,7 +659,7 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (when scenario skips completeness), got: %v", errs)
 	}
@@ -672,7 +701,7 @@ func TestValidate_ThenUnknownField(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for unknown then target, got %d: %v", len(errs), errs)
 	}
@@ -729,7 +758,7 @@ func TestValidate_ThenDotPathValid(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got: %v", errs)
 	}
@@ -771,7 +800,7 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (plugin assertions skipped), got: %v", errs)
 	}
@@ -816,7 +845,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) < 3 {
 		t.Fatalf(
 			"expected at least 3 errors (type mismatch + missing field + bad then target), got %d: %v",
@@ -870,7 +899,7 @@ func TestValidate_ServiceRefValid(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors for valid service ref, got: %v", errs)
 	}
@@ -886,7 +915,7 @@ func TestValidate_ServiceRefUndeclared(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error for undeclared service ref, got %d: %v", len(errs), errs)
 	}
@@ -907,7 +936,7 @@ func TestValidate_ServiceRefWithCompose(t *testing.T) {
 		},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors when compose is set, got: %v", errs)
 	}
@@ -945,7 +974,7 @@ func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
 		}},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	for _, e := range errs {
 		if contains(e.Error(), "error") && contains(e.Error(), "output field") {
 			t.Errorf("error pseudo-field should be allowed, got: %v", e)
@@ -981,7 +1010,7 @@ func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
 		}},
 	}
 
-	errs := Validate(spec)
+	errs := Validate(spec, testRegistry())
 	found := false
 	for _, e := range errs {
 		if contains(e.Error(), "nonexistent") {
@@ -993,5 +1022,89 @@ func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected validation error for 'nonexistent' field")
+	}
+}
+
+func TestValidate_PluginAssertionTargetsAllowed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		plugin string
+		target string
+	}{
+		{"http status", "http", "status"},
+		{"http body", "http", "body"},
+		{"http header", "http", "header"},
+		{"process exit_code", "process", "exit_code"},
+		{"process stdout", "process", "stdout"},
+		{"process stderr", "process", "stderr"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := &parser.Spec{
+				Scopes: []*parser.Scope{{
+					Name: "test",
+					Use:  tt.plugin,
+					Contract: &parser.Contract{
+						Input:  []*parser.Field{},
+						Output: []*parser.Field{{Name: "data", Type: parser.TypeExpr{Name: "string"}}},
+					},
+					Scenarios: []*parser.Scenario{{
+						Name:  "check",
+						Given: &parser.Block{},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Target: tt.target, Expected: parser.LiteralInt{Value: 200}, Operator: "=="},
+							},
+						},
+					}},
+				}},
+			}
+
+			errs := Validate(spec, testRegistry())
+			for _, e := range errs {
+				if contains(e.Error(), tt.target) {
+					t.Errorf("%s should be allowed as assertion target for %s plugin, got: %v",
+						tt.target, tt.plugin, e)
+				}
+			}
+		})
+	}
+}
+
+func TestValidate_UnknownTargetStillRejected(t *testing.T) {
+	t.Parallel()
+	spec := &parser.Spec{
+		Scopes: []*parser.Scope{{
+			Name: "test",
+			Use:  "http",
+			Contract: &parser.Contract{
+				Input:  []*parser.Field{},
+				Output: []*parser.Field{{Name: "data", Type: parser.TypeExpr{Name: "string"}}},
+			},
+			Scenarios: []*parser.Scenario{{
+				Name:  "check",
+				Given: &parser.Block{},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{
+						{Target: "nonexistent", Expected: parser.LiteralInt{Value: 42}, Operator: "=="},
+					},
+				},
+			}},
+		}},
+	}
+
+	errs := Validate(spec, testRegistry())
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "nonexistent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected validation error for unknown target 'nonexistent'")
 	}
 }
