@@ -234,6 +234,87 @@ func TestBeforeFailureReturnsError(t *testing.T) {
 	}
 }
 
+// TestBeforeBodyRefResolution verifies that body.field references in before/given
+// steps resolve from the previous action's response (#97).
+func TestBeforeBodyRefResolution(t *testing.T) {
+	adp := &bodyRefAdapter{}
+
+	// before block: post to login (returns {"access_token":"tok123"}),
+	// then call header with "Bearer " + body.access_token
+	beforeBlock := &spec.Block{
+		Steps: []spec.GivenStep{
+			&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+				spec.LiteralString{Value: "/auth/login"},
+				spec.ObjectLiteral{},
+			}},
+			&spec.Call{Namespace: "http", Method: "header", Args: []spec.Expr{
+				spec.LiteralString{Value: "Authorization"},
+				spec.BinaryOp{
+					Left:  spec.LiteralString{Value: "Bearer "},
+					Op:    "+",
+					Right: spec.FieldRef{Path: "body.access_token"},
+				},
+			}},
+		},
+	}
+
+	s := minimalSpec([]*spec.Scope{
+		{
+			Name:      "test_scope",
+			Use:       "http",
+			Config:    map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Before:    beforeBlock,
+			Contract:  minimalContract(),
+			Scenarios: []*spec.Scenario{givenScenario("basic", 42)},
+		},
+	})
+
+	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
+	r.SetN(1)
+	_, err := r.Verify()
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+
+	// The header call should have received "Bearer tok123" as the second arg.
+	if adp.lastHeaderValue != "Bearer tok123" {
+		t.Errorf("expected header value 'Bearer tok123', got %q", adp.lastHeaderValue)
+	}
+}
+
+// bodyRefAdapter returns a JSON body from "post" and records "header" args.
+type bodyRefAdapter struct {
+	lastHeaderValue string
+}
+
+func (a *bodyRefAdapter) Init(map[string]string) error { return nil }
+func (a *bodyRefAdapter) Reset() error                 { return nil }
+func (a *bodyRefAdapter) Close() error                 { return nil }
+
+func (a *bodyRefAdapter) Action(name string, args json.RawMessage) (*spec.Response, error) {
+	switch name {
+	case "post":
+		return &spec.Response{
+			OK:     true,
+			Actual: json.RawMessage(`{"access_token":"tok123"}`),
+		}, nil
+	case "header":
+		var rawArgs []json.RawMessage
+		if err := json.Unmarshal(args, &rawArgs); err == nil && len(rawArgs) >= 2 {
+			var val string
+			json.Unmarshal(rawArgs[1], &val)
+			a.lastHeaderValue = val
+		}
+		return &spec.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
+	default:
+		return &spec.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
+	}
+}
+
+func (a *bodyRefAdapter) Assert(property, locator string, expected json.RawMessage) (*spec.Response, error) {
+	return &spec.Response{OK: true, Actual: expected}, nil
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchSubstring(s, substr)
 }

@@ -380,10 +380,10 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 	for _, step := range steps {
 		switch s := step.(type) {
 		case *parser.Assignment:
-			val, _ := generator.Eval(s.Value, nil)
+			val, _ := generator.Eval(s.Value, input)
 			setPath(input, s.Path, val)
 		case *parser.Call:
-			args, err := sr.marshalCallArgs(s)
+			args, err := sr.marshalCallArgs(s, input)
 			if err != nil {
 				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
 			}
@@ -400,6 +400,13 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 					resp.Error,
 				)
 			}
+			// Make the action response available as "body" for subsequent steps.
+			if len(resp.Actual) > 0 {
+				var parsed any
+				if err := json.Unmarshal(resp.Actual, &parsed); err == nil {
+					input["body"] = parsed
+				}
+			}
 		}
 	}
 	return input, nil
@@ -407,7 +414,9 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 
 // marshalCallArgs converts Call expression arguments to JSON for the adapter.
 // FieldRef args are resolved as locator names from the spec's locators map.
-func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, error) {
+// The ctx provides the accumulated step context for expression evaluation
+// (e.g., "body" from a previous action response).
+func (sr *scopeRunner) marshalCallArgs(call *parser.Call, ctx map[string]any) (json.RawMessage, error) {
 	var resolved []any
 	for _, arg := range call.Args {
 		switch a := arg.(type) {
@@ -416,11 +425,15 @@ func (sr *scopeRunner) marshalCallArgs(call *parser.Call) (json.RawMessage, erro
 			if selector, ok := sr.runner.spec.Locators[a.Path]; ok {
 				resolved = append(resolved, selector)
 			} else {
-				// Not a locator — pass the name as-is (could be a variable)
-				resolved = append(resolved, a.Path)
+				// Try resolving as a context reference (e.g., body.access_token)
+				if val, ok := generator.Eval(a, ctx); ok {
+					resolved = append(resolved, val)
+				} else {
+					resolved = append(resolved, a.Path)
+				}
 			}
 		default:
-			val, _ := generator.Eval(arg, nil)
+			val, _ := generator.Eval(arg, ctx)
 			resolved = append(resolved, val)
 		}
 	}
