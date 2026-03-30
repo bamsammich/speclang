@@ -1,14 +1,15 @@
 spec AccountAPI {
   description: "REST API for inter-account money transfers with balance tracking"
 
-  target {
-    services {
-      app {
-        build: "./server"
-        port: 8080
-      }
-    }
+  http {
     base_url: service(app)
+  }
+
+  services {
+    app {
+      build: "./server"
+      port: 8080
+    }
   }
 
   include "models/account.spec"

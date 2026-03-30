@@ -277,7 +277,7 @@ func runVerify(opts *verifyOpts) int {
 
 	config := resolveTargetConfig(s.Target, runningServices)
 
-	adapters, err := createAdapters(s, config)
+	adapters, err := createAdapters(s, config, runningServices)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
@@ -474,30 +474,56 @@ func runInstall(plugin string) int {
 }
 
 // collectPlugins returns the unique set of plugin names from all scopes.
+// In v2 mode, plugins come from scope.Use directives.
+// In v3 mode, plugins come from spec-level AdapterConfigs keys.
 func collectPlugins(s *spec.Spec) []string {
 	seen := make(map[string]bool)
 	var plugins []string
+
+	// v2: scope.Use directives
 	for _, scope := range s.Scopes {
 		if scope.Use != "" && !seen[scope.Use] {
 			seen[scope.Use] = true
 			plugins = append(plugins, scope.Use)
 		}
 	}
+
+	// v3: adapter config blocks (http { ... }, playwright { ... })
+	for name := range s.AdapterConfigs {
+		if !seen[name] {
+			seen[name] = true
+			plugins = append(plugins, name)
+		}
+	}
+
 	return plugins
 }
 
 func createAdapters(
 	s *spec.Spec,
 	targetConfig map[string]string,
+	services []infra.RunningService,
 ) (map[string]adapter.Adapter, error) {
 	plugins := collectPlugins(s)
 	if len(plugins) == 0 {
-		return nil, errors.New("no scopes declare a 'use' directive")
+		return nil, errors.New("no adapters configured (no 'use' directives or adapter config blocks)")
 	}
 
 	adapters := make(map[string]adapter.Adapter, len(plugins))
 	for _, name := range plugins {
-		adp, err := createSingleAdapter(name, targetConfig)
+		// Build per-adapter config: merge v2 target config with v3 adapter config
+		adapterConfig := make(map[string]string, len(targetConfig))
+		for k, v := range targetConfig {
+			adapterConfig[k] = v
+		}
+		// v3: overlay adapter-specific config
+		if acfg, ok := s.AdapterConfigs[name]; ok {
+			for key, expr := range acfg {
+				adapterConfig[key] = resolveExprToString(expr, services)
+			}
+		}
+
+		adp, err := createSingleAdapter(name, adapterConfig)
 		if err != nil {
 			closeAdapters(adapters)
 			return nil, fmt.Errorf("initializing %q adapter: %w", name, err)
@@ -588,16 +614,23 @@ func resolveServiceURL(
 	return ""
 }
 
-// buildInfraConfig constructs an infra.Config from the spec's target block.
+// buildInfraConfig constructs an infra.Config from the spec's target/services blocks.
 func buildInfraConfig(s *spec.Spec, specFile string) infra.Config {
 	specDir := filepath.Dir(specFile)
 	cfg := infra.Config{
 		SpecName: s.Name,
 		SpecDir:  specDir,
 	}
+
+	// v3: spec-level services block
+	for _, svc := range s.Services {
+		cfg.Services = append(cfg.Services, convertServiceDef(specDir, svc))
+	}
+
 	if s.Target == nil {
 		return cfg
 	}
+	// v2 compat: target block
 	cfg.ComposePath = resolveRelPath(specDir, s.Target.Compose)
 	for _, svc := range s.Target.Services {
 		cfg.Services = append(cfg.Services, convertServiceDef(specDir, svc))
