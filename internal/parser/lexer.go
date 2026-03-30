@@ -252,7 +252,9 @@ func (l *lexer) lexOne() error {
 	case ch == '#':
 		l.skipComment()
 	case ch == '"':
-		return l.lexString()
+		return l.lexString('"')
+	case ch == '\'':
+		return l.lexString('\'')
 	case unicode.IsDigit(ch):
 		l.lexNumber()
 	case unicode.IsLetter(ch) || ch == '_':
@@ -285,11 +287,11 @@ func (l *lexer) skipComment() {
 	}
 }
 
-func (l *lexer) lexString() error {
+func (l *lexer) lexString(quote rune) error {
 	startLine, startCol := l.line, l.col
-	l.advance() // consume opening "
+	l.advance() // consume opening quote
 
-	s, err := l.lexStringBody(startLine, startCol)
+	s, err := l.lexStringBody(quote, startLine, startCol)
 	if err != nil {
 		return err
 	}
@@ -297,14 +299,14 @@ func (l *lexer) lexString() error {
 	if l.pos >= len(l.src) {
 		return fmt.Errorf("%d:%d: unterminated string literal", startLine, startCol)
 	}
-	l.advance() // consume closing "
+	l.advance() // consume closing quote
 	l.emit(TokenString, string(s), startLine, startCol)
 	return nil
 }
 
-func (l *lexer) lexStringBody(startLine, startCol int) ([]rune, error) {
+func (l *lexer) lexStringBody(quote rune, startLine, startCol int) ([]rune, error) {
 	var s []rune
-	for l.pos < len(l.src) && l.src[l.pos] != '"' {
+	for l.pos < len(l.src) && l.src[l.pos] != quote {
 		if l.src[l.pos] != '\\' {
 			s = append(s, l.src[l.pos])
 			l.advance()
@@ -322,7 +324,7 @@ func (l *lexer) lexStringBody(startLine, startCol int) ([]rune, error) {
 
 func escapeChar(ch rune) []rune {
 	switch ch {
-	case '"', '\\':
+	case '"', '\'', '\\':
 		return []rune{ch}
 	case 'n':
 		return []rune{'\n'}

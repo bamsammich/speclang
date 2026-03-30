@@ -100,6 +100,32 @@ func TestLexUnterminatedString(t *testing.T) {
 	}
 }
 
+func TestLexSingleQuotedString(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex(`'hello'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenString, "hello")
+}
+
+func TestLexSingleQuotedStringWithDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex(`'[data-testid="email"]'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenString, `[data-testid="email"]`)
+}
+
+func TestLexUnterminatedSingleQuotedString(t *testing.T) {
+	t.Parallel()
+	_, err := Lex(`'hello`)
+	if err == nil {
+		t.Fatal("expected error for unterminated single-quoted string")
+	}
+}
+
 func TestLexComments(t *testing.T) {
 	t.Parallel()
 	tokens, err := Lex("foo # this is a comment\nbar")
