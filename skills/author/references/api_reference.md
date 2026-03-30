@@ -9,45 +9,54 @@ spec <Name> {
 
   description: "<text>"              # optional: AI context about the system
 
-  target {
-    services {                       # optional: Docker containers as test infra
-      <name> {
-        build: "<dockerfile-dir>"    # OR image: "<docker-image>"
-        port: <port>                 # optional
-        health: "<http-path>"        # optional
-        env { KEY: "value" }         # optional
-        volumes { "<host>": "<container>" }  # optional
-      }
-      # OR: compose: "<path>"        # docker-compose file
+  # Adapter configuration (namespaced blocks at spec level)
+  http {
+    base_url: env(APP_URL, "http://localhost:8080")
+  }
+  playwright {
+    base_url: env(APP_URL, "http://localhost:3000")
+    headless: "true"
+    timeout: "5000"
+  }
+  process {
+    command: "./my-binary"
+  }
+
+  services {                         # optional: Docker containers as test infra
+    <name> {
+      build: "<dockerfile-dir>"      # OR image: "<docker-image>"
+      port: <port>                   # optional
+      health: "<http-path>"          # optional
+      env { KEY: "value" }           # optional
+      volumes { "<host>": "<container>" }  # optional
     }
-    base_url: env(APP_URL)           # plugin-dependent config (or service(name))
+    # OR: compose: "<path>"          # docker-compose file
   }
 
   include "<path>"                   # spec-body include
-
-  locators {                         # UI specs only: named element locators
-    <name>: [<css-selector>]
-  }
 
   model <Name> {
     <field>: <type>
     <field>: <type> { <constraint> }
   }
 
-  action <name>(<params>) {          # reusable action sequence
-    <plugin>.<verb>(<args>)
+  # Spec-level actions — reusable across scopes
+  action <name>(<param>: <type>, ...) {
+    let <var> = <adapter>.<method>(<args>)
+    <adapter>.<method>(<args>)
+    return <expr>
   }
 
   scope <name> {
-    use <plugin>                     # required: which adapter drives this scope
-
-    config {                         # opaque key-value pairs for adapter
-      path: "/api/v1/resource"
-      method: "POST"
+    # Scope-level actions — private to this scope
+    action <name>(<param>: <type>, ...) {
+      let <var> = <adapter>.<method>(<args>)
+      return <expr>
     }
 
     before {                         # optional: runs before each scenario/invariant
-      <plugin>.<verb>(<args>)
+      let <var> = <action>(<args>)
+      <adapter>.<method>(<args>)
     }
 
     contract {
@@ -57,6 +66,7 @@ spec <Name> {
       output {
         <field>: <type>
       }
+      action: <action_name>         # references a scope-level or spec-level action
     }
 
     invariant <name> {
@@ -72,8 +82,6 @@ spec <Name> {
   }
 }
 ```
-
-**Important:** `use <plugin>` is declared at the **scope** level, not at spec level. Each scope independently declares which plugin drives it. This allows a single spec to mix plugins (e.g., one scope using `http` and another using `playwright`).
 
 ## Types
 
@@ -91,10 +99,10 @@ spec <Name> {
 
 ## Expressions
 
-- **Literals**: `42`, `3.14`, `"hello"`, `true`, `false`, `null`
+- **Literals**: `42`, `3.14`, `"hello"`, `'single-quoted'`, `true`, `false`, `null`
 - **Field references**: `from.balance`, `output.error`
-- **Environment**: `env(VAR)`, `env(VAR, "default")` — works in all positions (target config, scope config, given values, call args); returns `""` if unset with no default
-- **Service reference**: `service(name)` -- resolves to running container URL from `services` block
+- **Environment**: `env(VAR)`, `env(VAR, "default")` — works in all positions (adapter config, given values, call args); returns `""` if unset with no default
+- **Service reference**: `service(name)` — resolves to running container URL from `services` block
 - **Objects**: `{ id: "alice", balance: 100 }`
 - **Arrays**: `[expr, expr, ...]` — comma-separated list of expressions of the same type
 - **Operators**: `==`, `!=`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!` — the `+` operator also performs string concatenation when either operand is a string (non-string operands are auto-converted: `"count: " + 42` produces `"count: 42"`)
@@ -107,6 +115,14 @@ spec <Name> {
   - `has_key(expr, "key")` — returns `true` if the map contains the specified key, `false` otherwise
 - **Conditionals**: `if condition then expr else expr` — condition must be bool; returns then-branch or else-branch. Nest with parentheses: `if a then (if b then x else y) else z`
 
+## Strings
+
+Both double-quoted (`"..."`) and single-quoted (`'...'`) strings are supported. Single-quoted strings are useful for CSS selectors containing double quotes:
+
+```
+playwright.fill('[data-testid="email"]', "alice@example.com")
+```
+
 ## Comments
 
 Lines starting with `#` are comments. Use them to explain intent.
@@ -116,13 +132,93 @@ Lines starting with `#` are comments. Use them to explain intent.
 invariant conservation { ... }
 ```
 
+## Adapter Config Blocks
+
+Adapters are configured at the spec level using namespaced blocks. No `use` directive — adapters are called inline as `adapter.method(args)`.
+
+```
+spec MyApp {
+  http {
+    base_url: env(APP_URL, "http://localhost:8080")
+  }
+  playwright {
+    base_url: env(APP_URL, "http://localhost:3000")
+    headless: "true"
+    timeout: "5000"
+  }
+  process {
+    command: "./my-binary"
+  }
+}
+```
+
+## Custom Actions
+
+Actions are reusable, parameterized blocks that can call adapters and return values. Defined at spec level (shared) or scope level (private).
+
+```
+# Spec-level: reusable across scopes
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+  return result.body
+}
+
+# Scope-level: private to the scope
+scope my_scope {
+  action create_item(name: string) {
+    let result = http.post("/api/items", { name: name })
+    return result.body
+  }
+}
+```
+
+Usage:
+- In `before` blocks: `let session = login("admin", "test")`
+- As contract action: `action: create_item`
+- Return values captured via `let`
+
+## Let Bindings
+
+Immutable named values. Scoped to the block they appear in.
+
+```
+let result = http.post("/api/auth/login", { username: "admin" })
+let token = result.body.access_token
+http.header("Authorization", "Bearer " + token)
+```
+
+No reassignment — once bound, fixed.
+
+## Contract with Action Reference
+
+Contracts declare input/output shapes and reference an action by name. The runtime maps contract input fields to action parameters.
+
+```
+contract {
+  input {
+    from: Account
+    to: Account
+    amount: int { 0 < amount <= from.balance }
+  }
+  output {
+    from: Account
+    to: Account
+    error: string?
+  }
+  action: transfer
+}
+```
+
+The `action:` field references a scope-level or spec-level action. Signature mismatch is a compile-time error.
+
 ## Three Scenario Types (Ascending Verification Strength)
 
 ### 1. `scenario` with `given` — Concrete smoke test
 
 Fixed input values. Runs once. Documents expected behavior.
 
-`then` assertions can use **relational expressions** that reference input fields. The expected value is computed from the input, not hardcoded. This makes assertions resistant to memorization — an LLM can't learn "the answer is 70" because the answer depends on the input.
+`then` assertions can use **relational expressions** that reference input fields. The expected value is computed from the input, not hardcoded.
 
 ```
 scenario success {
@@ -132,9 +228,9 @@ scenario success {
     amount: 30
   }
   then {
-    from.balance: from.balance - amount   # 100 - 30 = 70
-    to.balance: to.balance + amount       # 50 + 30 = 80
-    error: null                           # literals still work
+    from.balance == from.balance - amount   # 100 - 30 = 70
+    to.balance == to.balance + amount       # 50 + 30 = 80
+    error == null                           # literals still work
   }
 }
 ```
@@ -149,7 +245,7 @@ scenario overdraft {
     amount > from.balance
   }
   then {
-    error: "insufficient_funds"
+    error == "insufficient_funds"
   }
 }
 ```
@@ -171,6 +267,21 @@ invariant non_negative {
 }
 ```
 
+## Assertion Syntax
+
+All assertions use explicit operators. `:` for equality is removed — use `==`.
+
+```
+then {
+  status == 200                                              # equality
+  playwright.count('[data-testid="item"]') >= 1              # relational
+  playwright.visible('[data-testid="welcome"]') == true      # adapter method assertion
+  score != 0                                                 # inequality
+}
+```
+
+Every line in `then`/invariant body is implicitly ANDed. No `||` between assertion lines — use separate scenarios for OR logic.
+
 ## Constraints
 
 Model fields can have constraints that bound the generator:
@@ -181,69 +292,22 @@ model Transfer {
 }
 ```
 
-## Locators Block
-
-UI specs declare named element locators at the spec level. Locator names are used in `given` blocks (as arguments to plugin actions) and in `then` blocks (with the `@plugin.property` assertion syntax).
-
-```
-locators {
-  username_field: [data-testid=username]
-  password_field: [data-testid=password]
-  submit_btn:     [data-testid=submit]
-  error_msg:      [data-testid=error]
-  welcome:        [data-testid=welcome]
-}
-```
-
-All locators must be pre-declared here. Inline selectors in action calls are not supported.
-
-## `@plugin.property` Assertion Syntax
-
-Use `locator@plugin.property: expected` in `then` blocks to assert on UI element state. The locator name is resolved from the spec's `locators` block to a CSS selector.
-
-```
-then {
-  welcome@playwright.visible: true
-  welcome@playwright.text: "Welcome, alice"
-  error_msg@playwright.visible: false
-}
-```
-
-This syntax is available to all adapters but is primarily used with `playwright`.
-
-## Comparison Operators in Assertions
-
-Assertions support comparison operators (`==`, `!=`, `>`, `>=`, `<`, `<=`). `:` is sugar for `==`. Relational operators (`>`, `>=`, `<`, `<=`) require numeric values.
-
-```
-then {
-  status: 200                        # equality (: is sugar for ==)
-  items@playwright.count >= 1        # relational
-  score != 0                         # inequality
-}
-```
-
 ## Before Block
 
 A `before` block runs before each scenario's `given` and each invariant iteration. The adapter state is reset to a clean slate before `before` executes, ensuring isolation between iterations.
 
-`before` uses the same syntax as `given` — data assignments and action calls:
-
 ```
 scope create_group {
-  use http
-  config { ... }
-
   before {
-    http.post("/auth/login", { token: "test" })
-    http.header("Authorization", "Bearer " + body.access_token)
+    let session = login("admin", "test")
+    http.header("Authorization", "Bearer " + session.access_token)
   }
 
   contract { ... }
 }
 ```
 
-**Composition:** `before` + `given` compose by concatenation — before steps run first, then given steps. State established in `before` (headers, cookies) carries into `given` and the request.
+**Composition:** `before` + `given` compose by concatenation — before steps run first, then given steps. State established in `before` (headers, cookies) carries into `given` and the action.
 
 **Failure:** If any `before` step fails, the entire scope is aborted.
 
@@ -251,48 +315,31 @@ scope create_group {
 
 ## Mixed `given` Block Syntax
 
-`given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written. This works with any adapter that supports action calls (Playwright and HTTP).
+`given` blocks accept both **data assignments** and **action calls**, interleaved in any order. Steps execute in the order written.
 
 ```
-# Playwright example
-given {
-  playwright.fill(username_field, "alice")   # action call
-  playwright.fill(password_field, "secret")  # action call
-  user: "alice"                               # data assignment
-  pass: "secret"                              # data assignment
-  playwright.click(submit_btn)               # action call
-}
-
 # HTTP multi-step example
 given {
-  http.header("Authorization", "Bearer token")   # set persistent header
-  http.post("/api/items", { name: "widget" })     # POST to create
-  http.get("/api/items/1")                        # GET to verify
+  http.header("Authorization", "Bearer token")
+  http.post("/api/items", { name: "widget" })
+  http.get("/api/items/1")
+}
+
+# Playwright example
+given {
+  playwright.fill('[data-testid="amount"]', "50")
+  from_balance: 100
+  playwright.click('[data-testid="transfer"]')
+  to_id: "bob"
 }
 ```
 
-Data assignments populate the input context for assertion evaluation. Action calls execute against the adapter immediately. For the HTTP adapter, headers and cookies persist across calls within a scenario, and `then` assertions apply to the last response.
-
-You can also call named actions defined in `action` blocks:
+You can also call named actions in `given` blocks:
 
 ```
-action login(user, pass) {
-  playwright.fill(username_field, user)
-  playwright.fill(password_field, pass)
-  playwright.click(submit_btn)
-  playwright.wait(welcome)
-}
-
-scope login {
-  use playwright
-  scenario successful_login {
-    given {
-      login("alice", "secret")   # invoke named action
-    }
-    then {
-      welcome@playwright.visible: true
-    }
-  }
+given {
+  let session = login("alice", "secret")
+  user: "alice"
 }
 ```
 
@@ -305,7 +352,7 @@ scenario process_batch {
     names: ["alice", "bob", "charlie"]
   }
   then {
-    count: 3
+    count == 3
   }
 }
 ```
@@ -316,48 +363,33 @@ Use the `error` pseudo-field in `then` blocks to assert that an action **should 
 
 ```
 scope bad_input {
-  use playwright
-
-  config {
-    url: "/form"
-  }
-
   contract {
-    input {
-      value: string
-    }
-    output {
-      ok: bool
-    }
+    input { value: string }
+    output { ok: bool }
+    action: submit_form
   }
 
   scenario click_nonexistent {
     given {
-      playwright.click(nonexistent_btn)
+      playwright.click('[data-testid="nonexistent"]')
     }
     then {
-      error: "element not found"
+      error == "element not found"
     }
   }
 
   scenario success_no_error {
     given {
-      playwright.click(submit_btn)
+      playwright.click('[data-testid="submit"]')
     }
     then {
-      error: null
+      error == null
     }
   }
 }
 ```
 
-When an adapter action returns `{ok: false, error: "..."}`:
-- If `error` is asserted, the error string is compared against the expected value
-- If `error: null` is asserted and no error occurred, the assertion passes
-- If `error` is asserted but no error occurred, the assertion fails
-- If an action fails but `error` is NOT in `then`, the test still fails (backward compatible)
-
-**Important:** If `error` is declared as a contract output field (e.g., `output { error: string? }`), it's treated as a normal response field, not the pseudo-field. The transfer example uses `error` as a regular output field.
+**Important:** If `error` is declared as a contract output field (e.g., `output { error: string? }`), it's treated as a normal response field, not the pseudo-field.
 
 ## Include Directive
 
@@ -378,7 +410,7 @@ Import models and scopes from external schema files. Supports OpenAPI 3.x and pr
 import openapi("schema.yaml")
 ```
 
-Generates models from `components/schemas` and scopes from `paths`. Type mapping: `integer` → `int`, `string` → `string`, `boolean` → `bool`, `$ref` → model name. Constraints (`minimum`/`maximum`) are converted to field constraint expressions.
+Generates models from `components/schemas` and scopes from `paths`. Type mapping: `integer` -> `int`, `string` -> `string`, `boolean` -> `bool`, `$ref` -> model name. Constraints (`minimum`/`maximum`) are converted to field constraint expressions.
 
 ### Protobuf
 
@@ -386,9 +418,9 @@ Generates models from `components/schemas` and scopes from `paths`. Type mapping
 import proto("service.proto")
 ```
 
-Generates models from `message` definitions and scopes from unary `rpc` methods. Type mapping: all integer types → `int`, `string` → `string`, `bool` → `bool`, message reference → model name.
+Generates models from `message` definitions and scopes from unary `rpc` methods. Type mapping: all integer types -> `int`, `string` -> `string`, `bool` -> `bool`, message reference -> model name.
 
-Unsupported types (array, float, enum, bytes, map) are skipped with a warning in both importers. Imported scopes have config and contracts populated but no invariants or scenarios — those are hand-authored.
+Unsupported types (array, float, enum, bytes, map) are skipped with a warning in both importers. Imported scopes have contracts populated but no invariants or scenarios — those are hand-authored.
 
 ## Validation
 
@@ -399,7 +431,8 @@ Specs are automatically validated after parsing, before generation and verificat
 - **Array element types**: All elements in array literals match the array's element type
 - **Object field validation**: Object literals contain only declared fields with matching types
 - **Given completeness**: All required contract input fields are assigned in `given` blocks
-- **Then field validation**: All fields in `then` blocks are valid model fields or locator assertions
+- **Then field validation**: All fields in `then` blocks are valid model fields or adapter method assertions
+- **Action signature matching**: Contract `action:` references match action parameter signatures
 
 **Validation failures are hard errors:** They cause `specrun` to exit with code 1 and print detailed messages. Verification does not proceed if validation fails — the user sees validation errors first.
 
@@ -412,19 +445,15 @@ error validating spec:
     error: type mismatch: expected int, got string "pending"
 ```
 
-Error messages are hierarchical: `scope / scenario` or `scope / invariant` for context, then the specific error.
+### `http` adapter
 
-### `use http`
+For HTTP APIs. Config uses `base_url`.
 
-For HTTP APIs. Target uses `base_url`.
+Use action calls with explicit paths — each call specifies its own path. Headers and cookies persist across calls. `then` assertions apply to the last response.
 
-**Single-request scopes**: Scope config uses `path` and `method`. All `given` assignments become the request body.
+#### Methods
 
-**Multi-step scopes**: Use action calls in `given` blocks. No `path`/`method` config needed — each call specifies its own path. Headers and cookies persist across calls. `then` assertions apply to the last response.
-
-#### Actions
-
-| Action | Args | Description |
+| Method | Args | Description |
 |--------|------|-------------|
 | `http.get(path)` | URL path | GET request |
 | `http.post(path, body)` | URL path + JSON body | POST request |
@@ -432,7 +461,7 @@ For HTTP APIs. Target uses `base_url`.
 | `http.delete(path)` | URL path | DELETE request |
 | `http.header(name, value)` | header name + value | Set persistent header |
 
-#### Assertions
+#### Assertion Fields
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -441,27 +470,28 @@ For HTTP APIs. Target uses `base_url`.
 | `header.<name>` | `string` | Response header |
 | `<field.path>` | `any` | Dot-path into JSON body |
 
-#### Multi-step Example
+#### Example
 
 ```
 scope create_and_verify {
-  use http
+  action create_widget(name: string) {
+    let result = http.post("/api/resources", { name: name })
+    return result.body
+  }
 
   contract {
     input { name: string }
     output { id: int, name: string }
+    action: create_widget
   }
 
   scenario create_then_get {
     given {
       name: "widget"
-      http.post("/api/resources", { name: "widget" })
-      http.get("/api/resources/1")
     }
     then {
-      status: 200
-      id: 1
-      name: "widget"
+      id == 1
+      name == "widget"
     }
   }
 
@@ -471,15 +501,15 @@ scope create_and_verify {
       http.get("/api/protected")
     }
     then {
-      status: 200
+      status == 200
     }
   }
 }
 ```
 
-### `use process`
+### `process` adapter
 
-For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Target uses `command`. Scope config uses `args` (string or array form).
+For CLI tools. Runs subprocesses, captures exit code/stdout/stderr. Config uses `command`. Scope config uses `args` (string or array form).
 
 Config `args` accepts two forms: string (split on whitespace) or array (each element is one argument, preferred). Array form preserves spaces:
 ```
@@ -487,43 +517,44 @@ config { args: "verify --json" }                                    # string for
 config { args: ["verify", "--json", "path with spaces/file.spec"] } # array form
 ```
 
-Dot-paths in `then` blocks support numeric array indexing. `stdout.items.0.name` accesses the first element of the `items` array in the parsed JSON response, then its `name` field. Out-of-range indices produce an assertion failure. This also applies to the `http` adapter when asserting against JSON response bodies.
+Dot-paths in `then` blocks support numeric array indexing. `stdout.items.0.name` accesses the first element of the `items` array in the parsed JSON response, then its `name` field. Out-of-range indices produce an assertion failure.
 
-### `use playwright`
+### `playwright` adapter
 
-For browser UI testing. Controls a real browser via Playwright. Target uses `base_url`, `headless` (default `"true"`), and `timeout` (milliseconds, default `"5000"`). Scope config uses `url` (the page path to navigate to).
+For browser UI testing. Controls a real browser via Playwright. Config uses `base_url`, `headless` (default `"true"`), and `timeout` (milliseconds, default `"5000"`).
 
 Requires Playwright browsers to be installed: `specrun install playwright`
 
+Selectors are passed as inline string arguments — no `locators` block.
+
 > For the complete syntax reference, see [docs/language-reference.md](../../../docs/language-reference.md).
 
-#### Actions
+#### Methods
 
-| Action | Args | Description |
+| Method | Args | Description |
 |--------|------|-------------|
 | `playwright.goto(url)` | URL string | Navigate (prepends `base_url` if relative) |
-| `playwright.click(locator)` | locator name | Click element |
-| `playwright.fill(locator, value)` | locator name + text | Clear and type into input |
-| `playwright.type(locator, value)` | locator name + text | Append text (no clear) |
-| `playwright.select(locator, value)` | locator name + option | Select dropdown option |
-| `playwright.check(locator)` | locator name | Check checkbox |
-| `playwright.uncheck(locator)` | locator name | Uncheck checkbox |
-| `playwright.wait(locator)` | locator name | Wait for element to be visible |
-| `playwright.new_page()` | — | Create a fresh browser page |
-| `playwright.close_page()` | — | Close current page |
-| `playwright.clear_state()` | — | Clear cookies and localStorage |
+| `playwright.click(selector)` | CSS selector string | Click element |
+| `playwright.fill(selector, value)` | CSS selector + text | Clear and type into input |
+| `playwright.type(selector, value)` | CSS selector + text | Append text (no clear) |
+| `playwright.select(selector, value)` | CSS selector + option | Select dropdown option |
+| `playwright.check(selector)` | CSS selector | Check checkbox |
+| `playwright.uncheck(selector)` | CSS selector | Uncheck checkbox |
+| `playwright.wait(selector)` | CSS selector | Wait for element to be visible |
+| `playwright.new_page()` | -- | Create a fresh browser page |
+| `playwright.close_page()` | -- | Close current page |
+| `playwright.clear_state()` | -- | Clear cookies and localStorage |
 
-#### Assertions
+#### Assertion Methods
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `visible` | `bool` | Element is visible |
-| `text` | `string` | Text content |
-| `value` | `string` | Input field value |
-| `checked` | `bool` | Checkbox state |
-| `disabled` | `bool` | Whether element is disabled |
-| `count` | `int` | Number of matching elements |
-| `attribute.<name>` | `string` | Named attribute value (e.g., `attribute.href`) |
+| Method | Return type | Description |
+|--------|-------------|-------------|
+| `playwright.visible(selector)` | `bool` | Element is visible |
+| `playwright.text(selector)` | `string` | Text content |
+| `playwright.value(selector)` | `string` | Input field value |
+| `playwright.checked(selector)` | `bool` | Checkbox state |
+| `playwright.disabled(selector)` | `bool` | Whether element is disabled |
+| `playwright.count(selector)` | `int` | Number of matching elements |
 
 #### Full Example
 
@@ -531,31 +562,26 @@ Requires Playwright browsers to be installed: `specrun install playwright`
 spec LoginApp {
   description: "Login UI verification"
 
-  target {
+  http {
+    base_url: env(APP_URL, "http://localhost:3000")
+  }
+  playwright {
     base_url: env(APP_URL, "http://localhost:3000")
     headless: "true"
     timeout: "5000"
   }
 
-  locators {
-    username_field: [data-testid=username]
-    password_field: [data-testid=password]
-    submit_btn:     [data-testid=submit]
-    welcome:        [data-testid=welcome]
-    error_msg:      [data-testid=error]
-  }
-
-  action login(user, pass) {
-    playwright.fill(username_field, user)
-    playwright.fill(password_field, pass)
-    playwright.click(submit_btn)
+  action login(user: string, pass: string) {
+    playwright.fill('[data-testid="username"]', user)
+    playwright.fill('[data-testid="password"]', pass)
+    playwright.click('[data-testid="submit"]')
   }
 
   scope login {
-    use playwright
-
-    config {
-      url: "/login"
+    action do_login(user: string, pass: string) {
+      login(user, pass)
+      let welcome_visible = playwright.visible('[data-testid="welcome"]')
+      return { ok: welcome_visible }
     }
 
     contract {
@@ -566,17 +592,18 @@ spec LoginApp {
       output {
         ok: bool
       }
+      action: do_login
     }
 
     scenario successful_login {
       given {
-        login("alice", "secret")
         user: "alice"
+        pass: "secret"
       }
       then {
-        welcome@playwright.visible: true
-        welcome@playwright.text: "Welcome, alice"
-        error_msg@playwright.visible: false
+        playwright.visible('[data-testid="welcome"]') == true
+        playwright.text('[data-testid="welcome"]') == "Welcome, alice"
+        playwright.visible('[data-testid="error"]') == false
       }
     }
 
@@ -585,14 +612,14 @@ spec LoginApp {
         pass != "secret"
       }
       then {
-        error_msg@playwright.visible: true
+        playwright.visible('[data-testid="error"]') == true
       }
     }
 
     # The welcome banner must never appear when login fails.
     invariant no_welcome_on_failure {
       when ok == false:
-        welcome@playwright.visible: false
+        playwright.visible('[data-testid="welcome"]') == false
     }
   }
 }
