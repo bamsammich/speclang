@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // testRegistry returns a registry with http and process plugin assertions

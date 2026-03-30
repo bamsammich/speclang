@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // --- v3 spec-level structure ---

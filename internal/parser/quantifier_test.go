@@ -3,7 +3,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 func TestParseAllExpr(t *testing.T) {

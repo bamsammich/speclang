@@ -14,14 +14,14 @@ import (
 	playwright "github.com/playwright-community/playwright-go"
 	"github.com/urfave/cli/v3"
 
-	"github.com/bamsammich/speclang/v2/internal/adapter"
-	"github.com/bamsammich/speclang/v2/internal/generator"
-	"github.com/bamsammich/speclang/v2/internal/infra"
-	"github.com/bamsammich/speclang/v2/internal/openapi"
-	protoresolver "github.com/bamsammich/speclang/v2/internal/proto"
-	"github.com/bamsammich/speclang/v2/internal/runner"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
-	"github.com/bamsammich/speclang/v2/pkg/specrun"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/generator"
+	"github.com/bamsammich/speclang/v3/internal/infra"
+	"github.com/bamsammich/speclang/v3/internal/openapi"
+	protoresolver "github.com/bamsammich/speclang/v3/internal/proto"
+	"github.com/bamsammich/speclang/v3/internal/runner"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v3/pkg/specrun"
 )
 
 var (

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // Import type aliases — all types are defined in pkg/spec and re-exported here

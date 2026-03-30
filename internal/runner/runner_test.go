@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/adapter"
-	"github.com/bamsammich/speclang/v2/internal/parser"
-	"github.com/bamsammich/speclang/v2/internal/runner"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/runner"
 )
 
 // writeJSON encodes v as JSON to w, falling back to a 500 error if encoding fails.

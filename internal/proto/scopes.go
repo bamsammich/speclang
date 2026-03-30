@@ -7,7 +7,7 @@ import (
 
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // convertServices extracts RPC methods from proto services and converts

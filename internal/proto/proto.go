@@ -11,7 +11,7 @@ import (
 	protoparser "github.com/yoheimuta/go-protoparser/v4"
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // Resolver implements parser.ImportResolver for protobuf files.

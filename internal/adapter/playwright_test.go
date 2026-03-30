@@ -9,7 +9,7 @@ import (
 
 	pw "github.com/playwright-community/playwright-go"
 
-	"github.com/bamsammich/speclang/v2/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
 )
 
 // mustMarshal is a test helper that marshals v to JSON, failing the test on error.

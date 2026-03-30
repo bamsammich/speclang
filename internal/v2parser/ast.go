@@ -1,6 +1,6 @@
 package v2parser
 
-import "github.com/bamsammich/speclang/v2/pkg/spec"
+import "github.com/bamsammich/speclang/v3/pkg/spec"
 
 // AST type aliases — all types are defined in pkg/spec and re-exported here
 // for backward compatibility.

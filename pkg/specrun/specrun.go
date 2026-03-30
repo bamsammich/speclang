@@ -6,11 +6,11 @@ package specrun
 import (
 	"fmt"
 
-	"github.com/bamsammich/speclang/v2/internal/generator"
-	"github.com/bamsammich/speclang/v2/internal/parser"
-	"github.com/bamsammich/speclang/v2/internal/runner"
-	"github.com/bamsammich/speclang/v2/internal/validator"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/generator"
+	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/runner"
+	"github.com/bamsammich/speclang/v3/internal/validator"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // Options configures verification behavior.
