@@ -16,6 +16,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 
 ### Settled Decisions
 
+- **v3 is the current syntax version** — see [docs/plans/2026-03-29-v3-language-design.md](docs/plans/2026-03-29-v3-language-design.md) for the full design and [docs/migration-v3.md](docs/migration-v3.md) for migration from v2. Key changes: `use` removed (adapters named inline), `locators` removed (inline selectors), `:` replaced by `==` in assertions, `@plugin.property` replaced by `adapter.method(args)`, `target` replaced by namespaced adapter config blocks, `let` bindings added, custom actions with typed params and `return`
 - **Calling convention**: `verb(args)` universally — both built-in primitives and user-defined actions
 - **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout)
 - **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level
