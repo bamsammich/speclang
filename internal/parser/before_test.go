@@ -10,10 +10,6 @@ func TestParseBeforeBlock(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope api {
-    use http
-    config {
-      url: "http://localhost:8080"
-    }
     before {
       http.post("/setup", {})
       http.header("X-Test", "true")
@@ -24,7 +20,7 @@ spec Test {
     }
     scenario smoke {
       given { x: 1 }
-      then { y: 2 }
+      then { y == 2 }
     }
   }
 }
@@ -46,7 +42,6 @@ func TestParseBeforeBlock_DuplicateRejected(t *testing.T) {
 	_, err := Parse(`
 spec Test {
   scope api {
-    use http
     before {
       http.post("/setup", {})
     }
@@ -73,14 +68,13 @@ func TestParseBeforeBlock_AsFieldName(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope api {
-    use http
     contract {
       input { x: int }
       output { before: string }
     }
     scenario smoke {
       given { x: 1 }
-      then { before: "ok" }
+      then { before == "ok" }
     }
   }
 }

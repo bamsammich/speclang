@@ -7,7 +7,6 @@ func TestParseGivenBlock_Assignments(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { x: int }
       output { y: int }
@@ -17,7 +16,7 @@ spec Test {
         x: 42
       }
       then {
-        y: 84
+        y == 84
       }
     }
   }
@@ -44,19 +43,18 @@ func TestParseGivenBlock_ActionCalls(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use playwright
     contract {
       input { x: int }
       output { ok: bool }
     }
     scenario ui_flow {
       given {
-        playwright.fill(username, "alice")
+        playwright.fill("username", "alice")
         x: 42
-        playwright.click(submit)
+        playwright.click("submit")
       }
       then {
-        ok: true
+        ok == true
       }
     }
   }
@@ -70,13 +68,13 @@ spec Test {
 		t.Fatalf("expected 3 given steps, got %d", len(sc.Given.Steps))
 	}
 
-	// Step 0: playwright.fill(username, "alice")
-	c0, ok := sc.Given.Steps[0].(*Call)
+	// Step 0: playwright.fill("username", "alice") -> AdapterCall
+	c0, ok := sc.Given.Steps[0].(*AdapterCall)
 	if !ok {
-		t.Fatalf("step 0: expected *Call, got %T", sc.Given.Steps[0])
+		t.Fatalf("step 0: expected *AdapterCall, got %T", sc.Given.Steps[0])
 	}
-	if c0.Namespace != "playwright" || c0.Method != "fill" {
-		t.Errorf("step 0: got %s.%s, want playwright.fill", c0.Namespace, c0.Method)
+	if c0.Adapter != "playwright" || c0.Method != "fill" {
+		t.Errorf("step 0: got %s.%s, want playwright.fill", c0.Adapter, c0.Method)
 	}
 
 	// Step 1: x: 42 (assignment)
@@ -85,10 +83,10 @@ spec Test {
 		t.Fatalf("step 1: expected *Assignment, got %T", sc.Given.Steps[1])
 	}
 
-	// Step 2: playwright.click(submit)
-	c2, ok := sc.Given.Steps[2].(*Call)
+	// Step 2: playwright.click("submit") -> AdapterCall
+	c2, ok := sc.Given.Steps[2].(*AdapterCall)
 	if !ok {
-		t.Fatalf("step 2: expected *Call, got %T", sc.Given.Steps[2])
+		t.Fatalf("step 2: expected *AdapterCall, got %T", sc.Given.Steps[2])
 	}
 	if c2.Method != "click" {
 		t.Errorf("step 2: method = %q, want 'click'", c2.Method)

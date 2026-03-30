@@ -88,7 +88,6 @@ func TestParseFloatLiteral(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         price: float { price > 0.5 }
@@ -102,7 +101,7 @@ spec Test {
         price: 9.99
       }
       then {
-        total: 19.98
+        total == 19.98
       }
     }
   }

@@ -11,8 +11,6 @@ func TestParseAllExpr(t *testing.T) {
 
 	src := `spec T {
   scope s {
-    use http
-    config { path: "/x" method: "GET" }
     contract {
       input { items: []int }
       output { ok: bool }
@@ -63,8 +61,6 @@ func TestParseAnyExpr(t *testing.T) {
 
 	src := `spec T {
   scope s {
-    use http
-    config { path: "/x" method: "GET" }
     contract {
       input { items: []string }
       output { ok: bool }
@@ -94,8 +90,6 @@ func TestParseNestedQuantifiers(t *testing.T) {
 
 	src := `spec T {
   scope s {
-    use http
-    config { path: "/x" method: "GET" }
     contract {
       input { matrix: []any }
       output { ok: bool }
@@ -134,8 +128,6 @@ func TestParseQuantifierWithComplexPredicate(t *testing.T) {
 
 	src := `spec T {
   scope s {
-    use http
-    config { path: "/x" method: "GET" }
     contract {
       input { nums: []int }
       output { ok: bool }

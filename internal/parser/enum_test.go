@@ -8,7 +8,6 @@ func TestParseEnumType(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         status: enum("active", "inactive", "pending")
@@ -43,7 +42,6 @@ func TestParseEnumType_SingleVariant(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         mode: enum("default")
@@ -75,7 +73,6 @@ func TestParseEnumType_Optional(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         role: enum("admin", "user")?
@@ -107,7 +104,6 @@ func TestParseEnumType_TrailingComma(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         color: enum("red", "green", "blue",)
@@ -133,7 +129,6 @@ func TestParseEnumType_Empty(t *testing.T) {
 	_, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         status: enum()
@@ -154,7 +149,6 @@ func TestParseEnumType_NonStringVariant(t *testing.T) {
 	_, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         status: enum(1, 2, 3)
@@ -175,7 +169,6 @@ func TestParseEnumType_InGiven(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         status: enum("active", "inactive")
@@ -189,7 +182,7 @@ spec Test {
         status: "active"
       }
       then {
-        ok: true
+        ok == true
       }
     }
   }

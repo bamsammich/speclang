@@ -2,15 +2,11 @@ package parser
 
 import "testing"
 
-func TestParseThenBlock_AtSyntax(t *testing.T) {
+func TestParseThenBlock_V3ExprAssertions(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
 spec Test {
-  locators {
-    welcome: [data-testid=welcome]
-  }
   scope test {
-    use playwright
     contract {
       input { x: int }
       output { ok: bool }
@@ -18,8 +14,8 @@ spec Test {
     scenario check_ui {
       given { x: 1 }
       then {
-        welcome@playwright.visible: true
-        welcome@playwright.text: "hello"
+        playwright.visible('[data-testid="welcome"]') == true
+        playwright.text('[data-testid="msg"]') == "hello"
       }
     }
   }
@@ -34,39 +30,50 @@ spec Test {
 		t.Fatalf("expected 2 assertions, got %d", len(assertions))
 	}
 
+	// First: playwright.visible(...) == true
 	a0 := assertions[0]
-	if a0.Target != "welcome" {
-		t.Errorf("a0.Target = %q, want 'welcome'", a0.Target)
+	binOp, ok := a0.Expr.(BinaryOp)
+	if !ok {
+		t.Fatalf("a0: expected BinaryOp, got %T", a0.Expr)
 	}
-	if a0.Plugin != "playwright" {
-		t.Errorf("a0.Plugin = %q, want 'playwright'", a0.Plugin)
+	if binOp.Op != "==" {
+		t.Errorf("a0: expected ==, got %q", binOp.Op)
 	}
-	if a0.Property != "visible" {
-		t.Errorf("a0.Property = %q, want 'visible'", a0.Property)
+	call, ok := binOp.Left.(AdapterCall)
+	if !ok {
+		t.Fatalf("a0: expected AdapterCall on LHS, got %T", binOp.Left)
 	}
-	if _, ok := a0.Expected.(LiteralBool); !ok {
-		t.Errorf("a0.Expected type = %T, want LiteralBool", a0.Expected)
+	if call.Adapter != "playwright" || call.Method != "visible" {
+		t.Errorf("a0: expected playwright.visible, got %s.%s", call.Adapter, call.Method)
 	}
 
+	// Second: playwright.text(...) == "hello"
 	a1 := assertions[1]
-	if a1.Plugin != "playwright" || a1.Property != "text" {
-		t.Errorf("a1: Plugin=%q Property=%q, want playwright.text", a1.Plugin, a1.Property)
+	binOp1, ok := a1.Expr.(BinaryOp)
+	if !ok {
+		t.Fatalf("a1: expected BinaryOp, got %T", a1.Expr)
+	}
+	call1, ok := binOp1.Left.(AdapterCall)
+	if !ok {
+		t.Fatalf("a1: expected AdapterCall on LHS, got %T", binOp1.Left)
+	}
+	if call1.Method != "text" {
+		t.Errorf("a1: expected method text, got %q", call1.Method)
 	}
 }
 
-func TestParseThenBlock_PathAssertion_Unchanged(t *testing.T) {
+func TestParseThenBlock_SimpleFieldAssertion(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { x: int }
       output { y: int }
     }
     scenario smoke {
       given { x: 1 }
-      then { y: 2 }
+      then { y == 2 }
     }
   }
 }
@@ -75,15 +82,19 @@ spec Test {
 		t.Fatal(err)
 	}
 	a := spec.Scopes[0].Scenarios[0].Then.Assertions[0]
-	if a.Target != "y" || a.Plugin != "" || a.Property != "" {
-		t.Errorf(
-			"path assertion should have empty Plugin/Property, got Plugin=%q Property=%q",
-			a.Plugin,
-			a.Property,
-		)
+	binOp, ok := a.Expr.(BinaryOp)
+	if !ok {
+		t.Fatalf("expected BinaryOp, got %T", a.Expr)
 	}
-	if a.Operator != "==" {
-		t.Errorf("colon assertion Operator = %q, want '=='", a.Operator)
+	if binOp.Op != "==" {
+		t.Errorf("expected ==, got %q", binOp.Op)
+	}
+	lhs, ok := binOp.Left.(FieldRef)
+	if !ok {
+		t.Fatalf("expected FieldRef on LHS, got %T", binOp.Left)
+	}
+	if lhs.Path != "y" {
+		t.Errorf("expected field path y, got %q", lhs.Path)
 	}
 }
 
@@ -91,11 +102,7 @@ func TestParseThenBlock_ComparisonOperators(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
 spec Test {
-  locators {
-    items: [data-testid=items]
-  }
   scope test {
-    use playwright
     contract {
       input { x: int }
       output { score: int }
@@ -103,10 +110,10 @@ spec Test {
     scenario ops {
       given { x: 1 }
       then {
-        items@playwright.count >= 1
-        items@playwright.count > 0
-        items@playwright.count <= 100
-        items@playwright.count < 101
+        playwright.count('[data-testid="items"]') >= 1
+        playwright.count('[data-testid="items"]') > 0
+        playwright.count('[data-testid="items"]') <= 100
+        playwright.count('[data-testid="items"]') < 101
         score != 0
         score == 42
       }
@@ -123,33 +130,15 @@ spec Test {
 		t.Fatalf("expected 6 assertions, got %d", len(assertions))
 	}
 
-	tests := []struct {
-		target   string
-		plugin   string
-		property string
-		operator string
-	}{
-		{"items", "playwright", "count", ">="},
-		{"items", "playwright", "count", ">"},
-		{"items", "playwright", "count", "<="},
-		{"items", "playwright", "count", "<"},
-		{"score", "", "", "!="},
-		{"score", "", "", "=="},
-	}
-
-	for i, tt := range tests {
+	expectedOps := []string{">=", ">", "<=", "<", "!=", "=="}
+	for i, expectedOp := range expectedOps {
 		a := assertions[i]
-		if a.Target != tt.target {
-			t.Errorf("assertion[%d] Target = %q, want %q", i, a.Target, tt.target)
+		binOp, ok := a.Expr.(BinaryOp)
+		if !ok {
+			t.Fatalf("assertion[%d]: expected BinaryOp, got %T", i, a.Expr)
 		}
-		if a.Plugin != tt.plugin {
-			t.Errorf("assertion[%d] Plugin = %q, want %q", i, a.Plugin, tt.plugin)
-		}
-		if a.Property != tt.property {
-			t.Errorf("assertion[%d] Property = %q, want %q", i, a.Property, tt.property)
-		}
-		if a.Operator != tt.operator {
-			t.Errorf("assertion[%d] Operator = %q, want %q", i, a.Operator, tt.operator)
+		if binOp.Op != expectedOp {
+			t.Errorf("assertion[%d]: expected op %q, got %q", i, expectedOp, binOp.Op)
 		}
 	}
 }
