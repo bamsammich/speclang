@@ -13,7 +13,7 @@ func TestProcessAdapter_ExecEcho(t *testing.T) {
 	}
 
 	args := mustMarshal(t, []any{"hello", "world"})
-	resp, err := a.Action("exec", args)
+	resp, err := a.Call("exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,12 +21,12 @@ func TestProcessAdapter_ExecEcho(t *testing.T) {
 		t.Fatalf("exec failed: %s", resp.Error)
 	}
 
-	exitResp, err := a.Assert("exit_code", "", json.RawMessage(`0`))
+	exitResp, err := a.Call("exit_code", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !exitResp.OK {
-		t.Fatalf("exit_code assertion failed: %s", exitResp.Error)
+	if string(exitResp.Actual) != "0" {
+		t.Fatalf("expected exit_code=0, got %s", string(exitResp.Actual))
 	}
 }
 
@@ -41,7 +41,7 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 	}
 
 	args := mustMarshal(t, []any{"extra"})
-	resp, err := a.Action("exec", args)
+	resp, err := a.Call("exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,16 +49,12 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 		t.Fatal("exec failed")
 	}
 
-	stdoutResp, err := a.Assert("stdout", "", json.RawMessage(`"base arg extra\n"`))
+	stdoutResp, err := a.Call("stdout", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stdoutResp.OK {
-		t.Fatalf(
-			"stdout assertion failed: %s (actual: %s)",
-			stdoutResp.Error,
-			string(stdoutResp.Actual),
-		)
+	if string(stdoutResp.Actual) != `"base arg extra\n"` {
+		t.Fatalf("stdout: expected %q, got %s", "base arg extra\\n", string(stdoutResp.Actual))
 	}
 }
 
@@ -70,16 +66,16 @@ func TestProcessAdapter_ExitCodeNonZero(t *testing.T) {
 	}
 
 	args := mustMarshal(t, []any{})
-	_, err := a.Action("exec", args)
+	_, err := a.Call("exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exitResp, err := a.Assert("exit_code", "", json.RawMessage(`1`))
+	exitResp, err := a.Call("exit_code", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !exitResp.OK {
+	if string(exitResp.Actual) != "1" {
 		t.Fatalf("expected exit_code=1, got: %s", string(exitResp.Actual))
 	}
 }
@@ -92,24 +88,24 @@ func TestProcessAdapter_JSONStdout(t *testing.T) {
 	}
 
 	args := mustMarshal(t, []any{`{"name":"test","value":42}`})
-	if _, err := a.Action("exec", args); err != nil {
+	if _, err := a.Call("exec", args); err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := a.Assert("stdout.name", "", json.RawMessage(`"test"`))
+	resp, err := a.Call("stdout.name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK {
-		t.Fatalf("stdout.name assertion failed: %s", resp.Error)
+	if string(resp.Actual) != `"test"` {
+		t.Fatalf("stdout.name: expected %q, got %s", "test", string(resp.Actual))
 	}
 
-	resp, err = a.Assert("stdout.value", "", json.RawMessage(`42`))
+	resp, err = a.Call("stdout.value", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK {
-		t.Fatalf("stdout.value assertion failed: %s", resp.Error)
+	if string(resp.Actual) != "42" {
+		t.Fatalf("stdout.value: expected 42, got %s", string(resp.Actual))
 	}
 }
 
@@ -122,37 +118,38 @@ func TestProcessAdapter_Stderr(t *testing.T) {
 
 	// "sh -c" writes to stderr
 	args := mustMarshal(t, []any{"-c", "echo error-output >&2"})
-	if _, err := a.Action("exec", args); err != nil {
+	if _, err := a.Call("exec", args); err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := a.Assert("stderr", "", json.RawMessage(`"error-output\n"`))
+	resp, err := a.Call("stderr", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK {
-		t.Fatalf("stderr assertion failed: %s (actual: %s)", resp.Error, string(resp.Actual))
+	if string(resp.Actual) != `"error-output\n"` {
+		t.Fatalf("stderr: expected %q, got %s", "error-output\\n", string(resp.Actual))
 	}
 }
 
-func TestProcessAdapter_AssertBeforeExec(t *testing.T) {
+func TestProcessAdapter_QueryBeforeExec(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
 	a.Command = "echo"
 
-	_, err := a.Assert("exit_code", "", json.RawMessage(`0`))
+	_, err := a.Call("exit_code", nil)
 	if err == nil {
-		t.Fatal("expected error when asserting before exec")
+		t.Fatal("expected error when querying before exec")
 	}
 }
 
-func TestProcessAdapter_UnknownAction(t *testing.T) {
+func TestProcessAdapter_UnknownExecOnly(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
 	a.Command = "echo"
 
-	_, err := a.Action("unknown", json.RawMessage(`[]`))
+	// Unknown methods that aren't "exec" and there's no prior exec result
+	_, err := a.Call("unknown", json.RawMessage(`[]`))
 	if err == nil {
-		t.Fatal("expected error for unknown action")
+		t.Fatal("expected error for unknown method with no prior exec")
 	}
 }

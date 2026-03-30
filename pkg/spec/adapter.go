@@ -4,12 +4,8 @@ import "encoding/json"
 
 // Request is sent from the runtime to an adapter.
 type Request struct {
-	Type     string          `json:"type"`               // "action" or "assert"
-	Name     string          `json:"name,omitempty"`     // action/assertion name
-	Args     json.RawMessage `json:"args,omitempty"`     // action arguments
-	Locator  string          `json:"locator,omitempty"`  // for UI assertions
-	Property string          `json:"property,omitempty"` // assertion property
-	Expected json.RawMessage `json:"expected,omitempty"` // expected value
+	Name string          `json:"name,omitempty"` // method name
+	Args json.RawMessage `json:"args,omitempty"` // method arguments
 }
 
 // Response is returned from an adapter to the runtime.
@@ -24,11 +20,10 @@ type Adapter interface {
 	// Init is called once before any actions/assertions.
 	Init(config map[string]string) error
 
-	// Action executes a named action with arguments.
-	Action(name string, args json.RawMessage) (*Response, error)
-
-	// Assert checks an assertion against the system under test.
-	Assert(property string, locator string, expected json.RawMessage) (*Response, error)
+	// Call executes a named method (action or query) with arguments.
+	// For actions, it performs the operation and returns the result.
+	// For queries (formerly assertions), it returns the current value in Response.Actual.
+	Call(method string, args json.RawMessage) (*Response, error)
 
 	// Reset clears accumulated state (headers, cookies, responses) for a fresh iteration.
 	Reset() error

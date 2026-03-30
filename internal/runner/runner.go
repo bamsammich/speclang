@@ -3,6 +3,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/bamsammich/speclang/v3/internal/adapter"
@@ -184,7 +185,7 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, err
 	}
 
-	resp, err := sr.adapter.Action(actionName, args)
+	resp, err := sr.adapter.Call(actionName, args)
 	if err != nil {
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
@@ -387,7 +388,7 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			if err != nil {
 				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
 			}
-			resp, err := sr.adapter.Action(s.Method, args)
+			resp, err := sr.adapter.Call(s.Method, args)
 			if err != nil {
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
 			}
@@ -531,7 +532,7 @@ func hasPluginAssertions(assertions []*parser.Assertion) bool {
 
 // newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
 func (sr *scopeRunner) newPageWithNavigation() error {
-	resp, err := sr.adapter.Action("new_page", nil)
+	resp, err := sr.adapter.Call("new_page", nil)
 	if err != nil {
 		return fmt.Errorf("creating new page: %w", err)
 	}
@@ -545,7 +546,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 		if err != nil {
 			return fmt.Errorf("marshaling goto args: %w", err)
 		}
-		resp, err := sr.adapter.Action("goto", args)
+		resp, err := sr.adapter.Call("goto", args)
 		if err != nil {
 			return fmt.Errorf("navigating to %q: %w", url, err)
 		}
@@ -558,7 +559,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 
 // closePage closes the current page via the adapter.
 func (sr *scopeRunner) closePage() error {
-	resp, err := sr.adapter.Action("close_page", nil)
+	resp, err := sr.adapter.Call("close_page", nil)
 	if err != nil {
 		return err
 	}
@@ -650,13 +651,23 @@ func (sr *scopeRunner) checkSingleAssertion(
 		return nil, nil
 	}
 
-	property, locator, err := sr.resolveAssertionTarget(a)
+	property, callArgs, err := sr.buildAssertionCall(a)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := sr.adapter.Assert(property, locator, expected)
+	resp, err := sr.adapter.Call(property, callArgs)
 	if err != nil {
-		return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
+		return nil, fmt.Errorf("querying %q: %w", a.Target, err)
+	}
+	if !resp.OK {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    string(expected),
+			Actual:      string(resp.Actual),
+			Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+		}, nil
 	}
 
 	op := a.Operator
@@ -665,15 +676,19 @@ func (sr *scopeRunner) checkSingleAssertion(
 	}
 
 	if op == "==" {
-		// Equality: use adapter's built-in comparison.
-		if !resp.OK {
+		// Equality: compare actual (from adapter) vs expected in the runner.
+		ok, cmpErr := compareEquality(resp.Actual, expected)
+		if cmpErr != nil {
+			return nil, fmt.Errorf("comparing %q: %w", a.Target, cmpErr)
+		}
+		if !ok {
 			return &Failure{
 				Name:        name,
 				Scope:       sr.scope,
 				Input:       input,
 				Expected:    string(expected),
 				Actual:      string(resp.Actual),
-				Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+				Description: fmt.Sprintf("assertion %q failed: expected %s, got %s", a.Target, string(expected), string(resp.Actual)),
 			}, nil
 		}
 		return nil, nil
@@ -734,15 +749,35 @@ func compareAssertion(op string, actual, expected json.RawMessage) (bool, error)
 	}
 }
 
-func (sr *scopeRunner) resolveAssertionTarget(a *parser.Assertion) (string, string, error) {
+// buildAssertionCall constructs the Call method name and args for an assertion.
+// For non-plugin assertions (e.g., body field paths), it returns (target, nil, nil).
+// For plugin assertions (e.g., playwright.visible on a locator), it returns
+// (property, JSON array with selector, nil).
+func (sr *scopeRunner) buildAssertionCall(a *parser.Assertion) (string, json.RawMessage, error) {
 	if a.Plugin == "" {
-		return a.Target, "", nil
+		return a.Target, nil, nil
 	}
 	selector, ok := sr.runner.spec.Locators[a.Target]
 	if !ok {
-		return "", "", fmt.Errorf("locator %q not defined in locators block", a.Target)
+		return "", nil, fmt.Errorf("locator %q not defined in locators block", a.Target)
 	}
-	return a.Property, selector, nil
+	args, err := json.Marshal([]string{selector})
+	if err != nil {
+		return "", nil, fmt.Errorf("marshaling assertion args: %w", err)
+	}
+	return a.Property, args, nil
+}
+
+// compareEquality checks if two JSON values are deeply equal after normalization.
+func compareEquality(actual, expected json.RawMessage) (bool, error) {
+	var actualNorm, expectedNorm any
+	if err := json.Unmarshal(actual, &actualNorm); err != nil {
+		return false, fmt.Errorf("normalizing actual: %w", err)
+	}
+	if err := json.Unmarshal(expected, &expectedNorm); err != nil {
+		return false, fmt.Errorf("normalizing expected: %w", err)
+	}
+	return reflect.DeepEqual(actualNorm, expectedNorm), nil
 }
 
 // hasOutputField returns true if the scope's contract declares a field with the given name.

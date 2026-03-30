@@ -10,18 +10,10 @@ import (
 // stubAdapter is a minimal Adapter implementation for testing.
 type stubAdapter struct{}
 
-func (stubAdapter) Init(map[string]string) error { return nil }
-
-func (stubAdapter) Action(string, json.RawMessage) (*spec.Response, error) {
-	return nil, nil
-}
-
-func (stubAdapter) Assert(string, string, json.RawMessage) (*spec.Response, error) {
-	return nil, nil
-}
-
-func (stubAdapter) Reset() error { return nil }
-func (stubAdapter) Close() error { return nil }
+func (stubAdapter) Init(map[string]string) error                          { return nil }
+func (stubAdapter) Call(string, json.RawMessage) (*spec.Response, error)  { return nil, nil }
+func (stubAdapter) Reset() error                                          { return nil }
+func (stubAdapter) Close() error                                          { return nil }
 
 func TestRegistry_RegisterAndLookup(t *testing.T) {
 	r := spec.NewRegistry()

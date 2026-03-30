@@ -92,6 +92,22 @@ func startTestServer(t *testing.T) string {
 	return fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 }
 
+// assertPlaywrightQuery calls Call with a query method and selector, then checks the actual value.
+func assertPlaywrightQuery(t *testing.T, adp *adapter.PlaywrightAdapter, method, selector string, expected json.RawMessage) {
+	t.Helper()
+	args := mustMarshal(t, []string{selector})
+	resp, err := adp.Call(method, args)
+	if err != nil {
+		t.Fatalf("query %q on %q: %v", method, selector, err)
+	}
+	if !resp.OK {
+		t.Fatalf("query %q on %q not OK: %s", method, selector, resp.Error)
+	}
+	if string(resp.Actual) != string(expected) {
+		t.Errorf("query %q on %q: expected %s, got %s", method, selector, string(expected), string(resp.Actual))
+	}
+}
+
 func TestPlaywrightAdapter_Integration(t *testing.T) {
 	skipIfNoBrowsers(t)
 
@@ -110,7 +126,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	t.Run("goto and fill and click", func(t *testing.T) {
 		// Navigate to login page.
 		gotoArgs := mustMarshal(t, []string{"/login"})
-		resp, err := adp.Action("goto", gotoArgs)
+		resp, err := adp.Call("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto: %v", err)
 		}
@@ -120,7 +136,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 		// Fill username.
 		fillUser := mustMarshal(t, []string{"[data-testid=username]", "alice"})
-		resp, err = adp.Action("fill", fillUser)
+		resp, err = adp.Call("fill", fillUser)
 		if err != nil {
 			t.Fatalf("fill username: %v", err)
 		}
@@ -130,7 +146,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 		// Fill password.
 		fillPass := mustMarshal(t, []string{"[data-testid=password]", "secret"})
-		resp, err = adp.Action("fill", fillPass)
+		resp, err = adp.Call("fill", fillPass)
 		if err != nil {
 			t.Fatalf("fill password: %v", err)
 		}
@@ -140,7 +156,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 		// Click submit.
 		clickArgs := mustMarshal(t, []string{"[data-testid=submit]"})
-		resp, err = adp.Action("click", clickArgs)
+		resp, err = adp.Call("click", clickArgs)
 		if err != nil {
 			t.Fatalf("click: %v", err)
 		}
@@ -149,55 +165,24 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("assert visible", func(t *testing.T) {
-		expected := mustMarshal(t, true)
-		resp, err := adp.Assert("visible", "[data-testid=welcome]", expected)
-		if err != nil {
-			t.Fatalf("assert visible: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("welcome should be visible: %s", resp.Error)
-		}
+	t.Run("query visible", func(t *testing.T) {
+		assertPlaywrightQuery(t, adp, "visible", "[data-testid=welcome]", mustMarshal(t, true))
 	})
 
-	t.Run("assert text", func(t *testing.T) {
-		expected := mustMarshal(t, "Welcome, alice")
-		resp, err := adp.Assert("text", "[data-testid=welcome]", expected)
-		if err != nil {
-			t.Fatalf("assert text: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf(
-				"welcome text mismatch: expected 'Welcome, alice', got %s",
-				string(resp.Actual),
-			)
-		}
+	t.Run("query text", func(t *testing.T) {
+		assertPlaywrightQuery(t, adp, "text", "[data-testid=welcome]", mustMarshal(t, "Welcome, alice"))
 	})
 
-	t.Run("assert value", func(t *testing.T) {
-		expected := mustMarshal(t, "alice")
-		resp, err := adp.Assert("value", "[data-testid=username]", expected)
-		if err != nil {
-			t.Fatalf("assert value: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("username value mismatch: expected 'alice', got %s", string(resp.Actual))
-		}
+	t.Run("query value", func(t *testing.T) {
+		assertPlaywrightQuery(t, adp, "value", "[data-testid=username]", mustMarshal(t, "alice"))
 	})
 
-	t.Run("assert not visible", func(t *testing.T) {
-		expected := mustMarshal(t, false)
-		resp, err := adp.Assert("visible", "[data-testid=error]", expected)
-		if err != nil {
-			t.Fatalf("assert not visible: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("error should not be visible: %s", resp.Error)
-		}
+	t.Run("query not visible", func(t *testing.T) {
+		assertPlaywrightQuery(t, adp, "visible", "[data-testid=error]", mustMarshal(t, false))
 	})
 
 	t.Run("new_page and close_page", func(t *testing.T) {
-		resp, err := adp.Action("new_page", nil)
+		resp, err := adp.Call("new_page", nil)
 		if err != nil {
 			t.Fatalf("new_page: %v", err)
 		}
@@ -206,7 +191,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		gotoArgs := mustMarshal(t, []string{"/login"})
-		resp, err = adp.Action("goto", gotoArgs)
+		resp, err = adp.Call("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto on new page: %v", err)
 		}
@@ -214,7 +199,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 			t.Fatalf("goto on new page failed: %s", resp.Error)
 		}
 
-		resp, err = adp.Action("close_page", nil)
+		resp, err = adp.Call("close_page", nil)
 		if err != nil {
 			t.Fatalf("close_page: %v", err)
 		}
@@ -223,20 +208,13 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// After closing the new page, the original page should still work.
-		expected := mustMarshal(t, true)
-		resp, err = adp.Assert("visible", "[data-testid=welcome]", expected)
-		if err != nil {
-			t.Fatalf("assert after close_page: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("welcome should still be visible on original page: %s", resp.Error)
-		}
+		assertPlaywrightQuery(t, adp, "visible", "[data-testid=welcome]", mustMarshal(t, true))
 	})
 
 	t.Run("resize viewport", func(t *testing.T) {
 		// Resize to mobile.
 		resizeArgs := mustMarshal(t, []int{375, 812})
-		resp, err := adp.Action("resize", resizeArgs)
+		resp, err := adp.Call("resize", resizeArgs)
 		if err != nil {
 			t.Fatalf("resize: %v", err)
 		}
@@ -246,7 +224,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 		// Page should still work at mobile size.
 		gotoArgs := mustMarshal(t, []string{"/login"})
-		resp, err = adp.Action("goto", gotoArgs)
+		resp, err = adp.Call("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("goto after resize: %v", err)
 		}
@@ -256,7 +234,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 
 		// Resize back to desktop.
 		resizeArgs = mustMarshal(t, []int{1920, 1080})
-		resp, err = adp.Action("resize", resizeArgs)
+		resp, err = adp.Call("resize", resizeArgs)
 		if err != nil {
 			t.Fatalf("resize back: %v", err)
 		}
@@ -268,7 +246,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 	t.Run("failed login shows error", func(t *testing.T) {
 		// Navigate fresh.
 		gotoArgs := mustMarshal(t, []string{"/login"})
-		resp, err := adp.Action("goto", gotoArgs)
+		resp, err := adp.Call("goto", gotoArgs)
 		if err != nil {
 			t.Fatalf("setup action failed: %v", err)
 		}
@@ -277,7 +255,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		fillUser := mustMarshal(t, []string{"[data-testid=username]", "bob"})
-		resp, err = adp.Action("fill", fillUser)
+		resp, err = adp.Call("fill", fillUser)
 		if err != nil {
 			t.Fatalf("setup action failed: %v", err)
 		}
@@ -286,7 +264,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		fillPass := mustMarshal(t, []string{"[data-testid=password]", "wrong"})
-		resp, err = adp.Action("fill", fillPass)
+		resp, err = adp.Call("fill", fillPass)
 		if err != nil {
 			t.Fatalf("setup action failed: %v", err)
 		}
@@ -295,7 +273,7 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		clickArgs := mustMarshal(t, []string{"[data-testid=submit]"})
-		resp, err = adp.Action("click", clickArgs)
+		resp, err = adp.Call("click", clickArgs)
 		if err != nil {
 			t.Fatalf("setup action failed: %v", err)
 		}
@@ -304,23 +282,9 @@ func TestPlaywrightAdapter_Integration(t *testing.T) {
 		}
 
 		// Error should be visible.
-		expected := mustMarshal(t, true)
-		resp, err = adp.Assert("visible", "[data-testid=error]", expected)
-		if err != nil {
-			t.Fatalf("assert error visible: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("error should be visible after bad login: %s", resp.Error)
-		}
+		assertPlaywrightQuery(t, adp, "visible", "[data-testid=error]", mustMarshal(t, true))
 
 		// Error text.
-		expectedText := mustMarshal(t, "Invalid credentials")
-		resp, err = adp.Assert("text", "[data-testid=error]", expectedText)
-		if err != nil {
-			t.Fatalf("assert error text: %v", err)
-		}
-		if !resp.OK {
-			t.Errorf("error text mismatch: got %s", string(resp.Actual))
-		}
+		assertPlaywrightQuery(t, adp, "text", "[data-testid=error]", mustMarshal(t, "Invalid credentials"))
 	})
 }

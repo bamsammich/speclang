@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -80,22 +79,16 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 	return nil
 }
 
-func (a *PlaywrightAdapter) Action(name string, args json.RawMessage) (*Response, error) {
+func (a *PlaywrightAdapter) Call(method string, args json.RawMessage) (*Response, error) {
 	var rawArgs []json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &rawArgs); err != nil {
-			return nil, fmt.Errorf("parsing action args: %w", err)
+			return nil, fmt.Errorf("parsing args: %w", err)
 		}
 	}
 
-	return a.dispatchAction(name, rawArgs)
-}
-
-func (a *PlaywrightAdapter) dispatchAction(
-	name string,
-	rawArgs []json.RawMessage,
-) (*Response, error) {
-	switch name {
+	// Actions
+	switch method {
 	case "goto":
 		return a.doGoto(rawArgs)
 	case "click":
@@ -120,79 +113,62 @@ func (a *PlaywrightAdapter) dispatchAction(
 		return a.doClosePage()
 	case "clear_state":
 		return a.doClearState()
-	default:
-		return nil, fmt.Errorf("unknown playwright action %q", name)
 	}
-}
 
-func (a *PlaywrightAdapter) Assert(
-	property string,
-	locator string,
-	expected json.RawMessage,
-) (*Response, error) {
+	// Assertions / queries — first arg is CSS selector, return value in Actual
 	if a.page == nil {
-		return nil, errors.New("no page available for assertion")
+		return nil, errors.New("no page available for query")
 	}
 
-	loc := a.page.Locator(locator)
+	if len(rawArgs) < 1 {
+		return nil, fmt.Errorf("query %q requires a selector argument", method)
+	}
+	var selector string
+	if err := json.Unmarshal(rawArgs[0], &selector); err != nil {
+		return nil, fmt.Errorf("parsing selector for query %q: %w", method, err)
+	}
+
+	loc := a.page.Locator(selector)
 	timeout := a.timeout
 
 	var actual any
 	var err error
 
 	switch {
-	case property == "visible":
+	case method == "visible":
 		actual, err = loc.IsVisible(playwright.LocatorIsVisibleOptions{Timeout: &timeout})
-	case property == "text":
+	case method == "text":
 		actual, err = loc.TextContent(playwright.LocatorTextContentOptions{Timeout: &timeout})
-	case property == "value":
+	case method == "value":
 		actual, err = loc.InputValue(playwright.LocatorInputValueOptions{Timeout: &timeout})
-	case property == "checked":
+	case method == "checked":
 		actual, err = loc.IsChecked(playwright.LocatorIsCheckedOptions{Timeout: &timeout})
-	case property == "disabled":
+	case method == "disabled":
 		actual, err = loc.IsDisabled(playwright.LocatorIsDisabledOptions{Timeout: &timeout})
-	case property == "count":
+	case method == "count":
 		actual, err = loc.Count()
-	case strings.HasPrefix(property, "attribute."):
-		attrName := strings.TrimPrefix(property, "attribute.")
+	case strings.HasPrefix(method, "attribute."):
+		attrName := strings.TrimPrefix(method, "attribute.")
 		actual, err = loc.GetAttribute(
 			attrName,
 			playwright.LocatorGetAttributeOptions{Timeout: &timeout},
 		)
 	default:
-		return nil, fmt.Errorf("unknown playwright assertion property %q", property)
+		return nil, fmt.Errorf("unknown playwright method %q", method)
 	}
 
 	if err != nil {
 		return &Response{
 			OK:    false,
-			Error: fmt.Sprintf("assertion %q on %q: %v", property, locator, err),
+			Error: fmt.Sprintf("query %q on %q: %v", method, selector, err),
 		}, nil
 	}
 
-	// Normalize both sides through JSON for consistent comparison.
 	actualJSON, err := json.Marshal(actual)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling actual value: %w", err)
 	}
-
-	var actualNorm, expectedNorm any
-	if err := json.Unmarshal(actualJSON, &actualNorm); err != nil {
-		return nil, fmt.Errorf("normalizing actual: %w", err)
-	}
-	if err := json.Unmarshal(expected, &expectedNorm); err != nil {
-		return nil, fmt.Errorf("normalizing expected: %w", err)
-	}
-
-	if reflect.DeepEqual(actualNorm, expectedNorm) {
-		return &Response{OK: true, Actual: actualJSON}, nil
-	}
-
-	return &Response{
-		OK:     false,
-		Actual: actualJSON,
-		Error:  fmt.Sprintf("expected %s, got %s", string(expected), string(actualJSON)),
-	}, nil
+	return &Response{OK: true, Actual: actualJSON}, nil
 }
 
 func (a *PlaywrightAdapter) Reset() error {

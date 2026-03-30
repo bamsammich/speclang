@@ -222,19 +222,19 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.actionCalls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	if len(mock.calls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
 	}
 
 	// The exec action should contain "resolved_value" from the env var.
-	args := string(mock.actionCalls[0].Args)
-	if !json.Valid(mock.actionCalls[0].Args) {
+	args := string(mock.calls[0].Args)
+	if !json.Valid(mock.calls[0].Args) {
 		t.Fatalf("invalid JSON in action args: %s", args)
 	}
 	// The process adapter receives exec args as a JSON array.
 	// The input field "file" should have the resolved env value.
 	var execArgs []any
-	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+	if err := json.Unmarshal(mock.calls[0].Args, &execArgs); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
 	found := false
@@ -290,13 +290,13 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.actionCalls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	if len(mock.calls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
 	}
 
 	// The exec args should start with "parse" from the env-resolved config.
 	var execArgs []any
-	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+	if err := json.Unmarshal(mock.calls[0].Args, &execArgs); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
 	if len(execArgs) < 1 {
@@ -354,12 +354,12 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.actionCalls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.actionCalls))
+	if len(mock.calls) != 1 {
+		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
 	}
 
 	var execArgs []any
-	if err := json.Unmarshal(mock.actionCalls[0].Args, &execArgs); err != nil {
+	if err := json.Unmarshal(mock.calls[0].Args, &execArgs); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
 
@@ -379,43 +379,24 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 	}
 }
 
-// mockAdapter records Action and Assert calls for testing.
+// mockAdapter records Call invocations for testing.
 type mockAdapter struct {
-	actionCalls []actionCall
-	assertCalls []assertCall
+	calls []mockCall
 }
 
-type actionCall struct {
-	Name string
-	Args json.RawMessage
-}
-
-type assertCall struct {
-	Property string
-	Locator  string
-	Expected json.RawMessage
+type mockCall struct {
+	Method string
+	Args   json.RawMessage
 }
 
 func (m *mockAdapter) Init(config map[string]string) error { return nil }
-func (m *mockAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
-	m.actionCalls = append(m.actionCalls, actionCall{Name: name, Args: args})
+func (m *mockAdapter) Call(method string, args json.RawMessage) (*adapter.Response, error) {
+	m.calls = append(m.calls, mockCall{Method: method, Args: args})
 	return &adapter.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
-}
-
-func (m *mockAdapter) Assert(
-	property string,
-	locator string,
-	expected json.RawMessage,
-) (*adapter.Response, error) {
-	m.assertCalls = append(m.assertCalls, assertCall{
-		Property: property,
-		Locator:  locator,
-		Expected: expected,
-	})
-	return &adapter.Response{OK: true, Actual: expected}, nil
 }
 func (m *mockAdapter) Reset() error { return nil }
 func (m *mockAdapter) Close() error { return nil }
+
 
 func TestLocatorResolution(t *testing.T) {
 	t.Parallel()
@@ -457,16 +438,25 @@ func TestLocatorResolution(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.assertCalls) != 1 {
-		t.Fatalf("expected 1 assert call, got %d", len(mock.assertCalls))
+	// The assertion goes through Call("visible", args) where args contains the selector.
+	// Find the "visible" call in mock.calls.
+	var visibleCall *mockCall
+	for i := range mock.calls {
+		if mock.calls[i].Method == "visible" {
+			visibleCall = &mock.calls[i]
+			break
+		}
+	}
+	if visibleCall == nil {
+		t.Fatal("expected a 'visible' call, found none")
 	}
 
-	call := mock.assertCalls[0]
-	if call.Property != "visible" {
-		t.Errorf("property = %q, want 'visible'", call.Property)
+	var callArgs []string
+	if err := json.Unmarshal(visibleCall.Args, &callArgs); err != nil {
+		t.Fatalf("unmarshal visible args: %v", err)
 	}
-	if call.Locator != "[data-testid=welcome]" {
-		t.Errorf("locator = %q, want '[data-testid=welcome]'", call.Locator)
+	if len(callArgs) != 1 || callArgs[0] != "[data-testid=welcome]" {
+		t.Errorf("visible args = %v, want [[data-testid=welcome]]", callArgs)
 	}
 }
 
@@ -573,17 +563,17 @@ func TestGivenStepExecution(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	// Verify action calls executed in order
-	if len(mock.actionCalls) != 2 {
-		t.Fatalf("expected 2 action calls, got %d", len(mock.actionCalls))
+	// Verify calls executed in order: fill, click, then visible (assertion)
+	if len(mock.calls) < 3 {
+		t.Fatalf("expected at least 3 calls, got %d", len(mock.calls))
 	}
 
 	// First call: fill(username_selector, "alice")
-	if mock.actionCalls[0].Name != "fill" {
-		t.Errorf("action 0: name = %q, want 'fill'", mock.actionCalls[0].Name)
+	if mock.calls[0].Method != "fill" {
+		t.Errorf("call 0: method = %q, want 'fill'", mock.calls[0].Method)
 	}
 	var fillArgs []any
-	if err := json.Unmarshal(mock.actionCalls[0].Args, &fillArgs); err != nil {
+	if err := json.Unmarshal(mock.calls[0].Args, &fillArgs); err != nil {
 		t.Fatalf("unmarshal fill args: %v", err)
 	}
 	if len(fillArgs) != 2 {
@@ -597,26 +587,34 @@ func TestGivenStepExecution(t *testing.T) {
 	}
 
 	// Second call: click(submit_selector)
-	if mock.actionCalls[1].Name != "click" {
-		t.Errorf("action 1: name = %q, want 'click'", mock.actionCalls[1].Name)
+	if mock.calls[1].Method != "click" {
+		t.Errorf("action 1: name = %q, want 'click'", mock.calls[1].Method)
 	}
 	var clickArgs []any
-	if err := json.Unmarshal(mock.actionCalls[1].Args, &clickArgs); err != nil {
+	if err := json.Unmarshal(mock.calls[1].Args, &clickArgs); err != nil {
 		t.Fatalf("unmarshal click args: %v", err)
 	}
 	if len(clickArgs) != 1 || clickArgs[0] != "[data-testid=submit]" {
 		t.Errorf("click args = %v, want [[data-testid=submit]]", clickArgs)
 	}
 
-	// Verify assertion
-	if len(mock.assertCalls) != 1 {
-		t.Fatalf("expected 1 assert call, got %d", len(mock.assertCalls))
+	// Verify assertion — the "visible" query goes through Call too.
+	var visibleCall *mockCall
+	for i := range mock.calls {
+		if mock.calls[i].Method == "visible" {
+			visibleCall = &mock.calls[i]
+			break
+		}
 	}
-	if mock.assertCalls[0].Property != "visible" {
-		t.Errorf("assert property = %q, want 'visible'", mock.assertCalls[0].Property)
+	if visibleCall == nil {
+		t.Fatal("expected a 'visible' call, found none")
 	}
-	if mock.assertCalls[0].Locator != "[data-testid=welcome]" {
-		t.Errorf("assert locator = %q, want '[data-testid=welcome]'", mock.assertCalls[0].Locator)
+	var assertArgs []string
+	if err := json.Unmarshal(visibleCall.Args, &assertArgs); err != nil {
+		t.Fatalf("unmarshal visible args: %v", err)
+	}
+	if len(assertArgs) != 1 || assertArgs[0] != "[data-testid=welcome]" {
+		t.Errorf("visible args = %v, want [[data-testid=welcome]]", assertArgs)
 	}
 }
 
@@ -843,22 +841,14 @@ func TestVerifyTransferSpec(t *testing.T) {
 	}
 }
 
-// failingAdapter returns {ok: false} on Action calls with a configurable error message.
+// failingAdapter returns {ok: false} on Call invocations with a configurable error message.
 type failingAdapter struct {
 	errorMsg string
 }
 
 func (f *failingAdapter) Init(config map[string]string) error { return nil }
-func (f *failingAdapter) Action(name string, args json.RawMessage) (*adapter.Response, error) {
+func (f *failingAdapter) Call(method string, args json.RawMessage) (*adapter.Response, error) {
 	return &adapter.Response{OK: false, Error: f.errorMsg}, nil
-}
-
-func (f *failingAdapter) Assert(
-	property string,
-	locator string,
-	expected json.RawMessage,
-) (*adapter.Response, error) {
-	return &adapter.Response{OK: true, Actual: expected}, nil
 }
 func (f *failingAdapter) Reset() error { return nil }
 func (f *failingAdapter) Close() error { return nil }

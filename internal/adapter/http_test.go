@@ -82,6 +82,31 @@ func mustMarshal(t *testing.T, v any) json.RawMessage {
 	return b
 }
 
+// assertQuery calls Call with a query method and asserts the actual value matches expected.
+func assertQuery(t *testing.T, a *HTTPAdapter, method string, expected string) {
+	t.Helper()
+	resp, err := a.Call(method, nil)
+	if err != nil {
+		t.Fatalf("query %q: %v", method, err)
+	}
+	if !resp.OK {
+		t.Fatalf("query %q not OK: %s", method, resp.Error)
+	}
+	// Normalize through JSON for consistent comparison.
+	var actualNorm, expectedNorm any
+	if err := json.Unmarshal(resp.Actual, &actualNorm); err != nil {
+		t.Fatalf("normalizing actual: %v", err)
+	}
+	if err := json.Unmarshal([]byte(expected), &expectedNorm); err != nil {
+		t.Fatalf("normalizing expected: %v", err)
+	}
+	actualJSON, _ := json.Marshal(actualNorm)
+	expectedJSON, _ := json.Marshal(expectedNorm)
+	if string(actualJSON) != string(expectedJSON) {
+		t.Fatalf("query %q: expected %s, got %s", method, expected, string(resp.Actual))
+	}
+}
+
 func doTransfer(t *testing.T, a *HTTPAdapter, fromBalance, toBalance, amount int) {
 	t.Helper()
 	args := mustMarshal(t, []any{
@@ -92,7 +117,7 @@ func doTransfer(t *testing.T, a *HTTPAdapter, fromBalance, toBalance, amount int
 			"amount": amount,
 		},
 	})
-	if _, err := a.Action("post", args); err != nil {
+	if _, err := a.Call("post", args); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -254,21 +279,8 @@ func TestAction_PostSuccess(t *testing.T) {
 
 	doTransfer(t, a, 100, 50, 30)
 
-	assertResp, err := a.Assert("from.balance", "", json.RawMessage(`70`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
-
-	assertResp, err = a.Assert("to.balance", "", json.RawMessage(`80`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "from.balance", `70`)
+	assertQuery(t, a, "to.balance", `80`)
 }
 
 func TestAction_PostInsufficientFunds(t *testing.T) {
@@ -278,80 +290,46 @@ func TestAction_PostInsufficientFunds(t *testing.T) {
 
 	doTransfer(t, a, 10, 50, 30)
 
-	assertResp, err := a.Assert("error", "", json.RawMessage(`"insufficient_funds"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "error", `"insufficient_funds"`)
 }
 
-func TestAssert_Status(t *testing.T) {
+func TestCall_Status(t *testing.T) {
 	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
 	doTransfer(t, a, 100, 50, 30)
-
-	resp, err := a.Assert("status", "", json.RawMessage(`200`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !resp.OK {
-		t.Fatalf("assertion failed: %s", resp.Error)
-	}
+	assertQuery(t, a, "status", `200`)
 }
 
-func TestAssert_NestedBodyField(t *testing.T) {
+func TestCall_NestedBodyField(t *testing.T) {
 	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
 	doTransfer(t, a, 100, 50, 30)
-
-	resp, err := a.Assert("from.balance", "", json.RawMessage(`70`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !resp.OK {
-		t.Fatalf("assertion failed: %s", resp.Error)
-	}
+	assertQuery(t, a, "from.balance", `70`)
 }
 
-func TestAssert_ErrorNull(t *testing.T) {
+func TestCall_ErrorNull(t *testing.T) {
 	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
 	doTransfer(t, a, 100, 50, 30)
-
-	resp, err := a.Assert("error", "", json.RawMessage(`null`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !resp.OK {
-		t.Fatalf("expected null error, got: %s", resp.Error)
-	}
+	assertQuery(t, a, "error", `null`)
 }
 
-func TestAssert_ErrorString(t *testing.T) {
+func TestCall_ErrorString(t *testing.T) {
 	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
 	doTransfer(t, a, 10, 50, 30)
-
-	resp, err := a.Assert("error", "", json.RawMessage(`"insufficient_funds"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !resp.OK {
-		t.Fatalf("assertion failed: %s", resp.Error)
-	}
+	assertQuery(t, a, "error", `"insufficient_funds"`)
 }
 
-func TestAssert_BeforeRequest(t *testing.T) {
+func TestCall_BeforeRequest(t *testing.T) {
 	t.Parallel()
 	a, err := NewHTTPAdapter()
 	if err != nil {
@@ -359,9 +337,9 @@ func TestAssert_BeforeRequest(t *testing.T) {
 	}
 	a.BaseURL = "http://unused"
 
-	_, err = a.Assert("status", "", json.RawMessage(`200`))
+	_, err = a.Call("status", nil)
 	if err == nil {
-		t.Fatal("expected error when asserting before any request")
+		t.Fatal("expected error when querying before any request")
 	}
 }
 
@@ -387,12 +365,12 @@ func TestAction_Header(t *testing.T) {
 	}
 
 	headerArgs := mustMarshal(t, []any{"Authorization", "Bearer token123"})
-	if _, err := a.Action("header", headerArgs); err != nil {
+	if _, err := a.Call("header", headerArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	getArgs := mustMarshal(t, []any{"/"})
-	if _, err := a.Action("get", getArgs); err != nil {
+	if _, err := a.Call("get", getArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -401,7 +379,7 @@ func TestAction_Header(t *testing.T) {
 	}
 }
 
-func TestAction_Unknown(t *testing.T) {
+func TestCall_UnknownMethod(t *testing.T) {
 	t.Parallel()
 	a, err := NewHTTPAdapter()
 	if err != nil {
@@ -409,41 +387,38 @@ func TestAction_Unknown(t *testing.T) {
 	}
 	a.BaseURL = "http://unused"
 
-	_, err = a.Action("patch", json.RawMessage(`["/foo"]`))
+	// "patch" is now a valid HTTP method, so test a truly unknown method.
+	// But first we need a request to have been made for non-action methods.
+	// For an unknown dot-path with no prior request, we get "no request has been made yet"
+	_, err = a.Call("nonexistent.field", nil)
 	if err == nil {
-		t.Fatal("expected error for unknown action")
+		t.Fatal("expected error for unknown method with no prior request")
 	}
 }
 
-func TestAssert_Header(t *testing.T) {
+func TestCall_Header(t *testing.T) {
+	t.Parallel()
+	a, srv := newTestAdapter(t)
+	defer srv.Close()
+
+	doTransfer(t, a, 100, 50, 30)
+	assertQuery(t, a, "header.X-Request-Id", `"test-123"`)
+}
+
+func TestCall_ValueMismatch(t *testing.T) {
 	t.Parallel()
 	a, srv := newTestAdapter(t)
 	defer srv.Close()
 
 	doTransfer(t, a, 100, 50, 30)
 
-	resp, err := a.Assert("header.X-Request-Id", "", json.RawMessage(`"test-123"`))
+	// Call returns the actual value; comparison is the runner's job now.
+	resp, err := a.Call("from.balance", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK {
-		t.Fatalf("assertion failed: %s", resp.Error)
-	}
-}
-
-func TestAssert_FailureMismatch(t *testing.T) {
-	t.Parallel()
-	a, srv := newTestAdapter(t)
-	defer srv.Close()
-
-	doTransfer(t, a, 100, 50, 30)
-
-	resp, err := a.Assert("from.balance", "", json.RawMessage(`999`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.OK {
-		t.Fatal("expected assertion to fail for mismatched value")
+	if string(resp.Actual) == "999" {
+		t.Fatal("expected actual value to differ from 999")
 	}
 }
 
@@ -526,7 +501,7 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 
 	// Step 1: POST to create a resource
 	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "widget"}})
-	resp, err := a.Action("post", postArgs)
+	resp, err := a.Call("post", postArgs)
 	if err != nil {
 		t.Fatalf("POST failed: %v", err)
 	}
@@ -536,7 +511,7 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 
 	// Step 2: GET to verify the resource exists
 	getArgs := mustMarshal(t, []any{"/api/resources/1"})
-	resp, err = a.Action("get", getArgs)
+	resp, err = a.Call("get", getArgs)
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
@@ -545,21 +520,8 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 	}
 
 	// Assertions apply to the last response (the GET)
-	assertResp, err := a.Assert("name", "", json.RawMessage(`"widget"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
-
-	assertResp, err = a.Assert("id", "", json.RawMessage(`1`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "name", `"widget"`)
+	assertQuery(t, a, "id", `1`)
 }
 
 func TestMultiStep_HeaderPersistence(t *testing.T) {
@@ -577,35 +539,23 @@ func TestMultiStep_HeaderPersistence(t *testing.T) {
 
 	// Set a header
 	headerArgs := mustMarshal(t, []any{"Authorization", "Bearer my-token"})
-	if _, err := a.Action("header", headerArgs); err != nil {
+	if _, err := a.Call("header", headerArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// First request: POST — header should be present
 	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "test"}})
-	if _, err := a.Action("post", postArgs); err != nil {
+	if _, err := a.Call("post", postArgs); err != nil {
 		t.Fatal(err)
 	}
-	assertResp, err := a.Assert("auth", "", json.RawMessage(`"Bearer my-token"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("POST auth assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "auth", `"Bearer my-token"`)
 
 	// Second request: GET — header should still be present
 	getArgs := mustMarshal(t, []any{"/api/headers"})
-	if _, err := a.Action("get", getArgs); err != nil {
+	if _, err := a.Call("get", getArgs); err != nil {
 		t.Fatal(err)
 	}
-	assertResp, err = a.Assert("auth", "", json.RawMessage(`"Bearer my-token"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("GET auth assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "auth", `"Bearer my-token"`)
 }
 
 func TestMultiStep_CookiePersistence(t *testing.T) {
@@ -623,7 +573,7 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 
 	// Step 1: POST /api/login — server sets a session cookie
 	loginArgs := mustMarshal(t, []any{"/api/login", map[string]any{}})
-	resp, err := a.Action("post", loginArgs)
+	resp, err := a.Call("post", loginArgs)
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
@@ -633,7 +583,7 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 
 	// Step 2: GET /api/me — cookie should be sent automatically
 	meArgs := mustMarshal(t, []any{"/api/me"})
-	resp, err = a.Action("get", meArgs)
+	resp, err = a.Call("get", meArgs)
 	if err != nil {
 		t.Fatalf("me failed: %v", err)
 	}
@@ -641,13 +591,7 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 		t.Fatalf("me not OK: %s", resp.Error)
 	}
 
-	assertResp, err := a.Assert("user", "", json.RawMessage(`"alice"`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "user", `"alice"`)
 }
 
 func TestMultiStep_ErrorInMiddle(t *testing.T) {
@@ -665,7 +609,7 @@ func TestMultiStep_ErrorInMiddle(t *testing.T) {
 
 	// GET a resource that doesn't exist yet — should get 404
 	getArgs := mustMarshal(t, []any{"/api/resources/1"})
-	resp, err := a.Action("get", getArgs)
+	resp, err := a.Call("get", getArgs)
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
@@ -675,11 +619,5 @@ func TestMultiStep_ErrorInMiddle(t *testing.T) {
 	}
 
 	// Assert the 404 status
-	assertResp, err := a.Assert("status", "", json.RawMessage(`404`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assertResp.OK {
-		t.Fatalf("status assertion failed: %s", assertResp.Error)
-	}
+	assertQuery(t, a, "status", `404`)
 }

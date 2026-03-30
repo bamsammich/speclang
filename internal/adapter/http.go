@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"reflect"
 	"strconv"
 	"strings"
 )
@@ -93,22 +92,56 @@ func (a *HTTPAdapter) doRequest(method, path string, body json.RawMessage) (*Res
 	return &Response{OK: true, Actual: json.RawMessage(rawBody)}, nil
 }
 
-func (a *HTTPAdapter) Action(name string, args json.RawMessage) (*Response, error) {
+func (a *HTTPAdapter) Call(method string, args json.RawMessage) (*Response, error) {
 	var rawArgs []json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &rawArgs); err != nil {
-			return nil, fmt.Errorf("parsing action args: %w", err)
+			return nil, fmt.Errorf("parsing args: %w", err)
 		}
 	}
 
-	switch name {
-	case "get", "post", "put", "delete":
-		return a.doHTTPAction(name, rawArgs)
+	// Actions
+	switch method {
+	case "get", "post", "put", "delete", "patch":
+		return a.doHTTPAction(method, rawArgs)
 	case "header":
 		return a.doHeaderAction(rawArgs)
-	default:
-		return nil, fmt.Errorf("unknown http action %q", name)
+	case "cookie":
+		return a.doCookieAction(rawArgs)
 	}
+
+	// Assertions / queries — return current value in Actual
+	if a.last == nil {
+		return nil, errors.New("no request has been made yet")
+	}
+
+	var actual any
+
+	switch {
+	case method == "status":
+		actual = float64(a.last.statusCode)
+	case strings.HasPrefix(method, "header."):
+		headerName := strings.TrimPrefix(method, "header.")
+		actual = a.last.headers.Get(headerName)
+	case method == "body":
+		actual = a.last.body
+	default:
+		// Treat as body field path.
+		if a.last.body == nil {
+			return nil, fmt.Errorf("response body is not JSON, cannot extract path %q", method)
+		}
+		val, err := extractPath(a.last.body, method)
+		if err != nil {
+			return nil, err
+		}
+		actual = val
+	}
+
+	actualJSON, err := json.Marshal(actual)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling actual value: %w", err)
+	}
+	return &Response{OK: true, Actual: actualJSON}, nil
 }
 
 func (a *HTTPAdapter) doHTTPAction(name string, rawArgs []json.RawMessage) (*Response, error) {
@@ -144,63 +177,10 @@ func (a *HTTPAdapter) doHeaderAction(rawArgs []json.RawMessage) (*Response, erro
 	return &Response{OK: true}, nil
 }
 
-func (a *HTTPAdapter) Assert(
-	property string,
-	_ string,
-	expected json.RawMessage,
-) (*Response, error) {
-	if a.last == nil {
-		return nil, errors.New("no request has been made yet")
-	}
-
-	var actual any
-
-	switch {
-	case property == "status":
-		actual = float64(a.last.statusCode)
-
-	case strings.HasPrefix(property, "header."):
-		headerName := strings.TrimPrefix(property, "header.")
-		actual = a.last.headers.Get(headerName)
-
-	case property == "body":
-		actual = a.last.body
-
-	default:
-		// Treat as body field path.
-		if a.last.body == nil {
-			return nil, fmt.Errorf("response body is not JSON, cannot extract path %q", property)
-		}
-		val, err := extractPath(a.last.body, property)
-		if err != nil {
-			return nil, err
-		}
-		actual = val
-	}
-
-	// Normalize both sides through JSON for consistent comparison.
-	actualJSON, err := json.Marshal(actual)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling actual value: %w", err)
-	}
-
-	var actualNorm, expectedNorm any
-	if err := json.Unmarshal(actualJSON, &actualNorm); err != nil {
-		return nil, fmt.Errorf("normalizing actual: %w", err)
-	}
-	if err := json.Unmarshal(expected, &expectedNorm); err != nil {
-		return nil, fmt.Errorf("normalizing expected: %w", err)
-	}
-
-	if reflect.DeepEqual(actualNorm, expectedNorm) {
-		return &Response{OK: true, Actual: actualJSON}, nil
-	}
-
-	return &Response{
-		OK:     false,
-		Actual: actualJSON,
-		Error:  fmt.Sprintf("expected %s, got %s", string(expected), string(actualJSON)),
-	}, nil
+// doCookieAction sets a cookie on the client's jar.
+func (a *HTTPAdapter) doCookieAction(_ []json.RawMessage) (*Response, error) {
+	// Placeholder — cookie support to be implemented.
+	return &Response{OK: true}, nil
 }
 
 func (a *HTTPAdapter) Reset() error {
