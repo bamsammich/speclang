@@ -222,19 +222,21 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.calls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
+	// Find the exec call (first call). The assertion query is a second call.
+	if len(mock.calls) < 1 {
+		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
 
 	// The exec action should contain "resolved_value" from the env var.
-	args := string(mock.calls[0].Args)
-	if !json.Valid(mock.calls[0].Args) {
+	execCall := mock.calls[0]
+	args := string(execCall.Args)
+	if !json.Valid(execCall.Args) {
 		t.Fatalf("invalid JSON in action args: %s", args)
 	}
 	// The process adapter receives exec args as a JSON array.
 	// The input field "file" should have the resolved env value.
 	var execArgs []any
-	if err := json.Unmarshal(mock.calls[0].Args, &execArgs); err != nil {
+	if err := json.Unmarshal(execCall.Args, &execArgs); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
 	found := false
@@ -290,8 +292,9 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.calls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
+	// Find the exec call (first call). The assertion query is a second call.
+	if len(mock.calls) < 1 {
+		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
 
 	// The exec args should start with "parse" from the env-resolved config.
@@ -354,8 +357,9 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	if len(mock.calls) != 1 {
-		t.Fatalf("expected 1 action call, got %d", len(mock.calls))
+	// Find the exec call (first call). The assertion query is a second call.
+	if len(mock.calls) < 1 {
+		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
 
 	var execArgs []any
