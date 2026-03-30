@@ -129,10 +129,10 @@ func (p *parser) expectIdent() (Token, error) {
 func (p *parser) parse() (*Spec, error) {
 	spec := &Spec{}
 
-	// Spec-level "use" is no longer valid — plugins are declared at scope level.
+	// Spec-level "use" is no longer valid in v3.
 	if p.peek().Type == TokenUse {
 		tok := p.peek()
-		return nil, p.errAt(tok, "'use' directive must be inside a scope block, not at spec level")
+		return nil, p.errAt(tok, "'use' directive is removed in v3; adapters are named inline per call")
 	}
 
 	// Parse "spec Name { ... }"
@@ -159,17 +159,10 @@ func (p *parser) parse() (*Spec, error) {
 		return nil, err
 	}
 
-	// Validate: every scope must declare a plugin via 'use'.
-	for _, scope := range spec.Scopes {
-		if scope.Use == "" {
-			return nil, fmt.Errorf("scope %q is missing a 'use <plugin>' directive", scope.Name)
-		}
-	}
-
 	return spec, nil
 }
 
-// specMemberParsers maps keyword tokens to their parse functions.
+// specMemberParser maps keyword tokens to their parse functions.
 // Each returns the parsed value as an any for dispatch by parseSpecMember.
 func (p *parser) specMemberParser(typ TokenType) func() (any, error) {
 	switch typ {
@@ -198,18 +191,9 @@ func wrap[T any](fn func() (T, error)) func() (any, error) {
 func (p *parser) parseSpecMember(spec *Spec) error {
 	tok := p.peek()
 
-	// Handle description as an identifier, not a keyword.
-	if tok.Type == TokenIdent && tok.Value == "description" {
-		p.advance() // consume "description"
-		if _, err := p.expect(TokenColon); err != nil {
-			return err
-		}
-		val, err := p.expect(TokenString)
-		if err != nil {
-			return err
-		}
-		spec.Description = val.Value
-		return nil
+	// Handle identifier-based constructs: description, services, adapter config blocks.
+	if tok.Type == TokenIdent {
+		return p.parseSpecIdentMember(spec, tok)
 	}
 
 	parse := p.specMemberParser(tok.Type)
@@ -227,13 +211,8 @@ func (p *parser) parseSpecMember(spec *Spec) error {
 		spec.Target = v
 	case *Model:
 		spec.Models = append(spec.Models, v)
-	case *Action:
-		// Convert v2 Action to v3 ActionDef
-		ad := &ActionDef{Name: v.Name, Params: v.Params}
-		for _, s := range v.Steps {
-			ad.Body = append(ad.Body, s)
-		}
-		spec.Actions = append(spec.Actions, ad)
+	case *ActionDef:
+		spec.Actions = append(spec.Actions, v)
 	case *Scope:
 		spec.Scopes = append(spec.Scopes, v)
 	case map[string]string:
@@ -243,6 +222,100 @@ func (p *parser) parseSpecMember(spec *Spec) error {
 		spec.Scopes = append(spec.Scopes, v.Scopes...)
 	}
 	return nil
+}
+
+// parseSpecIdentMember handles identifier-based spec members:
+// description: "...", services { ... }, and adapter config blocks (ident { ... }).
+func (p *parser) parseSpecIdentMember(spec *Spec, tok Token) error {
+	if tok.Value == "description" {
+		p.advance() // consume "description"
+		if _, err := p.expect(TokenColon); err != nil {
+			return err
+		}
+		val, err := p.expect(TokenString)
+		if err != nil {
+			return err
+		}
+		spec.Description = val.Value
+		return nil
+	}
+
+	if tok.Value == "services" {
+		p.advance() // consume "services"
+		svcs, err := p.parseSpecServices()
+		if err != nil {
+			return err
+		}
+		spec.Services = append(spec.Services, svcs...)
+		return nil
+	}
+
+	// Any other identifier followed by '{' is an adapter config block.
+	if p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == TokenLBrace {
+		return p.parseAdapterConfigBlock(spec, tok)
+	}
+
+	return p.errAt(tok, fmt.Sprintf("unexpected identifier %q in spec body", tok.Value))
+}
+
+// parseAdapterConfigBlock parses: name { key: expr, ... }
+// Stores in spec.AdapterConfigs[name].
+func (p *parser) parseAdapterConfigBlock(spec *Spec, nameTok Token) error {
+	p.advance() // consume identifier
+	if _, err := p.expect(TokenLBrace); err != nil {
+		return err
+	}
+
+	config := make(map[string]Expr)
+	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
+		key, err := p.expectIdent()
+		if err != nil {
+			return err
+		}
+		if _, err := p.expect(TokenColon); err != nil {
+			return err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return err
+		}
+		config[key.Value] = val
+	}
+
+	if _, err := p.expect(TokenRBrace); err != nil {
+		return err
+	}
+
+	if spec.AdapterConfigs == nil {
+		spec.AdapterConfigs = make(map[string]map[string]Expr)
+	}
+	spec.AdapterConfigs[nameTok.Value] = config
+	return nil
+}
+
+// parseSpecServices parses: { name { ... } ... } at spec level.
+func (p *parser) parseSpecServices() ([]*Service, error) {
+	if _, err := p.expect(TokenLBrace); err != nil {
+		return nil, err
+	}
+
+	var services []*Service
+	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
+		key, err := p.expect(TokenIdent)
+		if err != nil {
+			return nil, err
+		}
+		svc, err := p.parseService(key.Value)
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, svc)
+	}
+
+	if _, err := p.expect(TokenRBrace); err != nil {
+		return nil, err
+	}
+	return services, nil
 }
 
 // parseTarget parses: target { key: value ... }
@@ -470,22 +543,12 @@ func (p *parser) parseScope() (*Scope, error) {
 func (p *parser) parseScopeMember(scope *Scope) error {
 	tok := p.peek()
 	switch tok.Type {
-	case TokenUse:
-		p.advance() // consume "use"
-		name, err := p.expect(TokenIdent)
+	case TokenAction:
+		a, err := p.parseAction()
 		if err != nil {
 			return err
 		}
-		if scope.Use != "" {
-			return p.errAt(tok, fmt.Sprintf("scope %q has multiple 'use' directives", scope.Name))
-		}
-		scope.Use = name.Value
-	case TokenConfig:
-		config, err := p.parseScopeConfig()
-		if err != nil {
-			return err
-		}
-		scope.Config = config
+		scope.Actions = append(scope.Actions, a)
 	case TokenContract:
 		c, err := p.parseContract()
 		if err != nil {
@@ -620,6 +683,10 @@ func (p *parser) parseModel() (*Model, error) {
 			return nil, err
 		}
 		m.Fields = append(m.Fields, field)
+		// Allow optional comma between fields.
+		if p.peek().Type == TokenComma {
+			p.advance()
+		}
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
@@ -760,7 +827,7 @@ func (p *parser) parseEnumType(name Token) (TypeExpr, error) {
 	return TypeExpr{Name: typeEnum, Variants: variants}, nil
 }
 
-// parseContract parses: contract { input { ... } output { ... } }
+// parseContract parses: contract { input { ... } output { ... } action: name }
 func (p *parser) parseContract() (*Contract, error) {
 	p.advance() // consume "contract"
 	if _, err := p.expect(TokenLBrace); err != nil {
@@ -768,7 +835,7 @@ func (p *parser) parseContract() (*Contract, error) {
 	}
 
 	c := &Contract{}
-	for p.peek().Type != TokenRBrace {
+	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
 		tok := p.peek()
 		switch tok.Type {
 		case TokenInput:
@@ -785,10 +852,21 @@ func (p *parser) parseContract() (*Contract, error) {
 				return nil, err
 			}
 			c.Output = fields
+		case TokenAction:
+			// action: name
+			p.advance() // consume "action"
+			if _, err := p.expect(TokenColon); err != nil {
+				return nil, err
+			}
+			name, err := p.expectIdent()
+			if err != nil {
+				return nil, err
+			}
+			c.Action = name.Value
 		default:
 			return nil, p.errAt(
 				tok,
-				fmt.Sprintf("expected 'input' or 'output' in contract, got %s", tok.Type),
+				fmt.Sprintf("expected 'input', 'output', or 'action' in contract, got %s", tok.Type),
 			)
 		}
 	}
@@ -811,6 +889,10 @@ func (p *parser) parseFieldBlock() ([]*Field, error) {
 			return nil, err
 		}
 		fields = append(fields, f)
+		// Allow optional comma between fields.
+		if p.peek().Type == TokenComma {
+			p.advance()
+		}
 	}
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
@@ -819,14 +901,15 @@ func (p *parser) parseFieldBlock() ([]*Field, error) {
 }
 
 // parseAction parses: action name(params) { steps }
-func (p *parser) parseAction() (*Action, error) {
+// Steps can be: let bindings, adapter.method() calls, action() calls, return statements.
+func (p *parser) parseAction() (*ActionDef, error) {
 	p.advance() // consume "action"
 	name, err := p.expect(TokenIdent)
 	if err != nil {
 		return nil, err
 	}
 
-	a := &Action{Name: name.Value}
+	a := &ActionDef{Name: name.Value}
 
 	// Parse parameter list.
 	if _, err := p.expect(TokenLParen); err != nil {
@@ -850,18 +933,119 @@ func (p *parser) parseAction() (*Action, error) {
 	if _, err := p.expect(TokenLBrace); err != nil {
 		return nil, err
 	}
-	for p.peek().Type != TokenRBrace {
-		call, err := p.parseCall()
+	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
+		step, err := p.parseActionStep()
 		if err != nil {
 			return nil, err
 		}
-		a.Steps = append(a.Steps, call)
+		a.Body = append(a.Body, step)
 	}
 	if _, err := p.expect(TokenRBrace); err != nil {
 		return nil, err
 	}
 
 	return a, nil
+}
+
+// parseActionStep parses a single step in an action body:
+// let binding, return statement, adapter.method() call, or local action() call.
+func (p *parser) parseActionStep() (GivenStep, error) {
+	tok := p.peek()
+
+	switch tok.Type {
+	case TokenLet:
+		return p.parseLetBinding()
+	case TokenReturn:
+		return p.parseReturnStmt()
+	default:
+		// Must be a call: adapter.method(args) or action(args)
+		return p.parseCallOrAdapterCall()
+	}
+}
+
+// parseLetBinding parses: let name = expr
+func (p *parser) parseLetBinding() (*LetBinding, error) {
+	p.advance() // consume "let"
+	name, err := p.expectIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenAssign); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &LetBinding{Name: name.Value, Value: val}, nil
+}
+
+// parseReturnStmt parses: return expr
+func (p *parser) parseReturnStmt() (*ReturnStmt, error) {
+	p.advance() // consume "return"
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &ReturnStmt{Value: val}, nil
+}
+
+// parseCallOrAdapterCall parses: adapter.method(args) or action(args)
+// Returns an AdapterCall for namespaced calls, or a Call for local calls.
+func (p *parser) parseCallOrAdapterCall() (GivenStep, error) {
+	name, err := p.expectIdent()
+	if err != nil {
+		return nil, err
+	}
+
+	if p.peek().Type == TokenDot {
+		// Namespaced: adapter.method(args)
+		p.advance() // consume .
+		method, err := p.expect(TokenIdent)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(TokenLParen); err != nil {
+			return nil, err
+		}
+		args, err := p.parseArgList()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(TokenRParen); err != nil {
+			return nil, err
+		}
+		return &AdapterCall{Adapter: name.Value, Method: method.Value, Args: args}, nil
+	}
+
+	// Local call: action(args)
+	if _, err := p.expect(TokenLParen); err != nil {
+		return nil, err
+	}
+	args, err := p.parseArgList()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+	return &Call{Method: name.Value, Args: args}, nil
+}
+
+// parseArgList parses comma-separated expressions until ')'.
+func (p *parser) parseArgList() ([]Expr, error) {
+	var args []Expr
+	for p.peek().Type != TokenRParen && p.peek().Type != TokenEOF {
+		arg, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, arg)
+		if p.peek().Type == TokenComma {
+			p.advance()
+		}
+	}
+	return args, nil
 }
 
 // parseParam parses: name: type
@@ -880,7 +1064,8 @@ func (p *parser) parseParam() (*Param, error) {
 	return &Param{Name: name.Value, Type: typeExpr}, nil
 }
 
-// parseCall parses: namespace.method(args) or method(args)
+// parseCall is kept for backward compatibility with v2 Call AST nodes.
+// Prefer parseCallOrAdapterCall for v3 parsing.
 func (p *parser) parseCall() (*Call, error) {
 	name, err := p.expect(TokenIdent)
 	if err != nil {
@@ -1045,11 +1230,20 @@ func (p *parser) parseGivenBlock() (*Block, error) {
 	return block, nil
 }
 
-// parseGivenStep parses a single step in a given block: either a call or an assignment.
+// parseGivenStep parses a single step in a given/before block:
+// let binding, adapter.method() call, action() call, or field: value assignment.
 func (p *parser) parseGivenStep() (GivenStep, error) {
-	if p.isGivenCall() {
-		return p.parseCall()
+	// Let binding
+	if p.peek().Type == TokenLet {
+		return p.parseLetBinding()
 	}
+
+	// Call: adapter.method(args) or action(args)
+	if p.isGivenCall() {
+		return p.parseCallOrAdapterCall()
+	}
+
+	// Assignment: field: value
 	path, err := p.parseFieldPath()
 	if err != nil {
 		return nil, err
@@ -1126,54 +1320,17 @@ func (p *parser) parseThenBlock() (*Block, error) {
 	return block, nil
 }
 
-// parseAssertion parses a single then-block assertion:
-// path: expected  OR  path@plugin.property: expected
+// parseAssertion parses a single then-block assertion in v3 syntax:
+// expr op expr  (e.g., from.balance == 70, playwright.visible('[sel]') == true)
 func (p *parser) parseAssertion() (*Assertion, error) {
-	path, err := p.parseFieldPath()
+	// Parse the full assertion as an expression — it should be a comparison.
+	expr, err := p.parseExpr()
 	if err != nil {
 		return nil, err
 	}
 
-	a := &Assertion{Target: path}
-
-	// Check for @plugin.property syntax: target@plugin.property: expected
-	if p.peek().Type == TokenAt {
-		p.advance() // consume @
-		plugin, err := p.expectIdent()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(TokenDot); err != nil {
-			return nil, err
-		}
-		property, err := p.expectIdent()
-		if err != nil {
-			return nil, err
-		}
-		a.Plugin = plugin.Value
-		a.Property = property.Value
-	}
-
-	// Accept ':' (sugar for ==) or a comparison operator.
-	op := "=="
-	tok := p.peek()
-	switch tok.Type {
-	case TokenColon:
-		p.advance()
-	case TokenGt, TokenGte, TokenLt, TokenLte, TokenEq, TokenNeq:
-		p.advance()
-		op = tok.Value
-	default:
-		return nil, p.errAt(tok, "expected ':' or comparison operator in assertion")
-	}
-	a.Operator = op
-
-	val, err := p.parseExpr()
-	if err != nil {
-		return nil, err
-	}
-	a.Expected = val
-	return a, nil
+	// The expression must be a binary comparison for a then-block assertion.
+	return &Assertion{Expr: expr}, nil
 }
 
 // parseFieldPath consumes a dotted identifier path like "from.balance" or
@@ -1410,10 +1567,26 @@ func (p *parser) parseAtomDefault(tok Token) (Expr, error) {
 	return nil, p.errAt(tok, fmt.Sprintf("unexpected token %s in expression", tok.Type))
 }
 
-// parseFieldRefExpr parses a dotted identifier path as a FieldRef expression.
+// parseFieldRefExpr parses a dotted identifier path as a FieldRef expression,
+// an adapter.method(args) call if followed by '.ident(',
+// or a local function call if just 'ident('.
 func (p *parser) parseFieldRefExpr() (Expr, error) {
 	first := p.advance() // already confirmed isIdentLike
 	path := first.Value
+
+	// Check for local function call: ident(args)
+	if p.peek().Type == TokenLParen {
+		p.advance() // consume (
+		args, err := p.parseArgList()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(TokenRParen); err != nil {
+			return nil, err
+		}
+		return AdapterCall{Method: path, Args: args}, nil
+	}
+
 	for p.peek().Type == TokenDot {
 		p.advance() // consume .
 		// Accept integer tokens as array index segments (e.g., "output.items.0").
@@ -1426,6 +1599,20 @@ func (p *parser) parseFieldRefExpr() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Check if this is adapter.method( — an adapter call expression
+		if p.peek().Type == TokenLParen {
+			p.advance() // consume (
+			args, err := p.parseArgList()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(TokenRParen); err != nil {
+				return nil, err
+			}
+			return AdapterCall{Adapter: path, Method: next.Value, Args: args}, nil
+		}
+
 		path += "." + next.Value
 	}
 	return FieldRef{Path: path}, nil
