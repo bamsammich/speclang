@@ -16,21 +16,24 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 
 ### Settled Decisions
 
-- **v3 is the current syntax version** — see [docs/plans/2026-03-29-v3-language-design.md](docs/plans/2026-03-29-v3-language-design.md) for the full design and [docs/migration-v3.md](docs/migration-v3.md) for migration from v2. Key changes: `use` removed (adapters named inline), `locators` removed (inline selectors), `:` replaced by `==` in assertions, `@plugin.property` replaced by `adapter.method(args)`, `target` replaced by namespaced adapter config blocks, `let` bindings added, custom actions with typed params and `return`
-- **Calling convention**: `verb(args)` universally — both built-in primitives and user-defined actions
+- **v3 is the current syntax version** — see [docs/plans/2026-03-29-v3-language-design.md](docs/plans/2026-03-29-v3-language-design.md) for the full design and [docs/migration-v3.md](docs/migration-v3.md) for migration from v2
+- **Calling convention**: `adapter.method(args)` for all adapter interactions — both actions and assertions
 - **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout)
-- **Scope-level plugin declaration**: `use <plugin>` appears inside each `scope` block, not at spec level
-- **Namespaced calls**: Plugin methods are called as `plugin.method()` (e.g., `playwright.fill(locator, value)`)
-- **Assertion syntax in `then` blocks**: `locator@plugin.property: expected` (e.g., `error_msg@playwright.visible: true`)
-- **Error pseudo-field**: `error` in `then` blocks asserts against action errors when `error` is NOT a contract output field
+- **Adapter naming**: Adapters are named inline per call (e.g., `http.post(...)`, `playwright.fill(...)`) — no `use` directive
+- **Adapter config**: Namespaced config blocks at spec level (`http { base_url: ... }`, `playwright { headless: true }`)
+- **Assertion syntax in `then` blocks**: `expr operator value` (e.g., `playwright.visible('[data-testid="x"]') == true`, `error == null`). Operators: `==`, `!=`, `>`, `>=`, `<`, `<=`. No `:` for equality.
+- **Error pseudo-field**: `error` in assertions checks action errors when `error` is NOT a contract output field
+- **Variables**: `let name = expr` for immutable bindings — captures action results, scoped to block
+- **Custom actions**: `action name(param: type, ...) { body }` at spec or scope level, with `let`, `return`, typed params
+- **Contract action**: `action: name` in contract binds input generation to a defined action
 - **Three scenario types** (ascending verification strength):
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
-  - `invariant` — universal law, must hold for ALL valid inputs
-- **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapter binaries over IPC
-- **Scope-based grouping**: Contracts, invariants, and scenarios live inside named `scope` blocks with opaque `config` blocks
+  - `invariant` — universal law, must hold for ALL valid inputs; requires contract `action`
+- **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapters
+- **Scope-based grouping**: Contracts, invariants, scenarios, and actions live inside named `scope` blocks
 - **Counterexample shrinking**: Binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively)
-- **Target services**: `services` block in `target` declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups. Container lifecycle: pre-flight cleanup, health checks (HTTP or TCP), signal handling, `--keep-services` flag to leave containers running for debugging
+- **Services**: `services` block at spec level declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups
 
 ### Language Features
 
@@ -38,10 +41,11 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - **Expressions**: all arithmetic/comparison/logical operators, chained comparisons (`0 < x <= y`), division (`/`), modulo (`%`)
 - **Built-in functions**: `len()`, `contains()`, `exists()`, `has_key()`, `all(arr, x => pred)`, `any(arr, x => pred)`
 - **Conditional expressions**: `if cond then a else b`
+- **Variables**: `let name = expr` for immutable bindings in before/given/action bodies
+- **Single-quoted strings**: `'[data-testid="email"]'` for CSS selectors containing double quotes
 - **Include/Import**: `include "path"`, `import openapi("path")`, `import proto("path")`
 - **Dot-path array indexing**: `items.0.name` for array element access
-- **Config args**: `args` accepts `[]T` array form (preferred) or string form (whitespace-split)
-- **Compile-time validation**: type checking, model resolution, given completeness, then field validation
+- **Compile-time validation**: type checking, model resolution, action signature matching, assertion operator validation
 
 ### Anti-Gaming Properties
 
