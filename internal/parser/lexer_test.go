@@ -164,6 +164,18 @@ func TestTokenFileField(t *testing.T) {
 	}
 }
 
+func TestLexLetAndReturn(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex("let x return y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenLet, "let")
+	assertToken(t, tokens, 1, TokenIdent, "x")
+	assertToken(t, tokens, 2, TokenReturn, "return")
+	assertToken(t, tokens, 3, TokenIdent, "y")
+}
+
 // Helpers
 
 func assertToken(t *testing.T, tokens []Token, idx int, typ TokenType, value string) {
