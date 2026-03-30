@@ -44,3 +44,7 @@ type ExistsExpr = spec.ExistsExpr
 type HasKeyExpr = spec.HasKeyExpr
 type RegexLiteral = spec.RegexLiteral
 type IfExpr = spec.IfExpr
+type ActionDef = spec.ActionDef
+type LetBinding = spec.LetBinding
+type ReturnStmt = spec.ReturnStmt
+type AdapterCall = spec.AdapterCall

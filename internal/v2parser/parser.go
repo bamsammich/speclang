@@ -227,7 +227,12 @@ func (p *parser) parseSpecMember(spec *Spec) error {
 	case *Model:
 		spec.Models = append(spec.Models, v)
 	case *Action:
-		spec.Actions = append(spec.Actions, v)
+		// Convert v2 Action to v3 ActionDef
+		ad := &ActionDef{Name: v.Name, Params: v.Params}
+		for _, s := range v.Steps {
+			ad.Body = append(ad.Body, s)
+		}
+		spec.Actions = append(spec.Actions, ad)
 	case *Scope:
 		spec.Scopes = append(spec.Scopes, v)
 	case map[string]string:

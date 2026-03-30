@@ -2,13 +2,15 @@ package spec
 
 // Spec is the top-level AST node for a parsed spec file.
 type Spec struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Target      *Target           `json:"target,omitempty"`
-	Locators    map[string]string `json:"locators,omitempty"`
-	Models      []*Model          `json:"models,omitempty"`
-	Actions     []*Action         `json:"actions,omitempty"`
-	Scopes      []*Scope          `json:"scopes,omitempty"`
+	Name           string                       `json:"name"`
+	Description    string                       `json:"description,omitempty"`
+	AdapterConfigs map[string]map[string]Expr   `json:"adapter_configs,omitempty"` // v3: "http" -> {"base_url": expr}
+	Services       []*Service                   `json:"services,omitempty"`        // v3: moved from Target
+	Locators       map[string]string            `json:"locators,omitempty"`        // v2 compat
+	Target         *Target                      `json:"target,omitempty"`          // v2 compat
+	Models         []*Model                     `json:"models,omitempty"`
+	Actions        []*ActionDef                 `json:"actions,omitempty"`         // v3: was []*Action
+	Scopes         []*Scope                     `json:"scopes,omitempty"`
 }
 
 // Scope is a named grouping that owns a contract, invariants, and scenarios.
@@ -16,10 +18,11 @@ type Spec struct {
 // The Config block is opaque key-value pairs interpreted by the adapter.
 type Scope struct {
 	Name       string          `json:"name"`
-	Use        string          `json:"use"`              // plugin binding (e.g. "http", "playwright")
-	Config     map[string]Expr `json:"config,omitempty"` // opaque key-value pairs, interpreted by adapter
+	Use        string          `json:"use,omitempty"`    // v2 compat, v3 ignores
+	Config     map[string]Expr `json:"config,omitempty"` // v2 compat, v3 ignores
 	Before     *Block          `json:"before,omitempty"`
 	Contract   *Contract       `json:"contract,omitempty"`
+	Actions    []*ActionDef    `json:"actions,omitempty"` // v3: scope-level actions
 	Invariants []*Invariant    `json:"invariants,omitempty"`
 	Scenarios  []*Scenario     `json:"scenarios,omitempty"`
 }
@@ -69,6 +72,7 @@ type TypeExpr struct {
 type Contract struct {
 	Input  []*Field `json:"input,omitempty"`
 	Output []*Field `json:"output,omitempty"`
+	Action string   `json:"action,omitempty"` // v3: name of action to execute
 }
 
 // Action is a named reusable sequence of plugin calls.
@@ -82,6 +86,33 @@ type Action struct {
 type Param struct {
 	Name string   `json:"name"`
 	Type TypeExpr `json:"type"`
+}
+
+// ActionDef is a reusable action with typed parameters and a body of steps.
+type ActionDef struct {
+	Name   string      `json:"name"`
+	Params []*Param    `json:"params,omitempty"`
+	Body   []GivenStep `json:"body,omitempty"` // steps including let bindings, calls, return
+}
+
+// LetBinding binds an expression result to a name. Implements GivenStep.
+type LetBinding struct {
+	Name  string `json:"name"`
+	Value Expr   `json:"value"` // can be an expression or an AdapterCall
+}
+
+// ReturnStmt returns a value from an action body. Implements GivenStep.
+type ReturnStmt struct {
+	Value Expr `json:"value"`
+}
+
+// AdapterCall represents adapter.method(args...) — used in action bodies, before, given.
+// When used as an Expr (e.g., right side of let), it evaluates to the response.
+// When used as a GivenStep, it executes the call.
+type AdapterCall struct {
+	Adapter string `json:"adapter"`     // "http", "playwright", "process"
+	Method  string `json:"method"`      // "post", "fill", "visible"
+	Args    []Expr `json:"args,omitempty"`
 }
 
 // Call is an invocation: plugin.verb(args...) or action(args...)
@@ -109,8 +140,11 @@ type Scenario struct {
 // GivenStep is a step in a given block — either an assignment or an action call.
 type GivenStep interface{ givenStep() }
 
-func (*Assignment) givenStep() {}
-func (*Call) givenStep()       {}
+func (*Assignment) givenStep()  {}
+func (*Call) givenStep()        {}
+func (*LetBinding) givenStep()  {}
+func (*ReturnStmt) givenStep()  {}
+func (*AdapterCall) givenStep() {}
 
 // Block is a braced section containing steps, predicates, or assertions.
 type Block struct {
@@ -264,3 +298,4 @@ func (ExistsExpr) exprNode()    {}
 func (HasKeyExpr) exprNode()    {}
 func (RegexLiteral) exprNode()  {}
 func (IfExpr) exprNode()        {}
+func (AdapterCall) exprNode()   {}

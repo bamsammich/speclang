@@ -29,7 +29,7 @@ func TestRegistry_RegisterAndLookup(t *testing.T) {
 
 	r.Register("http", spec.PluginDef{
 		Adapter: adp,
-		Actions: map[string]spec.ActionDef{
+		Actions: map[string]spec.PluginActionDef{
 			"get": {Params: []spec.Param{{Name: "url", Type: spec.TypeExpr{Name: "string"}}}},
 		},
 	})
