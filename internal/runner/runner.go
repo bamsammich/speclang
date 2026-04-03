@@ -666,11 +666,12 @@ func (sr *scopeRunner) executeGivenInput(sc *parser.Scenario) (map[string]any, e
 	return input, nil
 }
 
-// hasCalls returns true if any given step is a Call (not just assignments).
-// When calls are present, steps execute in order rather than being batched.
+// hasCalls returns true if any given step requires sequential execution
+// (adapter calls or let bindings, not just static assignments).
 func hasCalls(steps []parser.GivenStep) bool {
 	for _, s := range steps {
-		if _, ok := s.(*parser.Call); ok {
+		switch s.(type) {
+		case *parser.Call, *parser.AdapterCall, *parser.LetBinding:
 			return true
 		}
 	}
