@@ -7,7 +7,7 @@ spec GroupAPI {
 
   scope leave_group {
     action leave_group(group_id: string) {
-      let result = http.post("/api/v1/groups/:group_id/leave", { group_id: group_id })
+      let result = http.post("/api/v1/groups/" + group_id + "/leave", { group_id: group_id })
       return result
     }
 

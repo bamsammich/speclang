@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -88,21 +89,58 @@ func synthesizeAction(sc *spec.Scope) *synthesizedAction {
 }
 
 // buildHTTPCallExpr builds: http.post("/path", { field1: field1, field2: field2 })
+// Path segments with :param placeholders are converted to string concatenation:
+//
+//	"/api/groups/:group_id/leave" → "/api/groups/" + group_id + "/leave"
 func buildHTTPCallExpr(adapter, method, path string, params []*spec.Param) string {
-	// GET/DELETE typically don't have a body
+	pathExpr := buildPathExpr(path)
 	needsBody := method == "post" || method == "put" || method == "patch"
 
 	if !needsBody || len(params) == 0 {
-		return fmt.Sprintf("%s.%s(%q)", adapter, method, path)
+		return fmt.Sprintf("%s.%s(%s)", adapter, method, pathExpr)
 	}
 
-	// Build object literal body from params
 	fields := make([]string, len(params))
 	for i, p := range params {
 		fields[i] = p.Name + ": " + p.Name
 	}
 	body := "{ " + strings.Join(fields, ", ") + " }"
-	return fmt.Sprintf("%s.%s(%q, %s)", adapter, method, path, body)
+	return fmt.Sprintf("%s.%s(%s, %s)", adapter, method, pathExpr, body)
+}
+
+// paramSegmentRe matches :param placeholders in URL paths.
+var paramSegmentRe = regexp.MustCompile(`:([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// buildPathExpr converts a URL path with :param placeholders into a string
+// concatenation expression. Plain paths (no placeholders) return a quoted string.
+//
+//	"/api/users"                → `"/api/users"`
+//	"/api/groups/:id"           → `"/api/groups/" + id`
+//	"/api/groups/:id/leave"     → `"/api/groups/" + id + "/leave"`
+func buildPathExpr(path string) string {
+	if !paramSegmentRe.MatchString(path) {
+		return fmt.Sprintf("%q", path)
+	}
+
+	var parts []string
+	remaining := path
+	for {
+		loc := paramSegmentRe.FindStringIndex(remaining)
+		if loc == nil {
+			if remaining != "" {
+				parts = append(parts, fmt.Sprintf("%q", remaining))
+			}
+			break
+		}
+		if loc[0] > 0 {
+			parts = append(parts, fmt.Sprintf("%q", remaining[:loc[0]]))
+		}
+		paramName := paramSegmentRe.FindStringSubmatch(remaining)[1]
+		parts = append(parts, paramName)
+		remaining = remaining[loc[1]:]
+	}
+
+	return strings.Join(parts, " + ")
 }
 
 // buildProcessCallExpr builds: process.exec(field1, field2)
