@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -8,12 +9,12 @@ import (
 func TestProcessAdapter_ExecEcho(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
-	if err := a.Init(map[string]string{"command": "echo"}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"command": "echo"}); err != nil {
 		t.Fatal(err)
 	}
 
 	args := mustMarshal(t, []any{"hello", "world"})
-	resp, err := a.Call("exec", args)
+	resp, err := a.Call(context.Background(),"exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +22,7 @@ func TestProcessAdapter_ExecEcho(t *testing.T) {
 		t.Fatalf("exec failed: %s", resp.Error)
 	}
 
-	exitResp, err := a.Call("exit_code", nil)
+	exitResp, err := a.Call(context.Background(),"exit_code", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestProcessAdapter_ExecEcho(t *testing.T) {
 func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
-	if err := a.Init(map[string]string{
+	if err := a.Init(context.Background(), map[string]string{
 		"command": "echo",
 		"args":    "base arg",
 	}); err != nil {
@@ -41,7 +42,7 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 	}
 
 	args := mustMarshal(t, []any{"extra"})
-	resp, err := a.Call("exec", args)
+	resp, err := a.Call(context.Background(),"exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +50,7 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 		t.Fatal("exec failed")
 	}
 
-	stdoutResp, err := a.Call("stdout", nil)
+	stdoutResp, err := a.Call(context.Background(),"stdout", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,17 +62,17 @@ func TestProcessAdapter_ExecWithBaseArgs(t *testing.T) {
 func TestProcessAdapter_ExitCodeNonZero(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
-	if err := a.Init(map[string]string{"command": "false"}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"command": "false"}); err != nil {
 		t.Fatal(err)
 	}
 
 	args := mustMarshal(t, []any{})
-	_, err := a.Call("exec", args)
+	_, err := a.Call(context.Background(),"exec", args)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exitResp, err := a.Call("exit_code", nil)
+	exitResp, err := a.Call(context.Background(),"exit_code", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,16 +84,16 @@ func TestProcessAdapter_ExitCodeNonZero(t *testing.T) {
 func TestProcessAdapter_JSONStdout(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
-	if err := a.Init(map[string]string{"command": "echo"}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"command": "echo"}); err != nil {
 		t.Fatal(err)
 	}
 
 	args := mustMarshal(t, []any{`{"name":"test","value":42}`})
-	if _, err := a.Call("exec", args); err != nil {
+	if _, err := a.Call(context.Background(),"exec", args); err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := a.Call("stdout.name", nil)
+	resp, err := a.Call(context.Background(),"stdout.name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestProcessAdapter_JSONStdout(t *testing.T) {
 		t.Fatalf("stdout.name: expected %q, got %s", "test", string(resp.Actual))
 	}
 
-	resp, err = a.Call("stdout.value", nil)
+	resp, err = a.Call(context.Background(),"stdout.value", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,17 +113,17 @@ func TestProcessAdapter_JSONStdout(t *testing.T) {
 func TestProcessAdapter_Stderr(t *testing.T) {
 	t.Parallel()
 	a := NewProcessAdapter()
-	if err := a.Init(map[string]string{"command": "sh"}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"command": "sh"}); err != nil {
 		t.Fatal(err)
 	}
 
 	// "sh -c" writes to stderr
 	args := mustMarshal(t, []any{"-c", "echo error-output >&2"})
-	if _, err := a.Call("exec", args); err != nil {
+	if _, err := a.Call(context.Background(),"exec", args); err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := a.Call("stderr", nil)
+	resp, err := a.Call(context.Background(),"stderr", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestProcessAdapter_QueryBeforeExec(t *testing.T) {
 	a := NewProcessAdapter()
 	a.Command = "echo"
 
-	_, err := a.Call("exit_code", nil)
+	_, err := a.Call(context.Background(),"exit_code", nil)
 	if err == nil {
 		t.Fatal("expected error when querying before exec")
 	}
@@ -148,7 +149,7 @@ func TestProcessAdapter_UnknownExecOnly(t *testing.T) {
 	a.Command = "echo"
 
 	// Unknown methods that aren't "exec" and there's no prior exec result
-	_, err := a.Call("unknown", json.RawMessage(`[]`))
+	_, err := a.Call(context.Background(),"unknown", json.RawMessage(`[]`))
 	if err == nil {
 		t.Fatal("expected error for unknown method with no prior exec")
 	}

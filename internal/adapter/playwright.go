@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,7 @@ func NewPlaywrightAdapter() *PlaywrightAdapter {
 	}
 }
 
-func (a *PlaywrightAdapter) Init(config map[string]string) error {
+func (a *PlaywrightAdapter) Init(_ context.Context, config map[string]string) error {
 	url, ok := config["base_url"]
 	if !ok {
 		return errors.New("playwright adapter requires base_url in target config")
@@ -79,7 +80,7 @@ func (a *PlaywrightAdapter) Init(config map[string]string) error {
 	return nil
 }
 
-func (a *PlaywrightAdapter) Call(method string, args json.RawMessage) (*Response, error) {
+func (a *PlaywrightAdapter) Call(_ context.Context, method string, args json.RawMessage) (*Response, error) {
 	var rawArgs []json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &rawArgs); err != nil {
@@ -180,7 +181,7 @@ func (a *PlaywrightAdapter) Reset() error {
 	return nil
 }
 
-func (a *PlaywrightAdapter) Close() error {
+func (a *PlaywrightAdapter) Close(_ context.Context) error {
 	var errs []error
 	for _, p := range a.pages {
 		if err := p.Close(); err != nil {

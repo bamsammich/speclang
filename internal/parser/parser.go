@@ -106,7 +106,7 @@ func isIdentLike(typ TokenType) bool {
 		TokenTarget, TokenLocators,
 		TokenGiven, TokenThen,
 		TokenScope, TokenConfig,
-		TokenBefore,
+		TokenBefore, TokenAfter,
 		TokenLet, TokenReturn:
 		return true
 	default:
@@ -577,6 +577,16 @@ func (p *parser) parseScopeMember(scope *Scope) error {
 			return err
 		}
 		scope.Before = block
+	case TokenAfter:
+		if scope.After != nil {
+			return p.errAt(tok, fmt.Sprintf("scope %q has multiple 'after' blocks", scope.Name))
+		}
+		p.advance() // consume "after"
+		block, err := p.parseGivenBlock()
+		if err != nil {
+			return err
+		}
+		scope.After = block
 	default:
 		return p.errAt(tok, fmt.Sprintf("unexpected token %s in scope body", tok.Type))
 	}

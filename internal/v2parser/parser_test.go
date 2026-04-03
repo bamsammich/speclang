@@ -9,7 +9,7 @@ import (
 func TestParseTransferSpec(t *testing.T) {
 	t.Parallel()
 
-	spec, err := v2parser.ParseFile("../../examples/transfer.spec")
+	spec, err := v2parser.ParseFile("testdata/transfer.spec")
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}

@@ -59,6 +59,10 @@ spec <Name> {
       <adapter>.<method>(<args>)
     }
 
+    after {                          # optional: runs after each scenario/invariant, even on failure
+      <adapter>.<method>(<args>)     # errors are logged but never affect test results
+    }
+
     contract {
       input {
         <field>: <type>
@@ -312,6 +316,24 @@ scope create_group {
 **Failure:** If any `before` step fails, the entire scope is aborted.
 
 **Reset:** Each iteration starts with a clean adapter state — fresh HTTP client, empty headers, new cookie jar. For Playwright, cookies and localStorage are cleared.
+
+## After Block
+
+An `after` block is the teardown counterpart to `before`. It runs after every scenario and invariant iteration, including iterations that fail.
+
+```
+scope create_group {
+  after {
+    http.delete("/api/cleanup")
+  }
+
+  contract { ... }
+}
+```
+
+**Always runs:** `after` executes even when the scenario or invariant iteration fails — safe for cleanup that must happen regardless of outcome.
+
+**Errors are logged, not fatal:** If an `after` step fails, the error is logged but does not affect the pass/fail result. A failing `after` block will never turn a passing test into a failure.
 
 ## Mixed `given` Block Syntax
 

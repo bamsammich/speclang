@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -72,13 +73,13 @@ func TestVerify_ScopeResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 42)
 	r.SetN(10)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -169,12 +170,12 @@ func TestRelationalAssertions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -352,7 +353,7 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(sp, map[string]adapter.Adapter{"test": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -393,13 +394,13 @@ type mockCall struct {
 	Args   json.RawMessage
 }
 
-func (m *mockAdapter) Init(config map[string]string) error { return nil }
-func (m *mockAdapter) Call(method string, args json.RawMessage) (*adapter.Response, error) {
+func (m *mockAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
+func (m *mockAdapter) Call(_ context.Context, method string, args json.RawMessage) (*adapter.Response, error) {
 	m.calls = append(m.calls, mockCall{Method: method, Args: args})
 	return &adapter.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 }
-func (m *mockAdapter) Reset() error { return nil }
-func (m *mockAdapter) Close() error { return nil }
+func (m *mockAdapter) Reset() error              { return nil }
+func (m *mockAdapter) Close(_ context.Context) error { return nil }
 
 
 func TestLocatorResolution(t *testing.T) {
@@ -437,7 +438,7 @@ func TestLocatorResolution(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -497,7 +498,7 @@ func TestLocatorResolution_MissingLocator(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err == nil {
 		t.Fatal("expected error for missing locator, got nil")
 	}
@@ -562,7 +563,7 @@ func TestGivenStepExecution(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(spec, map[string]adapter.Adapter{"playwright": mock}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -708,12 +709,12 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -780,12 +781,12 @@ func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -809,14 +810,14 @@ func TestVerifyTransferSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create adapter: %v", err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatalf("init adapter: %v", err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 42)
 	r.SetN(100)
 
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -850,12 +851,12 @@ type failingAdapter struct {
 	errorMsg string
 }
 
-func (f *failingAdapter) Init(config map[string]string) error { return nil }
-func (f *failingAdapter) Call(method string, args json.RawMessage) (*adapter.Response, error) {
+func (f *failingAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
+func (f *failingAdapter) Call(_ context.Context, _ string, _ json.RawMessage) (*adapter.Response, error) {
 	return &adapter.Response{OK: false, Error: f.errorMsg}, nil
 }
-func (f *failingAdapter) Reset() error { return nil }
-func (f *failingAdapter) Close() error { return nil }
+func (f *failingAdapter) Reset() error              { return nil }
+func (f *failingAdapter) Close(_ context.Context) error { return nil }
 
 func TestErrorPseudoField_GivenScenario_ExpectedError(t *testing.T) {
 	t.Parallel()
@@ -900,7 +901,7 @@ func TestErrorPseudoField_GivenScenario_ExpectedError(t *testing.T) {
 
 	adp := &failingAdapter{errorMsg: "something went wrong"}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -947,7 +948,7 @@ func TestErrorPseudoField_GivenScenario_ExpectedNull(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": mock}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -991,7 +992,7 @@ func TestErrorPseudoField_GivenScenario_UnexpectedError(t *testing.T) {
 
 	adp := &failingAdapter{errorMsg: "oops"}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -1034,7 +1035,7 @@ func TestErrorPseudoField_NoAssertion_ActionFails(t *testing.T) {
 
 	adp := &failingAdapter{errorMsg: "oops"}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err == nil {
 		t.Fatal("expected error when action fails without error assertion, got nil")
 	}
@@ -1075,7 +1076,7 @@ func TestErrorPseudoField_WrongMessage(t *testing.T) {
 
 	adp := &failingAdapter{errorMsg: "different_error"}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -1125,7 +1126,7 @@ func TestErrorPseudoField_ExpectedErrorButNoneOccurred(t *testing.T) {
 
 	mock := &mockAdapter{}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": mock}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -1170,7 +1171,7 @@ func TestErrorPseudoField_WithGivenCalls(t *testing.T) {
 
 	adp := &failingAdapter{errorMsg: "click failed"}
 	r := runner.New(spec, map[string]adapter.Adapter{"test": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -1230,12 +1231,12 @@ func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adp.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := adp.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
-	res, err := r.Verify()
+	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}

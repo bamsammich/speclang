@@ -1,22 +1,24 @@
 # Error case: service() references a nonexistent service name.
 spec BadRef {
-  target {
+  http {
     base_url: service(nonexistent)
   }
 
   scope test {
-    use http
-    config {
-      path: "/"
-      method: "GET"
+    action run() {
+      let result = http.get("/")
+      return result
     }
+
     contract {
       input {}
       output { status: any }
+      action: run
     }
+
     scenario fails {
       given {}
-      then { status: 200 }
+      then { status == 200 }
     }
   }
 }

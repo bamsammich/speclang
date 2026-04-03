@@ -1,8 +1,10 @@
 package runner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -48,6 +50,7 @@ func (r *Runner) SetN(n int) {
 
 // scopeRunner holds per-scope state for running scenarios and invariants.
 type scopeRunner struct {
+	ctx             context.Context
 	runner          *Runner
 	adapter         adapter.Adapter // resolved from scope.Use (v2 only, nil in v3)
 	generator       *generator.Generator
@@ -68,11 +71,11 @@ func (sr *scopeRunner) invariants() []*parser.Invariant {
 }
 
 // Verify runs all scopes' scenarios and invariants, returning results.
-func (r *Runner) Verify() (*Result, error) {
+func (r *Runner) Verify(ctx context.Context) (*Result, error) {
 	res := &Result{Spec: r.spec.Name}
 
 	for _, scope := range r.spec.Scopes {
-		sr, err := r.newScopeRunner(scope)
+		sr, err := r.newScopeRunner(ctx, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -84,10 +87,11 @@ func (r *Runner) Verify() (*Result, error) {
 	return res, nil
 }
 
-func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
+func (r *Runner) newScopeRunner(ctx context.Context, scope *parser.Scope) (*scopeRunner, error) {
 	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
 
 	sr := &scopeRunner{
+		ctx:       ctx,
 		runner:    r,
 		generator: gen,
 		scopeDef:  scope,
@@ -212,7 +216,7 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, err
 	}
 
-	resp, err := sr.adapter.Call(actionName, args)
+	resp, err := sr.adapter.Call(sr.ctx, actionName, args)
 	if err != nil {
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
@@ -309,7 +313,7 @@ func (sr *scopeRunner) executeActionBody(action *parser.ActionDef, ctx map[strin
 			if err != nil {
 				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Namespace, s.Method, err)
 			}
-			resp, err := adp.Call(s.Method, args)
+			resp, err := adp.Call(sr.ctx, s.Method, args)
 			if err != nil {
 				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Namespace, s.Method, err)
 			}
@@ -400,7 +404,7 @@ func (sr *scopeRunner) executeAdapterCallVal(call parser.AdapterCall, ctx map[st
 		return nil, fmt.Errorf("marshaling args: %w", err)
 	}
 
-	return adp.Call(call.Method, args)
+	return adp.Call(sr.ctx, call.Method, args)
 }
 
 // executeAdapterCall executes an AdapterCall step, resolving the adapter by name.
@@ -420,7 +424,7 @@ func (sr *scopeRunner) executeAdapterCall(call *parser.AdapterCall, ctx map[stri
 		return nil, fmt.Errorf("marshaling args: %w", err)
 	}
 
-	return adp.Call(call.Method, args)
+	return adp.Call(sr.ctx, call.Method, args)
 }
 
 // resolveAdapterForCall resolves an adapter by namespace. In v2 mode (single
@@ -535,6 +539,17 @@ func (sr *scopeRunner) executeBefore() (map[string]any, error) {
 	return sr.executeGivenSteps(sr.scopeDef.Before.Steps)
 }
 
+// executeAfter runs the scope's after block steps. Errors are logged to stderr
+// but never propagated — cleanup must not affect test results.
+func (sr *scopeRunner) executeAfter() {
+	if sr.scopeDef.After == nil {
+		return
+	}
+	if _, err := sr.executeGivenSteps(sr.scopeDef.After.Steps); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: after block in scope %q: %v\n", sr.scope, err)
+	}
+}
+
 // resetAdapters resets the adapter state. In v2 mode (single adapter), resets
 // that adapter. In v3 mode, resets all adapters in the runner.
 func (sr *scopeRunner) resetAdapters() error {
@@ -553,6 +568,7 @@ func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error
 	if _, err := sr.executeBefore(); err != nil {
 		return CheckResult{}, fmt.Errorf("before block: %w", err)
 	}
+	defer sr.executeAfter()
 
 	input, err := sr.executeGivenInput(sc)
 	if err != nil {
@@ -637,7 +653,7 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			if err != nil {
 				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
 			}
-			resp, err := adp.Call(s.Method, args)
+			resp, err := adp.Call(sr.ctx, s.Method, args)
 			if err != nil {
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
 			}
@@ -757,6 +773,7 @@ func (sr *scopeRunner) runWhenIteration(
 	if _, err := sr.executeBefore(); err != nil {
 		return nil, fmt.Errorf("before block: %w", err)
 	}
+	defer sr.executeAfter()
 
 	input, err := sr.generator.GenerateMatching(predicate)
 	if err != nil {
@@ -807,7 +824,7 @@ func hasPluginAssertions(assertions []*parser.Assertion) bool {
 
 // newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
 func (sr *scopeRunner) newPageWithNavigation() error {
-	resp, err := sr.adapter.Call("new_page", nil)
+	resp, err := sr.adapter.Call(sr.ctx, "new_page", nil)
 	if err != nil {
 		return fmt.Errorf("creating new page: %w", err)
 	}
@@ -821,7 +838,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 		if err != nil {
 			return fmt.Errorf("marshaling goto args: %w", err)
 		}
-		resp, err := sr.adapter.Call("goto", args)
+		resp, err := sr.adapter.Call(sr.ctx, "goto", args)
 		if err != nil {
 			return fmt.Errorf("navigating to %q: %w", url, err)
 		}
@@ -834,7 +851,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 
 // closePage closes the current page via the adapter.
 func (sr *scopeRunner) closePage() error {
-	resp, err := sr.adapter.Call("close_page", nil)
+	resp, err := sr.adapter.Call(sr.ctx, "close_page", nil)
 	if err != nil {
 		return err
 	}
@@ -937,13 +954,14 @@ func (sr *scopeRunner) checkExprAssertion(
 		ctx["error"] = nil
 	}
 
+	exprStr := spec.FormatExpr(a.Expr)
 	val, ok := generator.Eval(a.Expr, ctx)
 	if !ok {
 		return &Failure{
 			Name:        name,
 			Scope:       sr.scope,
 			Input:       input,
-			Description: "then assertion expression could not be evaluated",
+			Description: fmt.Sprintf("then assertion could not be evaluated: %s", exprStr),
 		}, nil
 	}
 	b, isBool := val.(bool)
@@ -954,7 +972,7 @@ func (sr *scopeRunner) checkExprAssertion(
 			Input:       input,
 			Expected:    true,
 			Actual:      val,
-			Description: fmt.Sprintf("then assertion evaluated to %v", val),
+			Description: fmt.Sprintf("then assertion failed: %s", exprStr),
 		}, nil
 	}
 	return nil, nil
@@ -991,7 +1009,7 @@ func (sr *scopeRunner) checkSingleAssertion(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := sr.adapter.Call(property, callArgs)
+	resp, err := sr.adapter.Call(sr.ctx, property, callArgs)
 	if err != nil {
 		return nil, fmt.Errorf("querying %q: %w", a.Target, err)
 	}
@@ -1206,14 +1224,17 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 
 		input, err := sr.generator.GenerateInput()
 		if err != nil {
+			sr.executeAfter()
 			return CheckResult{}, err
 		}
 
 		output, err := sr.executeInput(input)
 		if err != nil {
+			sr.executeAfter()
 			return CheckResult{}, err
 		}
 		if sr.lastActionError != "" {
+			sr.executeAfter()
 			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
 
@@ -1222,16 +1243,19 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 		ctx := buildInvariantContext(input, output)
 
 		if !evalGuard(inv.When, ctx) {
+			sr.executeAfter()
 			continue
 		}
 
 		if f := checkInvariantAssertions(inv.Name, sr.scope, input, inv.Assertions, ctx); f != nil {
+			sr.executeAfter()
 			f = sr.shrinkInvariantFailure(f, inv)
 			check.Passed = false
 			check.FailedAt = i + 1
 			check.Failure = f
 			return check, nil
 		}
+		sr.executeAfter()
 	}
 
 	return check, nil
@@ -1257,6 +1281,7 @@ func (sr *scopeRunner) shrinkFailure(f *Failure, then *parser.Block) *Failure {
 			if _, err := sr.executeBefore(); err != nil {
 				return false
 			}
+			defer sr.executeAfter()
 			if _, err := sr.executeInput(candidate); err != nil {
 				return false
 			}
@@ -1294,6 +1319,7 @@ func (sr *scopeRunner) shrinkInvariantFailure(f *Failure, inv *parser.Invariant)
 			if _, err := sr.executeBefore(); err != nil {
 				return false
 			}
+			defer sr.executeAfter()
 			output, err := sr.executeInput(candidate)
 			if err != nil || sr.lastActionError != "" {
 				return false
@@ -1338,13 +1364,14 @@ func checkInvariantAssertions(
 	ctx map[string]any,
 ) *Failure {
 	for _, a := range assertions {
+		exprStr := spec.FormatExpr(a.Expr)
 		val, ok := generator.Eval(a.Expr, ctx)
 		if !ok {
 			return &Failure{
 				Name:        name,
 				Scope:       scope,
 				Input:       input,
-				Description: "invariant expression could not be evaluated",
+				Description: fmt.Sprintf("invariant could not be evaluated: %s", exprStr),
 			}
 		}
 		b, isBool := val.(bool)
@@ -1355,7 +1382,7 @@ func checkInvariantAssertions(
 				Input:       input,
 				Expected:    true,
 				Actual:      val,
-				Description: fmt.Sprintf("invariant assertion evaluated to %v", val),
+				Description: fmt.Sprintf("invariant failed: %s", exprStr),
 			}
 		}
 	}

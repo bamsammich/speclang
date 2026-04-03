@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -67,7 +68,7 @@ func newTestAdapter(t *testing.T) (*HTTPAdapter, *httptest.Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 	return a, srv
@@ -85,7 +86,7 @@ func mustMarshal(t *testing.T, v any) json.RawMessage {
 // assertQuery calls Call with a query method and asserts the actual value matches expected.
 func assertQuery(t *testing.T, a *HTTPAdapter, method string, expected string) {
 	t.Helper()
-	resp, err := a.Call(method, nil)
+	resp, err := a.Call(context.Background(), method, nil)
 	if err != nil {
 		t.Fatalf("query %q: %v", method, err)
 	}
@@ -117,7 +118,7 @@ func doTransfer(t *testing.T, a *HTTPAdapter, fromBalance, toBalance, amount int
 			"amount": amount,
 		},
 	})
-	if _, err := a.Call("post", args); err != nil {
+	if _, err := a.Call(context.Background(), "post", args); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -337,7 +338,7 @@ func TestCall_BeforeRequest(t *testing.T) {
 	}
 	a.BaseURL = "http://unused"
 
-	_, err = a.Call("status", nil)
+	_, err = a.Call(context.Background(), "status", nil)
 	if err == nil {
 		t.Fatal("expected error when querying before any request")
 	}
@@ -360,17 +361,17 @@ func TestAction_Header(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	headerArgs := mustMarshal(t, []any{"Authorization", "Bearer token123"})
-	if _, err := a.Call("header", headerArgs); err != nil {
+	if _, err := a.Call(context.Background(), "header", headerArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	getArgs := mustMarshal(t, []any{"/"})
-	if _, err := a.Call("get", getArgs); err != nil {
+	if _, err := a.Call(context.Background(), "get", getArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -390,7 +391,7 @@ func TestCall_UnknownMethod(t *testing.T) {
 	// "patch" is now a valid HTTP method, so test a truly unknown method.
 	// But first we need a request to have been made for non-action methods.
 	// For an unknown dot-path with no prior request, we get "no request has been made yet"
-	_, err = a.Call("nonexistent.field", nil)
+	_, err = a.Call(context.Background(), "nonexistent.field", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown method with no prior request")
 	}
@@ -413,7 +414,7 @@ func TestCall_ValueMismatch(t *testing.T) {
 	doTransfer(t, a, 100, 50, 30)
 
 	// Call returns the actual value; comparison is the runner's job now.
-	resp, err := a.Call("from.balance", nil)
+	resp, err := a.Call(context.Background(), "from.balance", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,13 +496,13 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Step 1: POST to create a resource
 	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "widget"}})
-	resp, err := a.Call("post", postArgs)
+	resp, err := a.Call(context.Background(), "post", postArgs)
 	if err != nil {
 		t.Fatalf("POST failed: %v", err)
 	}
@@ -511,7 +512,7 @@ func TestMultiStep_CreateThenVerify(t *testing.T) {
 
 	// Step 2: GET to verify the resource exists
 	getArgs := mustMarshal(t, []any{"/api/resources/1"})
-	resp, err = a.Call("get", getArgs)
+	resp, err = a.Call(context.Background(), "get", getArgs)
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
@@ -533,26 +534,26 @@ func TestMultiStep_HeaderPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set a header
 	headerArgs := mustMarshal(t, []any{"Authorization", "Bearer my-token"})
-	if _, err := a.Call("header", headerArgs); err != nil {
+	if _, err := a.Call(context.Background(), "header", headerArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// First request: POST — header should be present
 	postArgs := mustMarshal(t, []any{"/api/resources", map[string]any{"name": "test"}})
-	if _, err := a.Call("post", postArgs); err != nil {
+	if _, err := a.Call(context.Background(), "post", postArgs); err != nil {
 		t.Fatal(err)
 	}
 	assertQuery(t, a, "auth", `"Bearer my-token"`)
 
 	// Second request: GET — header should still be present
 	getArgs := mustMarshal(t, []any{"/api/headers"})
-	if _, err := a.Call("get", getArgs); err != nil {
+	if _, err := a.Call(context.Background(), "get", getArgs); err != nil {
 		t.Fatal(err)
 	}
 	assertQuery(t, a, "auth", `"Bearer my-token"`)
@@ -567,13 +568,13 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Step 1: POST /api/login — server sets a session cookie
 	loginArgs := mustMarshal(t, []any{"/api/login", map[string]any{}})
-	resp, err := a.Call("post", loginArgs)
+	resp, err := a.Call(context.Background(), "post", loginArgs)
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
@@ -583,7 +584,7 @@ func TestMultiStep_CookiePersistence(t *testing.T) {
 
 	// Step 2: GET /api/me — cookie should be sent automatically
 	meArgs := mustMarshal(t, []any{"/api/me"})
-	resp, err = a.Call("get", meArgs)
+	resp, err = a.Call(context.Background(), "get", meArgs)
 	if err != nil {
 		t.Fatalf("me failed: %v", err)
 	}
@@ -603,13 +604,13 @@ func TestMultiStep_ErrorInMiddle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Init(map[string]string{"base_url": srv.URL}); err != nil {
+	if err := a.Init(context.Background(), map[string]string{"base_url": srv.URL}); err != nil {
 		t.Fatal(err)
 	}
 
 	// GET a resource that doesn't exist yet — should get 404
 	getArgs := mustMarshal(t, []any{"/api/resources/1"})
-	resp, err := a.Call("get", getArgs)
+	resp, err := a.Call(context.Background(), "get", getArgs)
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}

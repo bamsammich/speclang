@@ -4,15 +4,15 @@
 spec ProcessAdapterTest {
   description: "Verifies all process adapter actions and assertion properties"
 
-  target {
+  process {
     command: env(ECHO_TOOL_BIN, "./echo_tool")
   }
 
   # exec with JSON stdout — verify exit_code and dot-path traversal
   scope process_json_stdout {
-    use process
-    config {
-      args: "greet"
+    action run(name: string) {
+      let result = process.exec("greet", name)
+      return result
     }
 
     contract {
@@ -24,6 +24,7 @@ spec ProcessAdapterTest {
         greeting: string
         name: string
       }
+      action: run
     }
 
     scenario greet_alice {
@@ -31,18 +32,18 @@ spec ProcessAdapterTest {
         name: "alice"
       }
       then {
-        exit_code: 0
-        greeting: "hello alice"
-        name: "alice"
+        exit_code == 0
+        greeting == "hello alice"
+        name == "alice"
       }
     }
   }
 
   # exec with non-zero exit code
   scope process_exit_code {
-    use process
-    config {
-      args: "exit"
+    action run(code: string) {
+      let result = process.exec("exit", code)
+      return result
     }
 
     contract {
@@ -52,6 +53,7 @@ spec ProcessAdapterTest {
       output {
         exit_code: int
       }
+      action: run
     }
 
     scenario exit_with_code {
@@ -59,16 +61,16 @@ spec ProcessAdapterTest {
         code: "3"
       }
       then {
-        exit_code: 3
+        exit_code == 3
       }
     }
   }
 
   # exec with stderr output
   scope process_stderr {
-    use process
-    config {
-      args: "stderr"
+    action run(message: string) {
+      let result = process.exec("stderr", message)
+      return result
     }
 
     contract {
@@ -79,6 +81,7 @@ spec ProcessAdapterTest {
         exit_code: int
         stderr: string
       }
+      action: run
     }
 
     scenario stderr_output {
@@ -86,17 +89,17 @@ spec ProcessAdapterTest {
         message: "something went wrong"
       }
       then {
-        exit_code: 1
-        stderr: "something went wrong"
+        exit_code == 1
+        stderr == "something went wrong"
       }
     }
   }
 
   # exec with raw JSON passthrough
   scope process_raw_json {
-    use process
-    config {
-      args: "json"
+    action run(payload: string) {
+      let result = process.exec("json", payload)
+      return result
     }
 
     contract {
@@ -107,6 +110,7 @@ spec ProcessAdapterTest {
         exit_code: int
         key: string
       }
+      action: run
     }
 
     scenario json_passthrough {
@@ -114,8 +118,8 @@ spec ProcessAdapterTest {
         payload: "{\"key\":\"value\"}"
       }
       then {
-        exit_code: 0
-        key: "value"
+        exit_code == 0
+        key == "value"
       }
     }
   }

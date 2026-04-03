@@ -1,8 +1,8 @@
 # Verifies the parser and generator handle extended types (float, bytes, array, map).
 scope parse_types {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -13,6 +13,7 @@ scope parse_types {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   # The types spec should parse successfully.
@@ -21,17 +22,17 @@ scope parse_types {
       file: "testdata/self/types.spec"
     }
     then {
-      exit_code: 0
-      name: "TypesTest"
+      exit_code == 0
+      name == "TypesTest"
     }
   }
 }
 
 # Verifies the generator produces valid outputs for extended types.
 scope generate_types {
-  use process
-  config {
-    args: "generate testdata/self/types.spec --scope typed_inputs --seed"
+  action run(seed: int) {
+    let result = process.exec("generate", "testdata/self/types.spec", "--scope", "typed_inputs", "--seed", seed)
+    return result
   }
 
   contract {
@@ -46,6 +47,7 @@ scope generate_types {
       metadata: any
       items: any
     }
+    action: run
   }
 
   # Generation should succeed across seeds.

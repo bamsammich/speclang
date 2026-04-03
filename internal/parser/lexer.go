@@ -58,6 +58,7 @@ const (
 	TokenElse
 	TokenService
 	TokenBefore
+	TokenAfter
 	TokenLet
 	TokenReturn
 
@@ -127,6 +128,7 @@ var tokenNames = map[TokenType]string{
 	TokenElse:      "Else",
 	TokenService:   "Service",
 	TokenBefore:    "Before",
+	TokenAfter:     "After",
 	TokenLet:       "Let",
 	TokenReturn:    "Return",
 	TokenLBrace:    "LBrace",
@@ -192,6 +194,7 @@ var keywords = map[string]TokenType{
 	"else":      TokenElse,
 	"service":   TokenService,
 	"before":    TokenBefore,
+	"after":     TokenAfter,
 	"let":       TokenLet,
 	"return":    TokenReturn,
 	"true":      TokenBool,

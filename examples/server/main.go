@@ -29,6 +29,11 @@ type TransferResponse struct {
 var mu sync.Mutex
 
 func main() {
+	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ok")
+	})
+
 	http.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
 		var req TransferRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

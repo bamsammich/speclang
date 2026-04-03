@@ -459,6 +459,7 @@ scope transfer {
   action transfer(from: Account, to: Account, amount: int) { ... }
 
   before { ... }
+  after { ... }
   contract { ... }
   invariant <name> { ... }
   scenario <name> { ... }
@@ -484,6 +485,30 @@ scope orders {
 **Failure:** If any `before` step fails, the entire scope is aborted.
 
 **Reset:** Each iteration starts with a clean adapter state -- fresh HTTP client, empty headers, new cookie jar. For Playwright, cookies and localStorage are cleared.
+
+### After Block
+
+An `after` block is the teardown counterpart to `before`. It runs after every scenario and invariant iteration, including iterations that fail.
+
+```
+scope orders {
+  before {
+    let session = login("admin", "test")
+  }
+
+  after {
+    http.delete("/api/session")
+  }
+
+  contract { ... }
+}
+```
+
+**Always runs:** `after` executes even when the scenario or invariant iteration fails. This makes it safe for cleanup that must happen regardless of outcome.
+
+**Errors are logged, not fatal:** If an `after` step fails, the error is logged but does not affect the pass/fail result of the scenario or invariant. A failing `after` block will never turn a passing test into a failure.
+
+**Reset:** Like `before`, `after` runs within the iteration's adapter state before that state is discarded.
 
 ### Contract
 

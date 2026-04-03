@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -24,9 +25,9 @@ func newRecordingAdapter() *recordingAdapter {
 	}
 }
 
-func (a *recordingAdapter) Init(map[string]string) error { return nil }
+func (a *recordingAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
 
-func (a *recordingAdapter) Call(method string, args json.RawMessage) (*spec.Response, error) {
+func (a *recordingAdapter) Call(_ context.Context, method string, args json.RawMessage) (*spec.Response, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.log = append(a.log, "action:"+method)
@@ -46,7 +47,7 @@ func (a *recordingAdapter) Reset() error {
 	return nil
 }
 
-func (a *recordingAdapter) Close() error { return nil }
+func (a *recordingAdapter) Close(_ context.Context) error { return nil }
 
 func (a *recordingAdapter) calls() []string {
 	a.mu.Lock()
@@ -127,7 +128,7 @@ func TestBeforeStepsExecuteBeforeGiven(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestBeforeResetBetweenScenarios(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -216,7 +217,7 @@ func TestBeforeFailureReturnsError(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err == nil {
 		t.Fatal("expected verify to return an error when before block fails, but got nil")
 	}
@@ -264,7 +265,7 @@ func TestBeforeBodyRefResolution(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -280,11 +281,11 @@ type bodyRefAdapter struct {
 	lastHeaderValue string
 }
 
-func (a *bodyRefAdapter) Init(map[string]string) error { return nil }
-func (a *bodyRefAdapter) Reset() error                 { return nil }
-func (a *bodyRefAdapter) Close() error                 { return nil }
+func (a *bodyRefAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
+func (a *bodyRefAdapter) Reset() error                                      { return nil }
+func (a *bodyRefAdapter) Close(_ context.Context) error                     { return nil }
 
-func (a *bodyRefAdapter) Call(method string, args json.RawMessage) (*spec.Response, error) {
+func (a *bodyRefAdapter) Call(_ context.Context, method string, args json.RawMessage) (*spec.Response, error) {
 	switch method {
 	case "post":
 		return &spec.Response{

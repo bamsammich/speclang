@@ -1,7 +1,7 @@
 spec LoginUI {
     description: "Login page UI verification"
 
-    target {
+    playwright {
         base_url: env(APP_URL, "http://localhost:3000")
     }
 
@@ -14,10 +14,12 @@ spec LoginUI {
     }
 
     scope login {
-        use playwright
-
-        config {
-            url: "/login"
+        action run(user: string, pass: string) {
+            playwright.fill(username, user)
+            playwright.fill(password, pass)
+            playwright.click(submit)
+            let result = playwright.snapshot()
+            return result
         }
 
         contract {
@@ -28,19 +30,17 @@ spec LoginUI {
             output {
                 ok: bool
             }
+            action: run
         }
 
         scenario successful_login {
             given {
-                playwright.fill(username, "alice")
-                playwright.fill(password, "secret")
                 user: "alice"
                 pass: "secret"
-                playwright.click(submit)
             }
             then {
-                welcome@playwright.visible: true
-                welcome@playwright.text: "Welcome, alice"
+                playwright.visible(welcome) == true
+                playwright.text(welcome) == "Welcome, alice"
             }
         }
     }

@@ -15,6 +15,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/migrate"
 	"github.com/bamsammich/speclang/v3/internal/generator"
 	"github.com/bamsammich/speclang/v3/internal/infra"
 	"github.com/bamsammich/speclang/v3/internal/openapi"
@@ -39,6 +40,7 @@ func main() {
 			parseCmd(),
 			generateCmd(),
 			verifyCmd(),
+			migrateCmd(),
 			installCmd(),
 		},
 		CommandNotFound: func(_ context.Context, _ *cli.Command, name string) {
@@ -143,7 +145,7 @@ func verifyCmd() *cli.Command {
 				Usage: "keep containers running after verification",
 			},
 		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			specFile := cmd.Args().First()
 			if specFile == "" {
 				return cli.Exit(
@@ -158,7 +160,7 @@ func verifyCmd() *cli.Command {
 				jsonOutput:   cmd.Bool("json"),
 				keepServices: cmd.Bool("keep-services"),
 			}
-			code := runVerify(opts)
+			code := runVerify(ctx, opts)
 			if code != 0 {
 				return cli.Exit("", code)
 			}
@@ -185,6 +187,59 @@ func installCmd() *cli.Command {
 			return nil
 		},
 	}
+}
+
+func migrateCmd() *cli.Command {
+	return &cli.Command{
+		Name:            "migrate",
+		Usage:           "convert a v2 spec to v3 syntax",
+		ArgsUsage:       "<spec-file> [spec-file...]",
+		HideHelpCommand: true,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "write",
+				Aliases: []string{"w"},
+				Usage:   "write result back to source file(s)",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			if cmd.NArg() == 0 {
+				return cli.Exit("usage: specrun migrate <spec-file> [spec-file...]", 1)
+			}
+			write := cmd.Bool("write")
+			code := 0
+			for i := range cmd.NArg() {
+				specFile := cmd.Args().Get(i)
+				if c := runMigrate(specFile, write); c != 0 {
+					code = c
+				}
+			}
+			if code != 0 {
+				return cli.Exit("", code)
+			}
+			return nil
+		},
+	}
+}
+
+func runMigrate(specFile string, write bool) int {
+	output, err := migrate.MigrateFile(specFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "migrate error: %v\n", err)
+		return 1
+	}
+
+	if write {
+		if err := os.WriteFile(specFile, []byte(output), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "write error: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "migrated: %s\n", specFile)
+		return 0
+	}
+
+	fmt.Print(output)
+	return 0
 }
 
 func validateSpec(s *spec.Spec) int {
@@ -252,7 +307,7 @@ type verifyOpts struct {
 	keepServices bool
 }
 
-func runVerify(opts *verifyOpts) int {
+func runVerify(ctx context.Context, opts *verifyOpts) int {
 	s, err := specrun.ParseFile(opts.specFile, defaultImports())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
@@ -262,9 +317,6 @@ func runVerify(opts *verifyOpts) int {
 	if code := validateSpec(s); code != 0 {
 		return code
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	runningServices, cleanup, err := startServices(ctx, s, opts)
 	if err != nil {
@@ -277,12 +329,12 @@ func runVerify(opts *verifyOpts) int {
 
 	config := resolveTargetConfig(s.Target, runningServices)
 
-	adapters, err := createAdapters(s, config, runningServices)
+	adapters, err := createAdapters(ctx, s, config, runningServices)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "adapter init error: %v\n", err)
 		return 1
 	}
-	defer closeAdapters(adapters)
+	defer closeAdapters(ctx, adapters)
 
 	r := runner.New(s, adapters, opts.seed)
 	r.SetN(opts.iterations)
@@ -292,11 +344,11 @@ func runVerify(opts *verifyOpts) int {
 		colorDim.Printf(" (seed=%d, iterations=%d)\n\n", opts.seed, opts.iterations)
 	}
 
-	return runAndReport(r, opts.jsonOutput)
+	return runAndReport(ctx, r, opts.jsonOutput)
 }
 
-func runAndReport(r *runner.Runner, jsonOutput bool) int {
-	res, err := r.Verify()
+func runAndReport(ctx context.Context, r *runner.Runner, jsonOutput bool) int {
+	res, err := r.Verify(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "verification error: %v\n", err)
 		return 1
@@ -500,6 +552,7 @@ func collectPlugins(s *spec.Spec) []string {
 }
 
 func createAdapters(
+	ctx context.Context,
 	s *spec.Spec,
 	targetConfig map[string]string,
 	services []infra.RunningService,
@@ -523,9 +576,9 @@ func createAdapters(
 			}
 		}
 
-		adp, err := createSingleAdapter(name, adapterConfig)
+		adp, err := createSingleAdapter(ctx, name, adapterConfig)
 		if err != nil {
-			closeAdapters(adapters)
+			closeAdapters(ctx, adapters)
 			return nil, fmt.Errorf("initializing %q adapter: %w", name, err)
 		}
 		adapters[name] = adp
@@ -534,6 +587,7 @@ func createAdapters(
 }
 
 func createSingleAdapter(
+	ctx context.Context,
 	pluginName string,
 	targetConfig map[string]string,
 ) (adapter.Adapter, error) {
@@ -543,19 +597,19 @@ func createSingleAdapter(
 		if err != nil {
 			return nil, fmt.Errorf("creating http adapter: %w", err)
 		}
-		if err := adp.Init(targetConfig); err != nil {
+		if err := adp.Init(ctx, targetConfig); err != nil {
 			return nil, err
 		}
 		return adp, nil
 	case "process":
 		adp := adapter.NewProcessAdapter()
-		if err := adp.Init(targetConfig); err != nil {
+		if err := adp.Init(ctx, targetConfig); err != nil {
 			return nil, err
 		}
 		return adp, nil
 	case "playwright":
 		adp := adapter.NewPlaywrightAdapter()
-		if err := adp.Init(targetConfig); err != nil {
+		if err := adp.Init(ctx, targetConfig); err != nil {
 			return nil, err
 		}
 		return adp, nil
@@ -564,9 +618,9 @@ func createSingleAdapter(
 	}
 }
 
-func closeAdapters(adapters map[string]adapter.Adapter) {
+func closeAdapters(ctx context.Context, adapters map[string]adapter.Adapter) {
 	for _, adp := range adapters {
-		adp.Close() //nolint:errcheck // best-effort cleanup at program exit
+		adp.Close(ctx) //nolint:errcheck // best-effort cleanup at program exit
 	}
 }
 

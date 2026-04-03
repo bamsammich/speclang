@@ -1,8 +1,8 @@
 # Verifies the generator produces constraint-satisfying outputs across seeds.
 scope generate {
-  use process
-  config {
-    args: "generate examples/transfer.spec --scope transfer --seed"
+  action run(seed: int) {
+    let result = process.exec("generate", "examples/transfer.spec", "--scope", "transfer", "--seed", seed)
+    return result
   }
 
   contract {
@@ -15,6 +15,7 @@ scope generate {
       from: any
       to: any
     }
+    action: run
   }
 
   invariant produces_output {

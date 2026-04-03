@@ -9,6 +9,7 @@ spec AccountAPI {
     app {
       build: "./server"
       port: 8080
+      health: "/healthz"
     }
   }
 

@@ -41,7 +41,8 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - **Expressions**: all arithmetic/comparison/logical operators, chained comparisons (`0 < x <= y`), division (`/`), modulo (`%`)
 - **Built-in functions**: `len()`, `contains()`, `exists()`, `has_key()`, `all(arr, x => pred)`, `any(arr, x => pred)`
 - **Conditional expressions**: `if cond then a else b`
-- **Variables**: `let name = expr` for immutable bindings in before/given/action bodies
+- **Variables**: `let name = expr` for immutable bindings in before/after/given/action bodies
+- **After block**: `after { steps... }` at scope level — runs after every scenario/invariant iteration, even on failure; errors are logged but never affect test results
 - **Single-quoted strings**: `'[data-testid="email"]'` for CSS selectors containing double quotes
 - **Include/Import**: `include "path"`, `import openapi("path")`, `import proto("path")`
 - **Dot-path array indexing**: `items.0.name` for array element access

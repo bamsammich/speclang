@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,7 @@ func NewProcessAdapter() *ProcessAdapter {
 	return &ProcessAdapter{}
 }
 
-func (a *ProcessAdapter) Init(config map[string]string) error {
+func (a *ProcessAdapter) Init(_ context.Context, config map[string]string) error {
 	cmd, ok := config["command"]
 	if !ok {
 		return errors.New("process adapter requires 'command' in config")
@@ -38,10 +39,10 @@ func (a *ProcessAdapter) Init(config map[string]string) error {
 	return nil
 }
 
-func (a *ProcessAdapter) Call(method string, args json.RawMessage) (*Response, error) {
+func (a *ProcessAdapter) Call(ctx context.Context, method string, args json.RawMessage) (*Response, error) {
 	// Action: exec
 	if method == "exec" {
-		return a.doExec(args)
+		return a.doExec(ctx, args)
 	}
 
 	// Queries — return current value in Actual
@@ -79,7 +80,7 @@ func (a *ProcessAdapter) Call(method string, args json.RawMessage) (*Response, e
 	return &Response{OK: true, Actual: actualJSON}, nil
 }
 
-func (a *ProcessAdapter) doExec(args json.RawMessage) (*Response, error) {
+func (a *ProcessAdapter) doExec(ctx context.Context, args json.RawMessage) (*Response, error) {
 	var rawArgs []json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &rawArgs); err != nil {
@@ -98,7 +99,7 @@ func (a *ProcessAdapter) doExec(args json.RawMessage) (*Response, error) {
 	}
 
 	//nolint:gosec // process adapter intentionally executes user-specified commands from spec config
-	cmd := exec.Command(a.Command, cmdArgs...)
+	cmd := exec.CommandContext(ctx, a.Command, cmdArgs...)
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -121,9 +122,12 @@ func (a *ProcessAdapter) doExec(args json.RawMessage) (*Response, error) {
 	//nolint:errcheck // best-effort JSON parse; stdout may not be JSON
 	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout)), &parsed)
 
-	// Build the result that gets returned as Actual (for the runner's executeInput)
+	// Build the result that gets returned as Actual (for the runner's executeInput).
+	// Includes exit_code, stdout/stderr, and any parsed JSON fields.
 	result := map[string]any{
 		"exit_code": exitCode,
+		"stdout":    stdout,
+		"stderr":    stderr,
 	}
 	for k, v := range parsed {
 		result[k] = v
@@ -145,6 +149,6 @@ func (a *ProcessAdapter) Reset() error {
 	return nil
 }
 
-func (*ProcessAdapter) Close() error {
+func (*ProcessAdapter) Close(_ context.Context) error {
 	return nil
 }

@@ -4,7 +4,7 @@
 # so the conservation invariant fails for any amount > 0.
 spec BrokenTransferInvariantOnly {
 
-  target {
+  http {
     base_url: env(BROKEN_APP_URL, "http://localhost:8081")
   }
 
@@ -14,10 +14,11 @@ spec BrokenTransferInvariantOnly {
   }
 
   scope transfer {
-    use http
-    config {
-      path: "/api/v1/accounts/transfer"
-      method: "POST"
+    action transfer(from: Account, to: Account, amount: int) {
+      let result = http.post("/api/v1/accounts/transfer", {
+        from: from, to: to, amount: amount
+      })
+      return result
     }
 
     contract {
@@ -31,6 +32,7 @@ spec BrokenTransferInvariantOnly {
         to: Account
         error: string?
       }
+      action: transfer
     }
 
     invariant conservation {
