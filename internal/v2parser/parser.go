@@ -84,6 +84,10 @@ func (p *parser) advance() Token {
 func (p *parser) expect(typ TokenType) (Token, error) {
 	tok := p.advance()
 	if tok.Type != typ {
+		if tok.File != "" {
+			return tok, fmt.Errorf("%s:%d:%d: expected %s, got %s (%q)",
+				tok.File, tok.Line, tok.Col, typ, tok.Type, tok.Value)
+		}
 		return tok, fmt.Errorf("%d:%d: expected %s, got %s (%q)",
 			tok.Line, tok.Col, typ, tok.Type, tok.Value)
 	}
@@ -92,6 +96,9 @@ func (p *parser) expect(typ TokenType) (Token, error) {
 
 // errAt returns a formatted error at the given token's position.
 func (*parser) errAt(tok Token, msg string) error {
+	if tok.File != "" {
+		return fmt.Errorf("%s:%d:%d: %s", tok.File, tok.Line, tok.Col, msg)
+	}
 	return fmt.Errorf("%d:%d: %s", tok.Line, tok.Col, msg)
 }
 
@@ -118,6 +125,10 @@ func isIdentLike(typ TokenType) bool {
 func (p *parser) expectIdent() (Token, error) {
 	tok := p.advance()
 	if !isIdentLike(tok.Type) {
+		if tok.File != "" {
+			return tok, fmt.Errorf("%s:%d:%d: expected identifier, got %s (%q)",
+				tok.File, tok.Line, tok.Col, tok.Type, tok.Value)
+		}
 		return tok, fmt.Errorf("%d:%d: expected identifier, got %s (%q)",
 			tok.Line, tok.Col, tok.Type, tok.Value)
 	}

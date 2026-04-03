@@ -63,6 +63,11 @@ type parser struct {
 	pos     int
 }
 
+// posFrom converts a Token's location into a spec.Pos.
+func posFrom(tok Token) Pos {
+	return Pos{File: tok.File, Line: tok.Line, Col: tok.Col}
+}
+
 // peek returns the current token without consuming it.
 func (p *parser) peek() Token {
 	if p.pos < len(p.tokens) {
@@ -84,6 +89,10 @@ func (p *parser) advance() Token {
 func (p *parser) expect(typ TokenType) (Token, error) {
 	tok := p.advance()
 	if tok.Type != typ {
+		if tok.File != "" {
+			return tok, fmt.Errorf("%s:%d:%d: expected %s, got %s (%q)",
+				tok.File, tok.Line, tok.Col, typ, tok.Type, tok.Value)
+		}
 		return tok, fmt.Errorf("%d:%d: expected %s, got %s (%q)",
 			tok.Line, tok.Col, typ, tok.Type, tok.Value)
 	}
@@ -92,6 +101,9 @@ func (p *parser) expect(typ TokenType) (Token, error) {
 
 // errAt returns a formatted error at the given token's position.
 func (*parser) errAt(tok Token, msg string) error {
+	if tok.File != "" {
+		return fmt.Errorf("%s:%d:%d: %s", tok.File, tok.Line, tok.Col, msg)
+	}
 	return fmt.Errorf("%d:%d: %s", tok.Line, tok.Col, msg)
 }
 
@@ -127,8 +139,6 @@ func (p *parser) expectIdent() (Token, error) {
 
 // parse is the top-level entry point.
 func (p *parser) parse() (*Spec, error) {
-	spec := &Spec{}
-
 	// Spec-level "use" is no longer valid in v3.
 	if p.peek().Type == TokenUse {
 		tok := p.peek()
@@ -136,9 +146,11 @@ func (p *parser) parse() (*Spec, error) {
 	}
 
 	// Parse "spec Name { ... }"
+	specTok := p.peek()
 	if _, err := p.expect(TokenSpec); err != nil {
 		return nil, err
 	}
+	spec := &Spec{Pos: posFrom(specTok)}
 	name, err := p.expect(TokenIdent)
 	if err != nil {
 		return nil, err
@@ -320,12 +332,12 @@ func (p *parser) parseSpecServices() ([]*Service, error) {
 
 // parseTarget parses: target { key: value ... }
 func (p *parser) parseTarget() (*Target, error) {
-	p.advance() // consume "target"
+	targetTok := p.advance() // consume "target"
 	if _, err := p.expect(TokenLBrace); err != nil {
 		return nil, err
 	}
 
-	t := &Target{Fields: make(map[string]Expr)}
+	t := &Target{Pos: posFrom(targetTok), Fields: make(map[string]Expr)}
 	for p.peek().Type != TokenRBrace {
 		key, err := p.expect(TokenIdent)
 		if err != nil {
@@ -395,11 +407,12 @@ func (p *parser) parseServices(t *Target) error {
 
 // parseService parses a named service block: name { build: "...", port: N, ... }
 func (p *parser) parseService(name string) (*Service, error) {
-	if _, err := p.expect(TokenLBrace); err != nil {
+	lbrace, err := p.expect(TokenLBrace)
+	if err != nil {
 		return nil, err
 	}
 
-	svc := &Service{Name: name}
+	svc := &Service{Pos: posFrom(lbrace), Name: name}
 	for p.peek().Type != TokenRBrace {
 		if err := p.parseServiceEntry(svc); err != nil {
 			return nil, err
@@ -526,7 +539,7 @@ func (p *parser) parseScope() (*Scope, error) {
 		return nil, err
 	}
 
-	scope := &Scope{Name: name.Value}
+	scope := &Scope{Pos: posFrom(name), Name: name.Value}
 	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
 		if err := p.parseScopeMember(scope); err != nil {
 			return nil, err
@@ -686,7 +699,7 @@ func (p *parser) parseModel() (*Model, error) {
 		return nil, err
 	}
 
-	m := &Model{Name: name.Value}
+	m := &Model{Pos: posFrom(name), Name: name.Value}
 	for p.peek().Type != TokenRBrace {
 		field, err := p.parseField()
 		if err != nil {
@@ -720,7 +733,7 @@ func (p *parser) parseField() (*Field, error) {
 		return nil, err
 	}
 
-	f := &Field{Name: name.Value, Type: typeExpr}
+	f := &Field{Pos: posFrom(name), Name: name.Value, Type: typeExpr}
 
 	// Optional constraint block: { expr }
 	if p.peek().Type == TokenLBrace {
@@ -756,7 +769,7 @@ func (p *parser) parseTypeExpr() (TypeExpr, error) {
 func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 	// Array type: []T
 	if p.peek().Type == TokenLBracket {
-		p.advance() // consume [
+		lbracket := p.advance() // consume [
 		if _, err := p.expect(TokenRBracket); err != nil {
 			return TypeExpr{}, err
 		}
@@ -764,7 +777,7 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 		if err != nil {
 			return TypeExpr{}, err
 		}
-		return TypeExpr{Name: "array", ElemType: &elemType}, nil
+		return TypeExpr{Pos: posFrom(lbracket), Name: "array", ElemType: &elemType}, nil
 	}
 
 	name, err := p.expectIdent()
@@ -774,7 +787,7 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 
 	// Map type: map[K, V]
 	if name.Value == typeMap && p.peek().Type == TokenLBracket {
-		return p.parseMapType()
+		return p.parseMapType(name)
 	}
 
 	// Enum type: enum("val1", "val2", ...)
@@ -782,7 +795,7 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 		return p.parseEnumType(name)
 	}
 
-	return TypeExpr{Name: name.Value}, nil
+	return TypeExpr{Pos: posFrom(name), Name: name.Value}, nil
 }
 
 const (
@@ -790,7 +803,7 @@ const (
 	typeEnum = "enum"
 )
 
-func (p *parser) parseMapType() (TypeExpr, error) {
+func (p *parser) parseMapType(nameTok Token) (TypeExpr, error) {
 	p.advance() // consume [
 	keyType, err := p.parseTypeExprInner()
 	if err != nil {
@@ -806,7 +819,7 @@ func (p *parser) parseMapType() (TypeExpr, error) {
 	if _, err := p.expect(TokenRBracket); err != nil {
 		return TypeExpr{}, err
 	}
-	return TypeExpr{Name: typeMap, KeyType: &keyType, ValType: &valType}, nil
+	return TypeExpr{Pos: posFrom(nameTok), Name: typeMap, KeyType: &keyType, ValType: &valType}, nil
 }
 
 func (p *parser) parseEnumType(name Token) (TypeExpr, error) {
@@ -834,17 +847,17 @@ func (p *parser) parseEnumType(name Token) (TypeExpr, error) {
 	if len(variants) == 0 {
 		return TypeExpr{}, p.errAt(name, "enum type requires at least one variant")
 	}
-	return TypeExpr{Name: typeEnum, Variants: variants}, nil
+	return TypeExpr{Pos: posFrom(name), Name: typeEnum, Variants: variants}, nil
 }
 
 // parseContract parses: contract { input { ... } output { ... } action: name }
 func (p *parser) parseContract() (*Contract, error) {
-	p.advance() // consume "contract"
+	contractTok := p.advance() // consume "contract"
 	if _, err := p.expect(TokenLBrace); err != nil {
 		return nil, err
 	}
 
-	c := &Contract{}
+	c := &Contract{Pos: posFrom(contractTok)}
 	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
 		tok := p.peek()
 		switch tok.Type {
@@ -919,7 +932,7 @@ func (p *parser) parseAction() (*ActionDef, error) {
 		return nil, err
 	}
 
-	a := &ActionDef{Name: name.Value}
+	a := &ActionDef{Pos: posFrom(name), Name: name.Value}
 
 	// Parse parameter list.
 	if _, err := p.expect(TokenLParen); err != nil {
@@ -975,7 +988,7 @@ func (p *parser) parseActionStep() (GivenStep, error) {
 
 // parseLetBinding parses: let name = expr
 func (p *parser) parseLetBinding() (*LetBinding, error) {
-	p.advance() // consume "let"
+	letTok := p.advance() // consume "let"
 	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
@@ -987,17 +1000,17 @@ func (p *parser) parseLetBinding() (*LetBinding, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &LetBinding{Name: name.Value, Value: val}, nil
+	return &LetBinding{Pos: posFrom(letTok), Name: name.Value, Value: val}, nil
 }
 
 // parseReturnStmt parses: return expr
 func (p *parser) parseReturnStmt() (*ReturnStmt, error) {
-	p.advance() // consume "return"
+	returnTok := p.advance() // consume "return"
 	val, err := p.parseExpr()
 	if err != nil {
 		return nil, err
 	}
-	return &ReturnStmt{Value: val}, nil
+	return &ReturnStmt{Pos: posFrom(returnTok), Value: val}, nil
 }
 
 // parseCallOrAdapterCall parses: adapter.method(args) or action(args)
@@ -1025,7 +1038,7 @@ func (p *parser) parseCallOrAdapterCall() (GivenStep, error) {
 		if _, err := p.expect(TokenRParen); err != nil {
 			return nil, err
 		}
-		return &AdapterCall{Adapter: name.Value, Method: method.Value, Args: args}, nil
+		return &AdapterCall{Pos: posFrom(name), Adapter: name.Value, Method: method.Value, Args: args}, nil
 	}
 
 	// Local call: action(args)
@@ -1039,7 +1052,7 @@ func (p *parser) parseCallOrAdapterCall() (GivenStep, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return &Call{Method: name.Value, Args: args}, nil
+	return &Call{Pos: posFrom(name), Method: name.Value, Args: args}, nil
 }
 
 // parseArgList parses comma-separated expressions until ')'.
@@ -1071,7 +1084,7 @@ func (p *parser) parseParam() (*Param, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Param{Name: name.Value, Type: typeExpr}, nil
+	return &Param{Pos: posFrom(name), Name: name.Value, Type: typeExpr}, nil
 }
 
 // parseCall is kept for backward compatibility with v2 Call AST nodes.
@@ -1082,7 +1095,7 @@ func (p *parser) parseCall() (*Call, error) {
 		return nil, err
 	}
 
-	c := &Call{}
+	c := &Call{Pos: posFrom(name)}
 	if p.peek().Type == TokenDot {
 		p.advance() // consume .
 		method, err := p.expect(TokenIdent)
@@ -1126,7 +1139,7 @@ func (p *parser) parseInvariant() (*Invariant, error) {
 		return nil, err
 	}
 
-	inv := &Invariant{Name: name.Value}
+	inv := &Invariant{Pos: posFrom(name), Name: name.Value}
 
 	// Check for optional "when expr:" guard.
 	if p.peek().Type == TokenWhen {
@@ -1143,11 +1156,12 @@ func (p *parser) parseInvariant() (*Invariant, error) {
 
 	// Parse body assertions (boolean expressions) until closing brace.
 	for p.peek().Type != TokenRBrace {
+		assertTok := p.peek()
 		expr, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		inv.Assertions = append(inv.Assertions, &Assertion{Expr: expr})
+		inv.Assertions = append(inv.Assertions, &Assertion{Pos: posFrom(assertTok), Expr: expr})
 	}
 
 	if _, err := p.expect(TokenRBrace); err != nil {
@@ -1167,7 +1181,7 @@ func (p *parser) parseScenario() (*Scenario, error) {
 		return nil, err
 	}
 
-	sc := &Scenario{Name: name.Value}
+	sc := &Scenario{Pos: posFrom(name), Name: name.Value}
 
 	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
 		if err := p.parseScenarioBlock(sc); err != nil {
@@ -1221,11 +1235,12 @@ func (p *parser) parseScenarioBlock(sc *Scenario) error {
 //   - ident:       → assignment
 //   - ident.ident: → dotted-path assignment
 func (p *parser) parseGivenBlock() (*Block, error) {
-	if _, err := p.expect(TokenLBrace); err != nil {
+	lbrace, err := p.expect(TokenLBrace)
+	if err != nil {
 		return nil, err
 	}
 
-	block := &Block{}
+	block := &Block{Pos: posFrom(lbrace)}
 	for p.peek().Type != TokenRBrace {
 		step, err := p.parseGivenStep()
 		if err != nil {
@@ -1254,6 +1269,7 @@ func (p *parser) parseGivenStep() (GivenStep, error) {
 	}
 
 	// Assignment: field: value
+	assignTok := p.peek()
 	path, err := p.parseFieldPath()
 	if err != nil {
 		return nil, err
@@ -1265,7 +1281,7 @@ func (p *parser) parseGivenStep() (GivenStep, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Assignment{Path: path, Value: val}, nil
+	return &Assignment{Pos: posFrom(assignTok), Path: path, Value: val}, nil
 }
 
 // isGivenCall returns true if the current position starts a call (not an assignment).
@@ -1289,11 +1305,12 @@ func (p *parser) isGivenCall() bool {
 
 // parseWhenBlock parses: { predicates... }
 func (p *parser) parseWhenBlock() (*Block, error) {
-	if _, err := p.expect(TokenLBrace); err != nil {
+	lbrace, err := p.expect(TokenLBrace)
+	if err != nil {
 		return nil, err
 	}
 
-	block := &Block{}
+	block := &Block{Pos: posFrom(lbrace)}
 	for p.peek().Type != TokenRBrace {
 		expr, err := p.parseExpr()
 		if err != nil {
@@ -1311,11 +1328,12 @@ func (p *parser) parseWhenBlock() (*Block, error) {
 // parseThenBlock parses: { assertions... }
 // Assertions are in the form: path: expected
 func (p *parser) parseThenBlock() (*Block, error) {
-	if _, err := p.expect(TokenLBrace); err != nil {
+	lbrace, err := p.expect(TokenLBrace)
+	if err != nil {
 		return nil, err
 	}
 
-	block := &Block{}
+	block := &Block{Pos: posFrom(lbrace)}
 	for p.peek().Type != TokenRBrace {
 		a, err := p.parseAssertion()
 		if err != nil {
@@ -1334,13 +1352,14 @@ func (p *parser) parseThenBlock() (*Block, error) {
 // expr op expr  (e.g., from.balance == 70, playwright.visible('[sel]') == true)
 func (p *parser) parseAssertion() (*Assertion, error) {
 	// Parse the full assertion as an expression — it should be a comparison.
+	assertTok := p.peek()
 	expr, err := p.parseExpr()
 	if err != nil {
 		return nil, err
 	}
 
 	// The expression must be a binary comparison for a then-block assertion.
-	return &Assertion{Expr: expr}, nil
+	return &Assertion{Pos: posFrom(assertTok), Expr: expr}, nil
 }
 
 // parseFieldPath consumes a dotted identifier path like "from.balance" or
@@ -1451,7 +1470,7 @@ func (p *parser) parseExprPrec(minPrec int) (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = BinaryOp{Left: left, Op: op, Right: right}
+		left = BinaryOp{Pos: posFrom(tok), Left: left, Op: op, Right: right}
 	}
 
 	return left, nil
@@ -1467,14 +1486,14 @@ func (p *parser) parseUnary() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return UnaryOp{Op: "!", Operand: operand}, nil
+		return UnaryOp{Pos: posFrom(tok), Op: "!", Operand: operand}, nil
 	case TokenMinus:
 		p.advance()
 		operand, err := p.parseUnary()
 		if err != nil {
 			return nil, err
 		}
-		return UnaryOp{Op: "-", Operand: operand}, nil
+		return UnaryOp{Pos: posFrom(tok), Op: "-", Operand: operand}, nil
 	default:
 		return p.parseAtom()
 	}
@@ -1530,23 +1549,23 @@ func (p *parser) parseLiteralAtom(tok Token) (Expr, error) {
 		if err != nil {
 			return nil, p.errAt(tok, fmt.Sprintf("invalid int: %s", tok.Value))
 		}
-		return LiteralInt{Value: v}, nil
+		return LiteralInt{Pos: posFrom(tok), Value: v}, nil
 	case TokenFloat:
 		p.advance()
 		v, err := strconv.ParseFloat(tok.Value, 64)
 		if err != nil {
 			return nil, p.errAt(tok, fmt.Sprintf("invalid float: %s", tok.Value))
 		}
-		return LiteralFloat{Value: v}, nil
+		return LiteralFloat{Pos: posFrom(tok), Value: v}, nil
 	case TokenString:
 		p.advance()
-		return LiteralString{Value: tok.Value}, nil
+		return LiteralString{Pos: posFrom(tok), Value: tok.Value}, nil
 	case TokenBool:
 		p.advance()
-		return LiteralBool{Value: tok.Value == "true"}, nil
+		return LiteralBool{Pos: posFrom(tok), Value: tok.Value == "true"}, nil
 	case TokenNull:
 		p.advance()
-		return LiteralNull{}, nil
+		return LiteralNull{Pos: posFrom(tok)}, nil
 	default:
 		return nil, nil
 	}
@@ -1594,7 +1613,7 @@ func (p *parser) parseFieldRefExpr() (Expr, error) {
 		if _, err := p.expect(TokenRParen); err != nil {
 			return nil, err
 		}
-		return AdapterCall{Method: path, Args: args}, nil
+		return AdapterCall{Pos: posFrom(first), Method: path, Args: args}, nil
 	}
 
 	for p.peek().Type == TokenDot {
@@ -1620,17 +1639,17 @@ func (p *parser) parseFieldRefExpr() (Expr, error) {
 			if _, err := p.expect(TokenRParen); err != nil {
 				return nil, err
 			}
-			return AdapterCall{Adapter: path, Method: next.Value, Args: args}, nil
+			return AdapterCall{Pos: posFrom(first), Adapter: path, Method: next.Value, Args: args}, nil
 		}
 
 		path += "." + next.Value
 	}
-	return FieldRef{Path: path}, nil
+	return FieldRef{Pos: posFrom(first), Path: path}, nil
 }
 
 // parseLenExpr parses: len(expr)
 func (p *parser) parseLenExpr() (Expr, error) {
-	p.advance() // consume "len"
+	lenTok := p.advance() // consume "len"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1641,13 +1660,13 @@ func (p *parser) parseLenExpr() (Expr, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return LenExpr{Arg: arg}, nil
+	return LenExpr{Pos: posFrom(lenTok), Arg: arg}, nil
 }
 
 // parseQuantifierExpr parses: all(expr, ident => expr) or any(expr, ident => expr)
 // The "=>" arrow is lexed as TokenAssign followed by TokenGt.
 func (p *parser) parseQuantifierExpr(name string) (Expr, error) {
-	p.advance() // consume "all" or "any"
+	kwTok := p.advance() // consume "all" or "any"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1678,14 +1697,14 @@ func (p *parser) parseQuantifierExpr(name string) (Expr, error) {
 	}
 
 	if name == "all" {
-		return AllExpr{Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
+		return AllExpr{Pos: posFrom(kwTok), Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
 	}
-	return AnyExpr{Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
+	return AnyExpr{Pos: posFrom(kwTok), Array: arrayExpr, BoundVar: boundVar.Value, Predicate: predicate}, nil
 }
 
 // parseContainsExpr parses: contains(haystack, needle)
 func (p *parser) parseContainsExpr() (Expr, error) {
-	p.advance() // consume "contains"
+	containsTok := p.advance() // consume "contains"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1703,12 +1722,12 @@ func (p *parser) parseContainsExpr() (Expr, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return ContainsExpr{Haystack: haystack, Needle: needle}, nil
+	return ContainsExpr{Pos: posFrom(containsTok), Haystack: haystack, Needle: needle}, nil
 }
 
 // parseExistsExpr parses: exists(expr)
 func (p *parser) parseExistsExpr() (Expr, error) {
-	p.advance() // consume "exists"
+	existsTok := p.advance() // consume "exists"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1719,12 +1738,12 @@ func (p *parser) parseExistsExpr() (Expr, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return ExistsExpr{Arg: arg}, nil
+	return ExistsExpr{Pos: posFrom(existsTok), Arg: arg}, nil
 }
 
 // parseHasKeyExpr parses: has_key(expr, key)
 func (p *parser) parseHasKeyExpr() (Expr, error) {
-	p.advance() // consume "has_key"
+	hasKeyTok := p.advance() // consume "has_key"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1742,12 +1761,12 @@ func (p *parser) parseHasKeyExpr() (Expr, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return HasKeyExpr{Arg: arg, Key: key}, nil
+	return HasKeyExpr{Pos: posFrom(hasKeyTok), Arg: arg, Key: key}, nil
 }
 
 // parseIfExpr parses: if expr then expr else expr
 func (p *parser) parseIfExpr() (Expr, error) {
-	p.advance() // consume "if"
+	ifTok := p.advance() // consume "if"
 	cond, err := p.parseExpr()
 	if err != nil {
 		return nil, err
@@ -1766,12 +1785,12 @@ func (p *parser) parseIfExpr() (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return IfExpr{Condition: cond, Then: thenExpr, Else: elseExpr}, nil
+	return IfExpr{Pos: posFrom(ifTok), Condition: cond, Then: thenExpr, Else: elseExpr}, nil
 }
 
 // parseEnvRef parses: env(VAR) or env(VAR, "default")
 func (p *parser) parseEnvRef() (Expr, error) {
-	p.advance() // consume "env"
+	envTok := p.advance() // consume "env"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1780,7 +1799,7 @@ func (p *parser) parseEnvRef() (Expr, error) {
 		return nil, err
 	}
 
-	ref := EnvRef{Var: varName.Value}
+	ref := EnvRef{Pos: posFrom(envTok), Var: varName.Value}
 
 	if p.peek().Type == TokenComma {
 		p.advance() // consume ,
@@ -1799,7 +1818,7 @@ func (p *parser) parseEnvRef() (Expr, error) {
 
 // parseServiceRef parses: service(name)
 func (p *parser) parseServiceRef() (Expr, error) {
-	p.advance() // consume "service"
+	serviceTok := p.advance() // consume "service"
 	if _, err := p.expect(TokenLParen); err != nil {
 		return nil, err
 	}
@@ -1810,13 +1829,13 @@ func (p *parser) parseServiceRef() (Expr, error) {
 	if _, err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return ServiceRef{Name: name.Value}, nil
+	return ServiceRef{Pos: posFrom(serviceTok), Name: name.Value}, nil
 }
 
 // parseObjectLiteral parses: { key: value, ... }
 func (p *parser) parseObjectLiteral() (Expr, error) {
-	p.advance() // consume {
-	obj := ObjectLiteral{}
+	lbrace := p.advance() // consume {
+	obj := ObjectLiteral{Pos: posFrom(lbrace)}
 
 	for p.peek().Type != TokenRBrace {
 		key, err := p.expect(TokenIdent)
@@ -1831,6 +1850,7 @@ func (p *parser) parseObjectLiteral() (Expr, error) {
 			return nil, err
 		}
 		obj.Fields = append(obj.Fields, &ObjField{
+			Pos:   posFrom(key),
 			Key:   key.Value,
 			Value: val,
 		})
@@ -1847,8 +1867,8 @@ func (p *parser) parseObjectLiteral() (Expr, error) {
 
 // parseArrayLiteral parses: [ expr, expr, ... ]
 func (p *parser) parseArrayLiteral() (Expr, error) {
-	p.advance() // consume [
-	arr := ArrayLiteral{}
+	lbracket := p.advance() // consume [
+	arr := ArrayLiteral{Pos: posFrom(lbracket)}
 
 	for p.peek().Type != TokenRBracket && p.peek().Type != TokenEOF {
 		elem, err := p.parseExpr()
