@@ -266,6 +266,27 @@ func (sr *scopeRunner) findAction(name string) *parser.ActionDef {
 	return nil
 }
 
+// executeLocalActionCall resolves arguments, builds a child context, and executes
+// a local (spec-level or scope-level) action, returning its result.
+func (sr *scopeRunner) executeLocalActionCall(action *parser.ActionDef, args []parser.Expr, parentCtx map[string]any) (any, error) {
+	childCtx := make(map[string]any)
+	for i, param := range action.Params {
+		if i < len(args) {
+			val, _ := generator.Eval(args[i], parentCtx)
+			childCtx[param.Name] = val
+		}
+	}
+	result, err := sr.executeActionBody(action, childCtx)
+	if err != nil {
+		return nil, err
+	}
+	// Return the result as a generic value (map or nil).
+	if result == nil {
+		return nil, nil
+	}
+	return any(result), nil
+}
+
 // executeActionBody executes an action's body steps and returns the output.
 // Handles LetBinding, AdapterCall, ReturnStmt, and legacy Call steps.
 func (sr *scopeRunner) executeActionBody(action *parser.ActionDef, ctx map[string]any) (map[string]any, error) {
@@ -281,6 +302,19 @@ func (sr *scopeRunner) executeActionBody(action *parser.ActionDef, ctx map[strin
 			ctx[s.Name] = val
 
 		case *parser.AdapterCall:
+			// Empty adapter namespace means this could be a local action call.
+			if s.Adapter == "" {
+				if calledAction := sr.findAction(s.Method); calledAction != nil {
+					result, err := sr.executeLocalActionCall(calledAction, s.Args, ctx)
+					if err != nil {
+						return nil, fmt.Errorf("action %q calling %q: %w", action.Name, s.Method, err)
+					}
+					if m, ok := result.(map[string]any); ok {
+						ctx["body"] = m
+					}
+					break
+				}
+			}
 			resp, err := sr.executeAdapterCall(s, ctx)
 			if err != nil {
 				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Adapter, s.Method, err)
@@ -351,6 +385,12 @@ func (sr *scopeRunner) executeActionBody(action *parser.ActionDef, ctx map[strin
 func (sr *scopeRunner) evalActionExpr(expr parser.Expr, ctx map[string]any) (any, error) {
 	switch e := expr.(type) {
 	case parser.AdapterCall:
+		// Empty adapter namespace means this could be a local action call.
+		if e.Adapter == "" {
+			if action := sr.findAction(e.Method); action != nil {
+				return sr.executeLocalActionCall(action, e.Args, ctx)
+			}
+		}
 		resp, err := sr.executeAdapterCallVal(e, ctx)
 		if err != nil {
 			return nil, err
@@ -365,6 +405,12 @@ func (sr *scopeRunner) evalActionExpr(expr parser.Expr, ctx map[string]any) (any
 		}
 		return parsed, nil
 	case *parser.AdapterCall:
+		// Empty adapter namespace means this could be a local action call.
+		if e.Adapter == "" {
+			if action := sr.findAction(e.Method); action != nil {
+				return sr.executeLocalActionCall(action, e.Args, ctx)
+			}
+		}
 		resp, err := sr.executeAdapterCall(e, ctx)
 		if err != nil {
 			return nil, err
@@ -645,6 +691,19 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			val, _ := generator.Eval(s.Value, input)
 			setPath(input, s.Path, val)
 		case *parser.Call:
+			// Empty namespace may be a local action call.
+			if s.Namespace == "" {
+				if action := sr.findAction(s.Method); action != nil {
+					result, err := sr.executeLocalActionCall(action, s.Args, input)
+					if err != nil {
+						return nil, fmt.Errorf("calling action %q: %w", s.Method, err)
+					}
+					if m, ok := result.(map[string]any); ok {
+						input["body"] = m
+					}
+					break
+				}
+			}
 			adp, err := sr.resolveAdapterForCall(s.Namespace)
 			if err != nil {
 				return nil, fmt.Errorf("resolving adapter for %s.%s: %w", s.Namespace, s.Method, err)
@@ -674,6 +733,19 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 				}
 			}
 		case *parser.AdapterCall:
+			// Empty adapter namespace may be a local action call.
+			if s.Adapter == "" {
+				if action := sr.findAction(s.Method); action != nil {
+					result, err := sr.executeLocalActionCall(action, s.Args, input)
+					if err != nil {
+						return nil, fmt.Errorf("calling action %q: %w", s.Method, err)
+					}
+					if m, ok := result.(map[string]any); ok {
+						input["body"] = m
+					}
+					break
+				}
+			}
 			resp, err := sr.executeAdapterCall(s, input)
 			if err != nil {
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Adapter, s.Method, err)
