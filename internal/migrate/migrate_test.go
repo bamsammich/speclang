@@ -23,6 +23,7 @@ func TestGoldenFiles(t *testing.T) {
 		{"http_basic", "testdata/http_basic.v2.spec", "testdata/http_basic.v3.spec"},
 		{"playwright", "testdata/playwright.v2.spec", "testdata/playwright.v3.spec"},
 		{"process", "testdata/process.v2.spec", "testdata/process.v3.spec"},
+		{"given_body_ref", "testdata/given_body_ref.v2.spec", "testdata/given_body_ref.v3.spec"},
 	}
 
 	for _, tt := range tests {
@@ -370,6 +371,123 @@ func TestFormatTypeExpr(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestTransformBodyRefs_GivenBlock verifies body refs in given blocks are converted.
+func TestTransformBodyRefs_GivenBlock(t *testing.T) {
+	t.Parallel()
+
+	steps := []spec.GivenStep{
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.LiteralString{Value: "/api/groups"},
+			spec.ObjectLiteral{Fields: []*spec.ObjField{{Key: "name", Value: spec.LiteralString{Value: "Test"}}}},
+		}},
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.BinaryOp{
+				Left:  spec.LiteralString{Value: "/api/groups/"},
+				Op:    "+",
+				Right: spec.FieldRef{Path: "body.group.id"},
+			},
+		}},
+	}
+
+	result := transformBodyRefs(steps, "http")
+	if len(result) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(result))
+	}
+
+	// First step should be wrapped in a let binding.
+	if _, ok := result[0].(*spec.LetBinding); !ok {
+		t.Errorf("expected first step to be LetBinding, got %T", result[0])
+	}
+}
+
+// TestTransformBodyRefs_Assignment verifies body refs in assignment values are converted.
+func TestTransformBodyRefs_Assignment(t *testing.T) {
+	t.Parallel()
+
+	steps := []spec.GivenStep{
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.LiteralString{Value: "/api/groups"},
+		}},
+		&spec.Assignment{Path: "group_id", Value: spec.FieldRef{Path: "body.group.id"}},
+	}
+
+	result := transformBodyRefs(steps, "http")
+
+	// First step should be let binding.
+	lb, ok := result[0].(*spec.LetBinding)
+	if !ok {
+		t.Fatalf("expected LetBinding, got %T", result[0])
+	}
+
+	// Assignment should reference the let variable, not body.
+	assign, ok := result[1].(*spec.Assignment)
+	if !ok {
+		t.Fatalf("expected Assignment, got %T", result[1])
+	}
+	ref, ok := assign.Value.(spec.FieldRef)
+	if !ok {
+		t.Fatalf("expected FieldRef value, got %T", assign.Value)
+	}
+	if !strings.HasPrefix(ref.Path, lb.Name+".") {
+		t.Errorf("assignment value %q should reference %q", ref.Path, lb.Name)
+	}
+}
+
+// TestTransformBodyRefs_NonAdjacent verifies body ref conversion works with intervening steps.
+func TestTransformBodyRefs_NonAdjacent(t *testing.T) {
+	t.Parallel()
+
+	steps := []spec.GivenStep{
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.LiteralString{Value: "/api/init"},
+		}},
+		&spec.Assignment{Path: "name", Value: spec.LiteralString{Value: "test"}},
+		// body ref is 2 steps after the call
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.FieldRef{Path: "body.token"},
+		}},
+	}
+
+	result := transformBodyRefs(steps, "http")
+
+	// First step should be wrapped in let binding.
+	if _, ok := result[0].(*spec.LetBinding); !ok {
+		t.Errorf("expected first step to be LetBinding, got %T", result[0])
+	}
+	// Assignment should be unchanged.
+	if _, ok := result[1].(*spec.Assignment); !ok {
+		t.Errorf("expected second step to be Assignment, got %T", result[1])
+	}
+}
+
+// TestTransformBodyRefs_MultipleRefs verifies unique variable names for multiple calls.
+func TestTransformBodyRefs_MultipleRefs(t *testing.T) {
+	t.Parallel()
+
+	steps := []spec.GivenStep{
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.LiteralString{Value: "/api/first"},
+		}},
+		&spec.Assignment{Path: "first_id", Value: spec.FieldRef{Path: "body.id"}},
+		&spec.Call{Namespace: "http", Method: "post", Args: []spec.Expr{
+			spec.LiteralString{Value: "/api/second"},
+		}},
+		&spec.Assignment{Path: "second_id", Value: spec.FieldRef{Path: "body.id"}},
+	}
+
+	result := transformBodyRefs(steps, "http")
+
+	// Both calls should be wrapped with different variable names.
+	lb0, ok0 := result[0].(*spec.LetBinding)
+	lb2, ok2 := result[2].(*spec.LetBinding)
+	if !ok0 || !ok2 {
+		t.Fatalf("expected both calls wrapped, got types: %T, %T", result[0], result[2])
+	}
+	if lb0.Name == lb2.Name {
+		t.Errorf("variable names should differ, both are %q", lb0.Name)
 	}
 }
 
