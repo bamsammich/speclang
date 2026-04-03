@@ -491,6 +491,34 @@ func TestTransformBodyRefs_MultipleRefs(t *testing.T) {
 	}
 }
 
+// TestBuildPathExpr verifies URL template to string concatenation conversion.
+func TestBuildPathExpr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"plain path", "/api/users", `"/api/users"`},
+		{"trailing param", "/api/groups/:id", `"/api/groups/" + id`},
+		{"middle param", "/api/groups/:id/leave", `"/api/groups/" + id + "/leave"`},
+		{"multiple params", "/api/:org/groups/:id", `"/api/" + org + "/groups/" + id`},
+		{"leading param", ":version/api", `version + "/api"`},
+		{"no slashes", ":id", `id`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildPathExpr(tt.path)
+			if got != tt.want {
+				t.Errorf("buildPathExpr(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestHasSynthesizableConfig verifies config detection.
 func TestHasSynthesizableConfig(t *testing.T) {
 	t.Parallel()
