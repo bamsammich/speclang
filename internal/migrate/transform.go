@@ -244,33 +244,32 @@ func inferAdapterConfigs(s *spec.Spec) map[string]map[string]string {
 	return configs
 }
 
-// transformBodyRefs detects implicit body.X references in before/after block steps
-// and wraps preceding adapter calls with let bindings.
+// transformBodyRefs detects implicit body.X references in block steps and wraps
+// preceding adapter calls with let bindings. Handles non-adjacent references
+// (e.g., an assignment between the call and the body ref) and multiple calls
+// in the same block with unique variable names.
 func transformBodyRefs(steps []spec.GivenStep, scopeAdapter string) []spec.GivenStep {
 	if len(steps) == 0 {
 		return steps
 	}
 
 	result := make([]spec.GivenStep, 0, len(steps))
-	var lastCallIdx int = -1
+	lastCallResultIdx := -1 // index in result slice of last unwrapped call
+	varCounter := 0
 
-	for i, step := range steps {
-		// Check if this step contains body.X references
-		hasBodyRef := stepHasBodyRef(step)
-
-		if hasBodyRef && lastCallIdx >= 0 && lastCallIdx == i-1 {
-			// Wrap the previous call in a let binding
-			prevStep := result[len(result)-1]
-			result[len(result)-1] = wrapCallInLet(prevStep, "result")
-
-			// Rewrite body.X → result.X in current step
-			step = rewriteBodyRefs(step, "result")
+	for _, step := range steps {
+		if stepHasBodyRef(step) && lastCallResultIdx >= 0 {
+			varName := fmt.Sprintf("r%d", varCounter)
+			varCounter++
+			result[lastCallResultIdx] = wrapCallInLet(result[lastCallResultIdx], varName)
+			step = rewriteBodyRefs(step, varName)
+			lastCallResultIdx = -1 // consumed
 		}
 
 		// Track calls for body ref resolution
 		switch step.(type) {
 		case *spec.Call, *spec.AdapterCall:
-			lastCallIdx = i
+			lastCallResultIdx = len(result)
 		}
 
 		result = append(result, step)
@@ -294,6 +293,8 @@ func stepHasBodyRef(step spec.GivenStep) bool {
 				return true
 			}
 		}
+	case *spec.Assignment:
+		return exprHasBodyRef(s.Value)
 	}
 	return false
 }
@@ -357,6 +358,11 @@ func rewriteBodyRefs(step spec.GivenStep, varName string) spec.GivenStep {
 			Adapter: s.Adapter,
 			Method:  s.Method,
 			Args:    newArgs,
+		}
+	case *spec.Assignment:
+		return &spec.Assignment{
+			Path:  s.Path,
+			Value: rewriteBodyRefsInExpr(s.Value, varName),
 		}
 	}
 	return step

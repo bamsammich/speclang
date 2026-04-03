@@ -296,7 +296,7 @@ func (w *v3Writer) emitBlock(b *spec.Block, kind string, scopeAdapter string, lo
 	// Steps (given/before/after blocks)
 	if len(b.Steps) > 0 {
 		steps := b.Steps
-		if kind == "before" || kind == "after" {
+		if kind == "before" || kind == "after" || kind == "given" {
 			steps = transformBodyRefs(steps, scopeAdapter)
 		}
 		for _, step := range steps {
