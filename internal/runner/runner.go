@@ -242,10 +242,21 @@ func (sr *scopeRunner) executeContractAction(input map[string]any) (map[string]a
 		return nil, fmt.Errorf("scope %q: contract references undefined action %q", sr.scope, actionName)
 	}
 
-	// Build parameter context from input map
+	// Build parameter context from input map.
 	ctx := make(map[string]any, len(input))
 	for k, v := range input {
 		ctx[k] = v
+	}
+
+	// Fill missing optional fields with nil; error on missing required fields.
+	for _, field := range sr.scopeDef.Contract.Input {
+		if _, exists := ctx[field.Name]; !exists {
+			if field.Type.Optional {
+				ctx[field.Name] = nil
+			} else {
+				return nil, fmt.Errorf("scope %q: missing required input field %q", sr.scope, field.Name)
+			}
+		}
 	}
 
 	return sr.executeActionBody(actionDef, ctx)
