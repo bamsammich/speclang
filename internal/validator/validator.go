@@ -54,6 +54,15 @@ func (v *validator) errorf(format string, args ...any) {
 	v.errs = append(v.errs, fmt.Errorf(format, args...))
 }
 
+func (v *validator) posErr(pos spec.Pos, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	if s := pos.String(); s != "" {
+		v.errs = append(v.errs, fmt.Errorf("%s: %s", s, msg))
+	} else {
+		v.errs = append(v.errs, fmt.Errorf("%s", msg))
+	}
+}
+
 func (v *validator) validateContract(scope *parser.Scope) {
 	if scope.Contract == nil {
 		return
@@ -139,7 +148,7 @@ func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) 
 		}
 
 		if _, ok := outputFields[fieldName]; !ok {
-			v.errorf("scope %q, scenario %q: then target %q does not match any output field",
+			v.posErr(a.Pos, "scope %q, scenario %q: then target %q does not match any output field",
 				v.scope, sc.Name, a.Target)
 		}
 	}
@@ -224,7 +233,7 @@ func (v *validator) checkGivenCompleteness(
 	}
 	for name, f := range inputFields {
 		if !f.Type.Optional && !assigned[name] {
-			v.errorf("scope %q, scenario %q: missing required field %q",
+			v.posErr(sc.Given.Pos, "scope %q, scenario %q: missing required field %q",
 				v.scope, sc.Name, name)
 		}
 	}
@@ -241,9 +250,9 @@ func topLevelField(path string) string {
 
 func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context string) {
 	// LiteralNull is valid only for optional types
-	if _, isNull := expr.(parser.LiteralNull); isNull {
+	if nl, isNull := expr.(parser.LiteralNull); isNull {
 		if !te.Optional {
-			v.errorf("%s: null is not valid for non-optional type %s", context, typeName(te))
+			v.posErr(nl.Pos, "%s: null is not valid for non-optional type %s", context, typeName(te))
 		}
 		return
 	}
@@ -268,7 +277,7 @@ func (v *validator) checkExprType(expr parser.Expr, te parser.TypeExpr, context 
 
 func (v *validator) checkIntType(expr parser.Expr, context string) {
 	if _, ok := expr.(parser.LiteralInt); !ok && !isNonLiteral(expr) {
-		v.errorf("%s: expected int, got %s", context, exprTypeName(expr))
+		v.posErr(exprPos(expr), "%s: expected int, got %s", context, exprTypeName(expr))
 	}
 }
 
@@ -278,20 +287,20 @@ func (v *validator) checkFloatType(expr parser.Expr, context string) {
 		// ok — accept int literals for float fields
 	default:
 		if !isNonLiteral(expr) {
-			v.errorf("%s: expected float, got %s", context, exprTypeName(expr))
+			v.posErr(exprPos(expr), "%s: expected float, got %s", context, exprTypeName(expr))
 		}
 	}
 }
 
 func (v *validator) checkStringType(expr parser.Expr, context string) {
 	if _, ok := expr.(parser.LiteralString); !ok && !isNonLiteral(expr) {
-		v.errorf("%s: expected string, got %s", context, exprTypeName(expr))
+		v.posErr(exprPos(expr), "%s: expected string, got %s", context, exprTypeName(expr))
 	}
 }
 
 func (v *validator) checkBoolType(expr parser.Expr, context string) {
 	if _, ok := expr.(parser.LiteralBool); !ok && !isNonLiteral(expr) {
-		v.errorf("%s: expected bool, got %s", context, exprTypeName(expr))
+		v.posErr(exprPos(expr), "%s: expected bool, got %s", context, exprTypeName(expr))
 	}
 }
 
@@ -299,7 +308,7 @@ func (v *validator) checkEnumType(expr parser.Expr, te parser.TypeExpr, context 
 	str, ok := expr.(parser.LiteralString)
 	if !ok {
 		if !isNonLiteral(expr) {
-			v.errorf("%s: expected enum value, got %s", context, exprTypeName(expr))
+			v.posErr(exprPos(expr), "%s: expected enum value, got %s", context, exprTypeName(expr))
 		}
 		return
 	}
@@ -308,7 +317,7 @@ func (v *validator) checkEnumType(expr parser.Expr, te parser.TypeExpr, context 
 			return
 		}
 	}
-	v.errorf("%s: %q is not a valid enum variant (expected one of %v)",
+	v.posErr(str.Pos, "%s: %q is not a valid enum variant (expected one of %v)",
 		context, str.Value, te.Variants)
 }
 
@@ -316,7 +325,7 @@ func (v *validator) checkArrayType(expr parser.Expr, te parser.TypeExpr, context
 	arr, ok := expr.(parser.ArrayLiteral)
 	if !ok {
 		if !isNonLiteral(expr) {
-			v.errorf("%s: expected array, got %s", context, exprTypeName(expr))
+			v.posErr(exprPos(expr), "%s: expected array, got %s", context, exprTypeName(expr))
 		}
 		return
 	}
@@ -331,7 +340,7 @@ func (v *validator) checkModelType(expr parser.Expr, te parser.TypeExpr, context
 	obj, ok := expr.(parser.ObjectLiteral)
 	if !ok {
 		if !isNonLiteral(expr) {
-			v.errorf("%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
+			v.posErr(exprPos(expr), "%s: expected %s (object), got %s", context, te.Name, exprTypeName(expr))
 		}
 		return
 	}
@@ -346,11 +355,60 @@ func (v *validator) checkModelType(expr parser.Expr, te parser.TypeExpr, context
 	for _, of := range obj.Fields {
 		mf, ok := modelFields[of.Key]
 		if !ok {
-			v.errorf("%s: unknown field %q in model %s", context, of.Key, te.Name)
+			v.posErr(of.Pos, "%s: unknown field %q in model %s", context, of.Key, te.Name)
 			continue
 		}
 		v.checkExprType(of.Value, mf.Type, fmt.Sprintf("%s.%s", context, of.Key))
 	}
+}
+
+// exprPos extracts the Pos from any Expr node.
+func exprPos(expr parser.Expr) spec.Pos {
+	switch e := expr.(type) {
+	case parser.LiteralInt:
+		return e.Pos
+	case parser.LiteralFloat:
+		return e.Pos
+	case parser.LiteralString:
+		return e.Pos
+	case parser.LiteralBool:
+		return e.Pos
+	case parser.LiteralNull:
+		return e.Pos
+	case parser.FieldRef:
+		return e.Pos
+	case parser.BinaryOp:
+		return e.Pos
+	case parser.UnaryOp:
+		return e.Pos
+	case parser.ObjectLiteral:
+		return e.Pos
+	case parser.ArrayLiteral:
+		return e.Pos
+	case parser.EnvRef:
+		return e.Pos
+	case parser.ServiceRef:
+		return e.Pos
+	case parser.LenExpr:
+		return e.Pos
+	case parser.AllExpr:
+		return e.Pos
+	case parser.AnyExpr:
+		return e.Pos
+	case parser.ContainsExpr:
+		return e.Pos
+	case parser.ExistsExpr:
+		return e.Pos
+	case parser.HasKeyExpr:
+		return e.Pos
+	case parser.RegexLiteral:
+		return e.Pos
+	case parser.IfExpr:
+		return e.Pos
+	case parser.AdapterCall:
+		return e.Pos
+	}
+	return spec.Pos{}
 }
 
 // isNonLiteral returns true for expressions that can't be statically type-checked.
@@ -389,8 +447,7 @@ func (v *validator) validateServiceRefs(spec *parser.Spec) {
 		if hasCompose || declared[ref.Name] {
 			continue
 		}
-		v.errs = append(v.errs,
-			fmt.Errorf("target field %q: service(%s) references undeclared service", key, ref.Name))
+		v.posErr(ref.Pos, "target field %q: service(%s) references undeclared service", key, ref.Name)
 	}
 }
 
@@ -514,18 +571,31 @@ func formatScopeErrors(b *strings.Builder, name string, se *scopeErrors) {
 }
 
 // extractScope parses 'scope "name", rest' from an error message.
+// Handles optional position prefixes like "file:line:col: scope ..." or "line:col: scope ...".
+// The position prefix is preserved in `rest` so it appears in the formatted output.
 func extractScope(msg string) (scope, rest string, ok bool) {
 	const prefix = "scope \""
-	if !strings.HasPrefix(msg, prefix) {
-		return "", "", false
+
+	// Try direct match first (no position prefix).
+	s := msg
+	posPrefix := ""
+	if !strings.HasPrefix(s, prefix) {
+		// Skip position prefix: find "scope \"" anywhere after a ": " separator.
+		idx := strings.Index(s, ": "+prefix)
+		if idx < 0 {
+			return "", "", false
+		}
+		posPrefix = s[:idx+2] // e.g., "file:line:col: "
+		s = s[idx+2:]
 	}
-	msg = msg[len(prefix):]
-	idx := strings.Index(msg, "\"")
+	s = s[len(prefix):]
+	idx := strings.Index(s, "\"")
 	if idx < 0 {
 		return "", "", false
 	}
-	scope = msg[:idx]
-	rest = strings.TrimLeft(msg[idx+1:], ", ")
+	scope = s[:idx]
+	detail := strings.TrimLeft(s[idx+1:], ", ")
+	rest = posPrefix + detail
 	return scope, rest, true
 }
 
@@ -560,7 +630,7 @@ func (v *validator) validateTypeExpr(te parser.TypeExpr, context string) {
 		}
 	default:
 		if _, ok := v.models[te.Name]; !ok {
-			v.errorf("%s: unknown type %q", context, te.Name)
+			v.posErr(te.Pos, "%s: unknown type %q", context, te.Name)
 		}
 	}
 }
