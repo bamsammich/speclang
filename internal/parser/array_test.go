@@ -9,7 +9,6 @@ func TestParseArrayType(t *testing.T) {
 spec Test {
   model Item { name: string }
   scope test {
-    use http
     contract {
       input {
         tags: []string
@@ -70,7 +69,6 @@ func TestParseMapType(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         metadata: map[string, int]
@@ -113,7 +111,6 @@ func TestParseArrayLiteral(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { items: []int }
       output { ok: bool }
@@ -123,7 +120,7 @@ spec Test {
         items: [1, 2, 3]
       }
       then {
-        ok: true
+        ok == true
       }
     }
   }
@@ -159,7 +156,6 @@ func TestParseLenExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         items: []int { len(items) > 0 }
@@ -197,14 +193,13 @@ func TestParseArrayLiteral_Empty(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { items: []int }
       output { ok: bool }
     }
     scenario smoke {
       given { items: [] }
-      then { ok: true }
+      then { ok == true }
     }
   }
 }
@@ -226,14 +221,13 @@ func TestParseArrayLiteral_Nested(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { matrix: [][]int }
       output { ok: bool }
     }
     scenario smoke {
       given { matrix: [[1, 2], [3, 4]] }
-      then { ok: true }
+      then { ok == true }
     }
   }
 }
@@ -266,7 +260,6 @@ spec Test {
     price: int
   }
   scope test {
-    use http
     contract {
       input { items: []Item }
       output { total: int }
@@ -278,7 +271,7 @@ spec Test {
           { name: "gadget", price: 200 }
         ]
       }
-      then { total: 300 }
+      then { total == 300 }
     }
   }
 }
@@ -307,14 +300,13 @@ func TestParseArrayLiteral_TrailingComma(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { items: []int }
       output { ok: bool }
     }
     scenario smoke {
       given { items: [1, 2, 3,] }
-      then { ok: true }
+      then { ok == true }
     }
   }
 }
@@ -333,7 +325,6 @@ func TestParseContainsExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input {
         msg: string
@@ -380,7 +371,6 @@ func TestParseContainsExpr_MissingComma(t *testing.T) {
 	_, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { msg: string }
       output { ok: bool }
@@ -400,14 +390,13 @@ func TestParseArrayLiteral_Unterminated(t *testing.T) {
 	_, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { items: []int }
       output { ok: bool }
     }
     scenario smoke {
       given { items: [1, 2 }
-      then { ok: true }
+      then { ok == true }
     }
   }
 }

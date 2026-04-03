@@ -11,36 +11,36 @@ Convert natural language requirements into speclang specification files.
 
 1. Read the language syntax reference: [references/api_reference.md](references/api_reference.md)
 2. Understand what the user wants to build
-3. Identify the plugin (`http` for APIs, `process` for CLI tools, `playwright` for browser UIs)
+3. Identify the adapter(s) needed (`http` for APIs, `process` for CLI tools, `playwright` for browser UIs)
 4. Write the spec following the structure below
 
 ## Spec Writing Checklist
 
 - [ ] If the user has an OpenAPI spec, use `import openapi("path")` to import models and scopes
 - [ ] `spec <Name>` with a `description` explaining what the system is
-- [ ] `target` block with connection config (plugin-dependent)
-- [ ] If using Docker: `services` block in `target` with container definitions, and `service(name)` for URLs
-- [ ] For `playwright` specs: `locators` block declaring all named element locators
-- [ ] For `playwright` specs: `action` blocks for reusable UI sequences (login, navigation)
+- [ ] Adapter config blocks at spec level (`http {}`, `playwright {}`, `process {}`) with connection config
+- [ ] If using Docker: `services` block with container definitions, and `service(name)` for URLs
 - [ ] `model` blocks for shared data structures
-- [ ] One `scope` per logical operation, endpoint, or page flow — each with `use <plugin>`
-- [ ] `contract` with typed `input` and `output` in each scope
+- [ ] Spec-level `action` blocks for reusable flows (login, setup) with typed params, `let`, `return`
+- [ ] One `scope` per logical operation, endpoint, or page flow
+- [ ] Scope-level `action` blocks for scope-private logic
+- [ ] `contract` with typed `input`, `output`, and `action:` referencing a named action
 - [ ] At least one `scenario` with `given` as a concrete smoke test
 - [ ] `scenario` with `when` for edge cases that should be tested generatively
 - [ ] `invariant` blocks for universal properties (conservation laws, non-negativity, idempotency)
 - [ ] Comments (`#`) explaining the intent of each invariant and scenario
 
-**Note:** `use <plugin>` goes inside each `scope` block, not at spec level.
+**Note:** Adapters are configured at spec level and called inline as `adapter.method(args)` — there is no `use` directive.
 
-## Choosing a Plugin
+## Choosing an Adapter
 
-| Plugin | Use when |
-|--------|----------|
-| `use http` | Testing a REST API |
-| `use process` | Testing a CLI tool or subprocess |
-| `use playwright` | Testing a browser UI |
+| Adapter | Use when |
+|---------|----------|
+| `http` | Testing a REST API |
+| `process` | Testing a CLI tool or subprocess |
+| `playwright` | Testing a browser UI |
 
-A single spec can have scopes with different plugins. For example, an app spec might have `use http` scopes for its API and `use playwright` scopes for its UI.
+A single spec can use multiple adapters. A single scope can mix adapters — call `http.post(...)` and `playwright.goto(...)` in the same action.
 
 ## Choosing Scenario Types
 
@@ -50,7 +50,7 @@ A single spec can have scopes with different plugins. For example, an app spec m
 | `when` scenario | An entire class of inputs should produce the same outcome | "Any amount exceeding balance should fail" |
 | `invariant` | A property that must hold universally | "Money is conserved across transfers" |
 
-**Prefer relational assertions in `then` blocks** — write `from.balance: from.balance - amount` instead of `from.balance: 70`. This computes the expected value from the input, so the assertion adapts to any input and resists memorization. Literal values are still supported where appropriate (e.g., `error: null`).
+**Prefer relational assertions in `then` blocks** — write `from.balance == from.balance - amount` instead of `from.balance == 70`. This computes the expected value from the input, so the assertion adapts to any input and resists memorization. Literal values are still supported where appropriate (e.g., `error == null`).
 
 **Prefer invariants over scenarios when possible.** Invariants are the strongest form of verification — they test across the full input space, not just a slice.
 
@@ -61,15 +61,15 @@ Use the `error` pseudo-field in `then` blocks to assert that an action should fa
 ```
 scenario missing_element {
   given {
-    playwright.click(nonexistent)
+    playwright.click('[data-testid="nonexistent"]')
   }
   then {
-    error: "element not found"
+    error == "element not found"
   }
 }
 ```
 
-Use `error: null` to assert that no error occurred. This only works when `error` is NOT a contract output field. If `error` IS declared in the output (like `output { error: string? }`), it's treated as a normal response field.
+Use `error == null` to assert that no error occurred. This only works when `error` is NOT a contract output field. If `error` IS declared in the output (like `output { error: string? }`), it's treated as a normal response field.
 
 ## Writing Good Invariants
 
@@ -107,7 +107,7 @@ For UI specs, invariants over visible state are also useful:
 ```
 invariant no_welcome_on_failure {
   when ok == false:
-    welcome@playwright.visible: false
+    playwright.visible('[data-testid="welcome"]') == false
 }
 ```
 
@@ -121,70 +121,89 @@ amount: int { 0 < amount <= from.balance }
 
 This ensures the generator only produces valid transfer amounts, so scenarios and invariants test meaningful inputs.
 
+## Custom Actions
+
+Actions are reusable, parameterized, and can return values. Define them at spec level (shared across scopes) or scope level (private).
+
+```
+# Spec-level action — reusable across scopes
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+  return result.body
+}
+
+# Scope-level action — private to scope
+scope transfer {
+  action transfer(from: Account, to: Account, amount: int) {
+    let result = http.post("/api/v1/accounts/transfer", {
+      from: from, to: to, amount: amount
+    })
+    return result.body
+  }
+}
+```
+
+Key points:
+- `let` creates immutable bindings — capture adapter responses, extract fields
+- `return` sends a value back to the caller
+- Actions can call other actions: `let session = login("admin", "test")`
+- Contract `action:` references an action by name — the runtime maps contract input fields to action parameters
+
+## Let Bindings
+
+Use `let` to name intermediate values in `before` blocks and action bodies:
+
+```
+before {
+  let session = login("admin", "test")
+  let token = session.access_token
+  http.header("Authorization", "Bearer " + token)
+}
+```
+
+`let` bindings are:
+- Immutable (no reassignment)
+- Scoped to the block they appear in
+- Available in subsequent lines of the same block
+
 ## Playwright-Specific Guidance
 
-### Locators
+### Selectors
 
-Declare all UI element locators in the spec-level `locators` block. Use descriptive names that match the element's role:
-
-```
-locators {
-  username_field: [data-testid=username]
-  submit_btn:     [data-testid=submit]
-  error_msg:      [data-testid=error]
-}
-```
-
-Prefer `data-testid` attributes over CSS classes or IDs — they're stable across styling changes.
-
-### Action Blocks
-
-Extract repeated UI flows into named `action` blocks:
+Use inline CSS selectors as string arguments. Prefer `data-testid` attributes — they're stable across styling changes. Single-quoted strings work for selectors containing double quotes:
 
 ```
-action login(user, pass) {
-  playwright.fill(username_field, user)
-  playwright.fill(password_field, pass)
-  playwright.click(submit_btn)
-  playwright.wait(welcome)
-}
+playwright.fill('[data-testid="username"]', "alice")
+playwright.click('[data-testid="submit"]')
 ```
 
-Then call them from `given` blocks:
+### Mixed Adapter Scopes
+
+A scope can mix adapters freely. For example, authenticate via HTTP then verify the UI:
 
 ```
-given {
-  login("alice", "secret")
-  user: "alice"
-}
-```
-
-### Mixed `given` Blocks
-
-`given` blocks can interleave action calls and data assignments. Steps run in order:
-
-```
-given {
-  playwright.fill(amount_field, "50")
-  from_balance: 100
-  playwright.click(transfer_btn)
-  to_id: "bob"
+action authenticate(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+  playwright.goto("/dashboard")
+  return result.body
 }
 ```
 
 ### Assertion Syntax
 
-Use `locator@playwright.property: expected` in `then` blocks:
+Use `adapter.method(args) == expected` in `then` and invariant blocks:
 
 ```
 then {
-  welcome@playwright.visible: true
-  welcome@playwright.text: "Welcome, alice"
-  error_msg@playwright.visible: false
+  playwright.visible('[data-testid="welcome"]') == true
+  playwright.text('[data-testid="welcome"]') == "Welcome, alice"
+  playwright.visible('[data-testid="error"]') == false
 }
 ```
 
-Available assertion properties: `visible`, `text`, `value`, `checked`, `disabled`, `count`, `attribute.<name>`.
+Available assertion methods: `visible`, `text`, `value`, `checked`, `disabled`, `count`, `attribute.<name>`.
 
 ## File Organization
 
@@ -192,12 +211,12 @@ For small specs, a single file is fine. For larger systems, split by concern:
 
 ```
 specs/
-├── myapp.spec              # root: spec name, target, locators, includes
+├── myapp.spec              # root: spec name, adapter configs, includes
 ├── models/
 │   └── user.spec           # model User { ... }
 └── scopes/
-    ├── auth.spec            # scope login { use playwright ... }
-    └── transfer.spec        # scope transfer { use http ... }
+    ├── auth.spec            # scope login { ... }
+    └── transfer.spec        # scope transfer { ... }
 ```
 
 ## Output
@@ -208,7 +227,7 @@ After writing the spec, tell the user how to verify it:
 specrun verify path/to/spec.spec
 ```
 
-If the spec declares `services` in the `target` block, Docker must be available on the host. The containers will be managed automatically by `specrun verify`.
+If the spec declares `services`, Docker must be available on the host. The containers will be managed automatically by `specrun verify`.
 
 If the spec needs a running server or binary without services, mention the setup required. For `playwright` specs, the user also needs:
 

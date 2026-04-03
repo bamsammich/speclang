@@ -1,14 +1,17 @@
 package runner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"reflect"
 	"strings"
 
-	"github.com/bamsammich/speclang/v2/internal/adapter"
-	"github.com/bamsammich/speclang/v2/internal/generator"
-	"github.com/bamsammich/speclang/v2/internal/parser"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/generator"
+	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // errorPseudoField is the name of the pseudo-field used to assert against action errors.
@@ -47,14 +50,16 @@ func (r *Runner) SetN(n int) {
 
 // scopeRunner holds per-scope state for running scenarios and invariants.
 type scopeRunner struct {
+	ctx             context.Context
 	runner          *Runner
-	adapter         adapter.Adapter // resolved from scope.Use
+	adapter         adapter.Adapter // resolved from scope.Use (v2 only, nil in v3)
 	generator       *generator.Generator
 	scopeDef        *parser.Scope
 	scope           string
 	path            string
 	method          string
-	lastActionError string // captured when an action returns {ok: false}
+	lastActionError string         // captured when an action returns {ok: false}
+	lastOutput      map[string]any // captured output from the last action execution
 }
 
 func (sr *scopeRunner) scenarios() []*parser.Scenario {
@@ -66,11 +71,11 @@ func (sr *scopeRunner) invariants() []*parser.Invariant {
 }
 
 // Verify runs all scopes' scenarios and invariants, returning results.
-func (r *Runner) Verify() (*Result, error) {
+func (r *Runner) Verify(ctx context.Context) (*Result, error) {
 	res := &Result{Spec: r.spec.Name}
 
 	for _, scope := range r.spec.Scopes {
-		sr, err := r.newScopeRunner(scope)
+		sr, err := r.newScopeRunner(ctx, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -82,22 +87,40 @@ func (r *Runner) Verify() (*Result, error) {
 	return res, nil
 }
 
-func (r *Runner) newScopeRunner(scope *parser.Scope) (*scopeRunner, error) {
+func (r *Runner) newScopeRunner(ctx context.Context, scope *parser.Scope) (*scopeRunner, error) {
+	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
+
+	sr := &scopeRunner{
+		ctx:       ctx,
+		runner:    r,
+		generator: gen,
+		scopeDef:  scope,
+		scope:     scope.Name,
+	}
+
+	// v3 path: no Use directive, adapters resolved per-call
+	if scope.Use == "" {
+		return sr, nil
+	}
+
+	// v2 compat path: single adapter per scope via Use directive
 	adp, ok := r.adapters[scope.Use]
 	if !ok {
 		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", scope.Use, scope.Name)
 	}
-	gen := generator.New(scope.Contract, r.spec.Models, r.seed)
-	method := strings.ToUpper(evalConfigString(scope.Config, "method"))
-	return &scopeRunner{
-		runner:    r,
-		adapter:   adp,
-		generator: gen,
-		scopeDef:  scope,
-		scope:     scope.Name,
-		path:      evalConfigString(scope.Config, "path"),
-		method:    method,
-	}, nil
+	sr.adapter = adp
+	sr.path = evalConfigString(scope.Config, "path")
+	sr.method = strings.ToUpper(evalConfigString(scope.Config, "method"))
+	return sr, nil
+}
+
+// resolveAdapter looks up an adapter by name from the runner's adapter map.
+func (sr *scopeRunner) resolveAdapter(name string) (adapter.Adapter, error) {
+	adp, ok := sr.runner.adapters[name]
+	if !ok {
+		return nil, fmt.Errorf("no adapter for plugin %q in scope %q", name, sr.scope)
+	}
+	return adp, nil
 }
 
 func (sr *scopeRunner) run(res *Result) error {
@@ -168,12 +191,21 @@ func evalConfigString(config map[string]parser.Expr, key string) string {
 }
 
 // executeInput sends an input map to the adapter and returns the parsed response.
-// When expectError is true, an action returning {ok: false} is captured as an
-// assertable error instead of failing the test. The captured error string is
-// stored in sr.lastActionError.
+// In v3 mode (contract has an action), it dispatches through the named action.
+// In v2 mode (scope has Use/Config), it builds the action from config.
+// The captured error string is stored in sr.lastActionError.
 func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error) {
 	sr.lastActionError = ""
+	sr.lastOutput = nil
 
+	// v3 path: contract references a named action
+	if sr.scopeDef.Contract != nil && sr.scopeDef.Contract.Action != "" {
+		output, err := sr.executeContractAction(input)
+		sr.lastOutput = output
+		return output, err
+	}
+
+	// v2 compat path: build action from scope config
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling input: %w", err)
@@ -184,7 +216,7 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 		return nil, err
 	}
 
-	resp, err := sr.adapter.Action(actionName, args)
+	resp, err := sr.adapter.Call(sr.ctx, actionName, args)
 	if err != nil {
 		return nil, fmt.Errorf("executing action %q: %w", actionName, err)
 	}
@@ -197,7 +229,211 @@ func (sr *scopeRunner) executeInput(input map[string]any) (map[string]any, error
 	if err := json.Unmarshal(resp.Actual, &output); err != nil {
 		return nil, fmt.Errorf("parsing response: %w", err)
 	}
+	sr.lastOutput = output
 	return output, nil
+}
+
+// executeContractAction looks up the contract's named action and executes its body.
+// The input map fields are bound as action parameters.
+func (sr *scopeRunner) executeContractAction(input map[string]any) (map[string]any, error) {
+	actionName := sr.scopeDef.Contract.Action
+	actionDef := sr.findAction(actionName)
+	if actionDef == nil {
+		return nil, fmt.Errorf("scope %q: contract references undefined action %q", sr.scope, actionName)
+	}
+
+	// Build parameter context from input map
+	ctx := make(map[string]any, len(input))
+	for k, v := range input {
+		ctx[k] = v
+	}
+
+	return sr.executeActionBody(actionDef, ctx)
+}
+
+// findAction looks up an action by name, first in the scope, then at spec level.
+func (sr *scopeRunner) findAction(name string) *parser.ActionDef {
+	for _, a := range sr.scopeDef.Actions {
+		if a.Name == name {
+			return a
+		}
+	}
+	for _, a := range sr.runner.spec.Actions {
+		if a.Name == name {
+			return a
+		}
+	}
+	return nil
+}
+
+// executeActionBody executes an action's body steps and returns the output.
+// Handles LetBinding, AdapterCall, ReturnStmt, and legacy Call steps.
+func (sr *scopeRunner) executeActionBody(action *parser.ActionDef, ctx map[string]any) (map[string]any, error) {
+	var returnVal any
+
+	for _, step := range action.Body {
+		switch s := step.(type) {
+		case *parser.LetBinding:
+			val, err := sr.evalActionExpr(s.Value, ctx)
+			if err != nil {
+				return nil, fmt.Errorf("action %q, let %q: %w", action.Name, s.Name, err)
+			}
+			ctx[s.Name] = val
+
+		case *parser.AdapterCall:
+			resp, err := sr.executeAdapterCall(s, ctx)
+			if err != nil {
+				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Adapter, s.Method, err)
+			}
+			if !resp.OK {
+				sr.lastActionError = resp.Error
+				return nil, nil
+			}
+			// Store response as "body" for subsequent steps
+			if len(resp.Actual) > 0 {
+				var parsed any
+				if err := json.Unmarshal(resp.Actual, &parsed); err == nil {
+					ctx["body"] = parsed
+				}
+			}
+
+		case *parser.ReturnStmt:
+			val, err := sr.evalActionExpr(s.Value, ctx)
+			if err != nil {
+				return nil, fmt.Errorf("action %q return: %w", action.Name, err)
+			}
+			returnVal = val
+
+		case *parser.Call:
+			adp, err := sr.resolveAdapterForCall(s.Namespace)
+			if err != nil {
+				return nil, err
+			}
+			args, err := sr.marshalCallArgs(s, ctx)
+			if err != nil {
+				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Namespace, s.Method, err)
+			}
+			resp, err := adp.Call(sr.ctx, s.Method, args)
+			if err != nil {
+				return nil, fmt.Errorf("action %q, %s.%s: %w", action.Name, s.Namespace, s.Method, err)
+			}
+			if !resp.OK {
+				sr.lastActionError = resp.Error
+				return nil, nil
+			}
+			if len(resp.Actual) > 0 {
+				var parsed any
+				if err := json.Unmarshal(resp.Actual, &parsed); err == nil {
+					ctx["body"] = parsed
+				}
+			}
+		}
+	}
+
+	// Convert return value or body to output map
+	if returnVal != nil {
+		if m, ok := returnVal.(map[string]any); ok {
+			return m, nil
+		}
+		// Wrap non-map return in a body key
+		return map[string]any{"body": returnVal}, nil
+	}
+	if body, ok := ctx["body"]; ok {
+		if m, ok := body.(map[string]any); ok {
+			return m, nil
+		}
+	}
+	return nil, nil
+}
+
+// evalActionExpr evaluates an expression in an action context.
+// Handles AdapterCall expressions (right side of let) and standard expressions.
+func (sr *scopeRunner) evalActionExpr(expr parser.Expr, ctx map[string]any) (any, error) {
+	switch e := expr.(type) {
+	case parser.AdapterCall:
+		resp, err := sr.executeAdapterCallVal(e, ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.OK {
+			sr.lastActionError = resp.Error
+			return nil, nil
+		}
+		var parsed any
+		if err := json.Unmarshal(resp.Actual, &parsed); err != nil {
+			return nil, fmt.Errorf("parsing response: %w", err)
+		}
+		return parsed, nil
+	case *parser.AdapterCall:
+		resp, err := sr.executeAdapterCall(e, ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.OK {
+			sr.lastActionError = resp.Error
+			return nil, nil
+		}
+		var parsed any
+		if err := json.Unmarshal(resp.Actual, &parsed); err != nil {
+			return nil, fmt.Errorf("parsing response: %w", err)
+		}
+		return parsed, nil
+	default:
+		val, ok := generator.Eval(expr, ctx)
+		if !ok {
+			return nil, fmt.Errorf("could not evaluate expression")
+		}
+		return val, nil
+	}
+}
+
+// executeAdapterCallVal is the value-type variant of executeAdapterCall.
+func (sr *scopeRunner) executeAdapterCallVal(call parser.AdapterCall, ctx map[string]any) (*spec.Response, error) {
+	adp, err := sr.resolveAdapterForCall(call.Adapter)
+	if err != nil {
+		return nil, err
+	}
+
+	var resolved []any
+	for _, arg := range call.Args {
+		val, _ := generator.Eval(arg, ctx)
+		resolved = append(resolved, val)
+	}
+	args, err := json.Marshal(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling args: %w", err)
+	}
+
+	return adp.Call(sr.ctx, call.Method, args)
+}
+
+// executeAdapterCall executes an AdapterCall step, resolving the adapter by name.
+func (sr *scopeRunner) executeAdapterCall(call *parser.AdapterCall, ctx map[string]any) (*spec.Response, error) {
+	adp, err := sr.resolveAdapterForCall(call.Adapter)
+	if err != nil {
+		return nil, err
+	}
+
+	var resolved []any
+	for _, arg := range call.Args {
+		val, _ := generator.Eval(arg, ctx)
+		resolved = append(resolved, val)
+	}
+	args, err := json.Marshal(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling args: %w", err)
+	}
+
+	return adp.Call(sr.ctx, call.Method, args)
+}
+
+// resolveAdapterForCall resolves an adapter by namespace. In v2 mode (single
+// adapter), returns sr.adapter. In v3 mode, looks up by name.
+func (sr *scopeRunner) resolveAdapterForCall(namespace string) (adapter.Adapter, error) {
+	if sr.adapter != nil && (namespace == "" || namespace == sr.scopeDef.Use) {
+		return sr.adapter, nil
+	}
+	return sr.resolveAdapter(namespace)
 }
 
 // buildAction constructs the adapter action call based on scope config.
@@ -291,7 +527,7 @@ func fieldToString(val any) string {
 // executeBefore resets the adapter to clean state, then executes the scope's
 // before block steps. Returns the input context from before assignments.
 func (sr *scopeRunner) executeBefore() (map[string]any, error) {
-	if err := sr.adapter.Reset(); err != nil {
+	if err := sr.resetAdapters(); err != nil {
 		return nil, fmt.Errorf("resetting adapter: %w", err)
 	}
 	sr.lastActionError = ""
@@ -303,10 +539,36 @@ func (sr *scopeRunner) executeBefore() (map[string]any, error) {
 	return sr.executeGivenSteps(sr.scopeDef.Before.Steps)
 }
 
+// executeAfter runs the scope's after block steps. Errors are logged to stderr
+// but never propagated — cleanup must not affect test results.
+func (sr *scopeRunner) executeAfter() {
+	if sr.scopeDef.After == nil {
+		return
+	}
+	if _, err := sr.executeGivenSteps(sr.scopeDef.After.Steps); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: after block in scope %q: %v\n", sr.scope, err)
+	}
+}
+
+// resetAdapters resets the adapter state. In v2 mode (single adapter), resets
+// that adapter. In v3 mode, resets all adapters in the runner.
+func (sr *scopeRunner) resetAdapters() error {
+	if sr.adapter != nil {
+		return sr.adapter.Reset()
+	}
+	for name, adp := range sr.runner.adapters {
+		if err := adp.Reset(); err != nil {
+			return fmt.Errorf("adapter %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func (sr *scopeRunner) runGivenScenario(sc *parser.Scenario) (CheckResult, error) {
 	if _, err := sr.executeBefore(); err != nil {
 		return CheckResult{}, fmt.Errorf("before block: %w", err)
 	}
+	defer sr.executeAfter()
 
 	input, err := sr.executeGivenInput(sc)
 	if err != nil {
@@ -383,11 +645,15 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 			val, _ := generator.Eval(s.Value, input)
 			setPath(input, s.Path, val)
 		case *parser.Call:
+			adp, err := sr.resolveAdapterForCall(s.Namespace)
+			if err != nil {
+				return nil, fmt.Errorf("resolving adapter for %s.%s: %w", s.Namespace, s.Method, err)
+			}
 			args, err := sr.marshalCallArgs(s, input)
 			if err != nil {
 				return nil, fmt.Errorf("marshaling args for %s.%s: %w", s.Namespace, s.Method, err)
 			}
-			resp, err := sr.adapter.Action(s.Method, args)
+			resp, err := adp.Call(sr.ctx, s.Method, args)
 			if err != nil {
 				return nil, fmt.Errorf("executing %s.%s: %w", s.Namespace, s.Method, err)
 			}
@@ -407,6 +673,32 @@ func (sr *scopeRunner) executeGivenSteps(steps []parser.GivenStep) (map[string]a
 					input["body"] = parsed
 				}
 			}
+		case *parser.AdapterCall:
+			resp, err := sr.executeAdapterCall(s, input)
+			if err != nil {
+				return nil, fmt.Errorf("executing %s.%s: %w", s.Adapter, s.Method, err)
+			}
+			if !resp.OK {
+				sr.lastActionError = resp.Error
+				return input, fmt.Errorf(
+					"action %s.%s failed: %s",
+					s.Adapter,
+					s.Method,
+					resp.Error,
+				)
+			}
+			if len(resp.Actual) > 0 {
+				var parsed any
+				if err := json.Unmarshal(resp.Actual, &parsed); err == nil {
+					input["body"] = parsed
+				}
+			}
+		case *parser.LetBinding:
+			val, err := sr.evalActionExpr(s.Value, input)
+			if err != nil {
+				return nil, fmt.Errorf("evaluating let %q: %w", s.Name, err)
+			}
+			input[s.Name] = val
 		}
 	}
 	return input, nil
@@ -481,6 +773,7 @@ func (sr *scopeRunner) runWhenIteration(
 	if _, err := sr.executeBefore(); err != nil {
 		return nil, fmt.Errorf("before block: %w", err)
 	}
+	defer sr.executeAfter()
 
 	input, err := sr.generator.GenerateMatching(predicate)
 	if err != nil {
@@ -531,7 +824,7 @@ func hasPluginAssertions(assertions []*parser.Assertion) bool {
 
 // newPageWithNavigation creates a fresh page and navigates to the scope's configured URL.
 func (sr *scopeRunner) newPageWithNavigation() error {
-	resp, err := sr.adapter.Action("new_page", nil)
+	resp, err := sr.adapter.Call(sr.ctx, "new_page", nil)
 	if err != nil {
 		return fmt.Errorf("creating new page: %w", err)
 	}
@@ -545,7 +838,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 		if err != nil {
 			return fmt.Errorf("marshaling goto args: %w", err)
 		}
-		resp, err := sr.adapter.Action("goto", args)
+		resp, err := sr.adapter.Call(sr.ctx, "goto", args)
 		if err != nil {
 			return fmt.Errorf("navigating to %q: %w", url, err)
 		}
@@ -558,7 +851,7 @@ func (sr *scopeRunner) newPageWithNavigation() error {
 
 // closePage closes the current page via the adapter.
 func (sr *scopeRunner) closePage() error {
-	resp, err := sr.adapter.Action("close_page", nil)
+	resp, err := sr.adapter.Call(sr.ctx, "close_page", nil)
 	if err != nil {
 		return err
 	}
@@ -628,11 +921,73 @@ func (sr *scopeRunner) checkThenAssertions(
 	return nil, nil
 }
 
+// checkExprAssertion evaluates a v3 expression assertion (where Expr is a BinaryOp
+// like `from.balance == from.balance - amount`). The context includes both the given
+// input and the action output, allowing field references to resolve against output.
+func (sr *scopeRunner) checkExprAssertion(
+	name string,
+	input map[string]any,
+	a *parser.Assertion,
+) (*Failure, error) {
+	// Build assertion context: output fields are directly accessible,
+	// input fields accessible as-is (for given references like amount).
+	ctx := make(map[string]any)
+	// Input values first (from given block)
+	for k, v := range input {
+		ctx[k] = v
+	}
+	// Output values overlay (from action response)
+	if sr.lastOutput != nil {
+		for k, v := range sr.lastOutput {
+			ctx[k] = v
+		}
+	}
+	// Also provide namespaced access
+	ctx["input"] = input
+	ctx["output"] = sr.lastOutput
+
+	// Handle error pseudo-field in expression assertions
+	if sr.lastActionError != "" {
+		ctx["error"] = sr.lastActionError
+	} else if _, hasError := ctx["error"]; !hasError {
+		// If no error occurred and no error in output, set to nil
+		ctx["error"] = nil
+	}
+
+	exprStr := spec.FormatExpr(a.Expr)
+	val, ok := generator.Eval(a.Expr, ctx)
+	if !ok {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Description: fmt.Sprintf("then assertion could not be evaluated: %s", exprStr),
+		}, nil
+	}
+	b, isBool := val.(bool)
+	if !isBool || !b {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    true,
+			Actual:      val,
+			Description: fmt.Sprintf("then assertion failed: %s", exprStr),
+		}, nil
+	}
+	return nil, nil
+}
+
 func (sr *scopeRunner) checkSingleAssertion(
 	name string,
 	input map[string]any,
 	a *parser.Assertion,
 ) (*Failure, error) {
+	// v3 expression assertion (Expr field set, Target empty)
+	if a.Expr != nil && a.Target == "" {
+		return sr.checkExprAssertion(name, input, a)
+	}
+
 	val, ok := generator.Eval(a.Expected, input)
 	if !ok {
 		return nil, fmt.Errorf("evaluating expected expression for %q", a.Target)
@@ -650,13 +1005,23 @@ func (sr *scopeRunner) checkSingleAssertion(
 		return nil, nil
 	}
 
-	property, locator, err := sr.resolveAssertionTarget(a)
+	property, callArgs, err := sr.buildAssertionCall(a)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := sr.adapter.Assert(property, locator, expected)
+	resp, err := sr.adapter.Call(sr.ctx, property, callArgs)
 	if err != nil {
-		return nil, fmt.Errorf("asserting %q: %w", a.Target, err)
+		return nil, fmt.Errorf("querying %q: %w", a.Target, err)
+	}
+	if !resp.OK {
+		return &Failure{
+			Name:        name,
+			Scope:       sr.scope,
+			Input:       input,
+			Expected:    string(expected),
+			Actual:      string(resp.Actual),
+			Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+		}, nil
 	}
 
 	op := a.Operator
@@ -665,15 +1030,19 @@ func (sr *scopeRunner) checkSingleAssertion(
 	}
 
 	if op == "==" {
-		// Equality: use adapter's built-in comparison.
-		if !resp.OK {
+		// Equality: compare actual (from adapter) vs expected in the runner.
+		ok, cmpErr := compareEquality(resp.Actual, expected)
+		if cmpErr != nil {
+			return nil, fmt.Errorf("comparing %q: %w", a.Target, cmpErr)
+		}
+		if !ok {
 			return &Failure{
 				Name:        name,
 				Scope:       sr.scope,
 				Input:       input,
 				Expected:    string(expected),
 				Actual:      string(resp.Actual),
-				Description: fmt.Sprintf("assertion %q failed: %s", a.Target, resp.Error),
+				Description: fmt.Sprintf("assertion %q failed: expected %s, got %s", a.Target, string(expected), string(resp.Actual)),
 			}, nil
 		}
 		return nil, nil
@@ -734,15 +1103,35 @@ func compareAssertion(op string, actual, expected json.RawMessage) (bool, error)
 	}
 }
 
-func (sr *scopeRunner) resolveAssertionTarget(a *parser.Assertion) (string, string, error) {
+// buildAssertionCall constructs the Call method name and args for an assertion.
+// For non-plugin assertions (e.g., body field paths), it returns (target, nil, nil).
+// For plugin assertions (e.g., playwright.visible on a locator), it returns
+// (property, JSON array with selector, nil).
+func (sr *scopeRunner) buildAssertionCall(a *parser.Assertion) (string, json.RawMessage, error) {
 	if a.Plugin == "" {
-		return a.Target, "", nil
+		return a.Target, nil, nil
 	}
 	selector, ok := sr.runner.spec.Locators[a.Target]
 	if !ok {
-		return "", "", fmt.Errorf("locator %q not defined in locators block", a.Target)
+		return "", nil, fmt.Errorf("locator %q not defined in locators block", a.Target)
 	}
-	return a.Property, selector, nil
+	args, err := json.Marshal([]string{selector})
+	if err != nil {
+		return "", nil, fmt.Errorf("marshaling assertion args: %w", err)
+	}
+	return a.Property, args, nil
+}
+
+// compareEquality checks if two JSON values are deeply equal after normalization.
+func compareEquality(actual, expected json.RawMessage) (bool, error) {
+	var actualNorm, expectedNorm any
+	if err := json.Unmarshal(actual, &actualNorm); err != nil {
+		return false, fmt.Errorf("normalizing actual: %w", err)
+	}
+	if err := json.Unmarshal(expected, &expectedNorm); err != nil {
+		return false, fmt.Errorf("normalizing expected: %w", err)
+	}
+	return reflect.DeepEqual(actualNorm, expectedNorm), nil
 }
 
 // hasOutputField returns true if the scope's contract declares a field with the given name.
@@ -835,14 +1224,17 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 
 		input, err := sr.generator.GenerateInput()
 		if err != nil {
+			sr.executeAfter()
 			return CheckResult{}, err
 		}
 
 		output, err := sr.executeInput(input)
 		if err != nil {
+			sr.executeAfter()
 			return CheckResult{}, err
 		}
 		if sr.lastActionError != "" {
+			sr.executeAfter()
 			return CheckResult{}, fmt.Errorf("action failed: %s", sr.lastActionError)
 		}
 
@@ -851,16 +1243,19 @@ func (sr *scopeRunner) runInvariant(inv *parser.Invariant) (CheckResult, error) 
 		ctx := buildInvariantContext(input, output)
 
 		if !evalGuard(inv.When, ctx) {
+			sr.executeAfter()
 			continue
 		}
 
 		if f := checkInvariantAssertions(inv.Name, sr.scope, input, inv.Assertions, ctx); f != nil {
+			sr.executeAfter()
 			f = sr.shrinkInvariantFailure(f, inv)
 			check.Passed = false
 			check.FailedAt = i + 1
 			check.Failure = f
 			return check, nil
 		}
+		sr.executeAfter()
 	}
 
 	return check, nil
@@ -886,6 +1281,7 @@ func (sr *scopeRunner) shrinkFailure(f *Failure, then *parser.Block) *Failure {
 			if _, err := sr.executeBefore(); err != nil {
 				return false
 			}
+			defer sr.executeAfter()
 			if _, err := sr.executeInput(candidate); err != nil {
 				return false
 			}
@@ -923,6 +1319,7 @@ func (sr *scopeRunner) shrinkInvariantFailure(f *Failure, inv *parser.Invariant)
 			if _, err := sr.executeBefore(); err != nil {
 				return false
 			}
+			defer sr.executeAfter()
 			output, err := sr.executeInput(candidate)
 			if err != nil || sr.lastActionError != "" {
 				return false
@@ -967,13 +1364,14 @@ func checkInvariantAssertions(
 	ctx map[string]any,
 ) *Failure {
 	for _, a := range assertions {
+		exprStr := spec.FormatExpr(a.Expr)
 		val, ok := generator.Eval(a.Expr, ctx)
 		if !ok {
 			return &Failure{
 				Name:        name,
 				Scope:       scope,
 				Input:       input,
-				Description: "invariant expression could not be evaluated",
+				Description: fmt.Sprintf("invariant could not be evaluated: %s", exprStr),
 			}
 		}
 		b, isBool := val.(bool)
@@ -984,7 +1382,7 @@ func checkInvariantAssertions(
 				Input:       input,
 				Expected:    true,
 				Actual:      val,
-				Description: fmt.Sprintf("invariant assertion evaluated to %v", val),
+				Description: fmt.Sprintf("invariant failed: %s", exprStr),
 			}
 		}
 	}

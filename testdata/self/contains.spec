@@ -1,9 +1,12 @@
 spec ContainsTest {
+  http {
+    base_url: "http://localhost:8080"
+  }
+
   scope test {
-    use http
-    config {
-      path: "/api/test"
-      method: "POST"
+    action run(msg: string, items: []int) {
+      let result = http.post("/api/test", { msg: msg, items: items })
+      return result
     }
 
     contract {
@@ -14,6 +17,7 @@ spec ContainsTest {
       output {
         ok: bool
       }
+      action: run
     }
 
     # Verify contains() works in invariant expressions

@@ -1,14 +1,15 @@
 package runner_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/adapter"
-	"github.com/bamsammich/speclang/v2/internal/runner"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/internal/runner"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // recordingAdapter is a test adapter that records all calls in order.
@@ -24,26 +25,19 @@ func newRecordingAdapter() *recordingAdapter {
 	}
 }
 
-func (a *recordingAdapter) Init(map[string]string) error { return nil }
+func (a *recordingAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
 
-func (a *recordingAdapter) Action(name string, args json.RawMessage) (*spec.Response, error) {
+func (a *recordingAdapter) Call(_ context.Context, method string, args json.RawMessage) (*spec.Response, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.log = append(a.log, "action:"+name)
+	a.log = append(a.log, "action:"+method)
 
-	if errMsg, ok := a.fail[name]; ok {
+	if errMsg, ok := a.fail[method]; ok {
 		return &spec.Response{OK: false, Error: errMsg}, nil
 	}
 
 	// Return a minimal valid JSON response.
 	return &spec.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
-}
-
-func (a *recordingAdapter) Assert(property, locator string, expected json.RawMessage) (*spec.Response, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.log = append(a.log, "assert:"+property)
-	return &spec.Response{OK: true, Actual: expected}, nil
 }
 
 func (a *recordingAdapter) Reset() error {
@@ -53,7 +47,7 @@ func (a *recordingAdapter) Reset() error {
 	return nil
 }
 
-func (a *recordingAdapter) Close() error { return nil }
+func (a *recordingAdapter) Close(_ context.Context) error { return nil }
 
 func (a *recordingAdapter) calls() []string {
 	a.mu.Lock()
@@ -134,7 +128,7 @@ func TestBeforeStepsExecuteBeforeGiven(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -180,7 +174,7 @@ func TestBeforeResetBetweenScenarios(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -223,7 +217,7 @@ func TestBeforeFailureReturnsError(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err == nil {
 		t.Fatal("expected verify to return an error when before block fails, but got nil")
 	}
@@ -271,7 +265,7 @@ func TestBeforeBodyRefResolution(t *testing.T) {
 
 	r := runner.New(s, map[string]adapter.Adapter{"http": adp}, 1)
 	r.SetN(1)
-	_, err := r.Verify()
+	_, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify failed: %v", err)
 	}
@@ -287,12 +281,12 @@ type bodyRefAdapter struct {
 	lastHeaderValue string
 }
 
-func (a *bodyRefAdapter) Init(map[string]string) error { return nil }
-func (a *bodyRefAdapter) Reset() error                 { return nil }
-func (a *bodyRefAdapter) Close() error                 { return nil }
+func (a *bodyRefAdapter) Init(_ context.Context, _ map[string]string) error { return nil }
+func (a *bodyRefAdapter) Reset() error                                      { return nil }
+func (a *bodyRefAdapter) Close(_ context.Context) error                     { return nil }
 
-func (a *bodyRefAdapter) Action(name string, args json.RawMessage) (*spec.Response, error) {
-	switch name {
+func (a *bodyRefAdapter) Call(_ context.Context, method string, args json.RawMessage) (*spec.Response, error) {
+	switch method {
 	case "post":
 		return &spec.Response{
 			OK:     true,
@@ -302,17 +296,13 @@ func (a *bodyRefAdapter) Action(name string, args json.RawMessage) (*spec.Respon
 		var rawArgs []json.RawMessage
 		if err := json.Unmarshal(args, &rawArgs); err == nil && len(rawArgs) >= 2 {
 			var val string
-			json.Unmarshal(rawArgs[1], &val)
+			json.Unmarshal(rawArgs[1], &val) //nolint:errcheck
 			a.lastHeaderValue = val
 		}
 		return &spec.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 	default:
 		return &spec.Response{OK: true, Actual: json.RawMessage(`{}`)}, nil
 	}
-}
-
-func (a *bodyRefAdapter) Assert(property, locator string, expected json.RawMessage) (*spec.Response, error) {
-	return &spec.Response{OK: true, Actual: expected}, nil
 }
 
 func contains(s, substr string) bool {

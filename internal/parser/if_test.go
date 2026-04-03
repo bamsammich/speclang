@@ -3,7 +3,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 func TestParseIfExpr_Simple(t *testing.T) {
@@ -11,7 +11,6 @@ func TestParseIfExpr_Simple(t *testing.T) {
 
 	spec, err := parser.Parse(`spec T {
 		scope s {
-			use http
 			invariant i {
 				if x > 0 then x else 0
 			}
@@ -64,7 +63,6 @@ func TestParseIfExpr_Nested(t *testing.T) {
 
 	spec, err := parser.Parse(`spec T {
 		scope s {
-			use http
 			invariant i {
 				if a then (if b then x else y) else z
 			}
@@ -120,7 +118,6 @@ func TestParseIfExpr_WithOperators(t *testing.T) {
 	// if/then/else with boolean operators in condition and arithmetic in branches
 	spec, err := parser.Parse(`spec T {
 		scope s {
-			use http
 			invariant i {
 				if error == null then output.balance - input.amount else input.balance
 			}
@@ -160,7 +157,6 @@ func TestParseIfExpr_MissingElse(t *testing.T) {
 
 	_, err := parser.Parse(`spec T {
 		scope s {
-			use http
 			invariant i {
 				if x > 0 then x
 			}
@@ -176,7 +172,6 @@ func TestParseIfExpr_MissingThen(t *testing.T) {
 
 	_, err := parser.Parse(`spec T {
 		scope s {
-			use http
 			invariant i {
 				if x > 0 x else 0
 			}

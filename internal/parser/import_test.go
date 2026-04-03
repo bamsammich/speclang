@@ -106,7 +106,6 @@ spec Test {
   }
   import test("schema.yaml")
   scope local_scope {
-    use http
     contract {
       input { x: int }
       output { y: int }
@@ -120,7 +119,7 @@ spec Test {
 			{Name: "Imported", Fields: []*Field{{Name: "a", Type: TypeExpr{Name: "string"}}}},
 		},
 		scopes: []*Scope{
-			{Name: "imported_scope", Use: "http"},
+			{Name: "imported_scope"},
 		},
 	}
 
@@ -250,7 +249,6 @@ func TestParseImport_DuplicateScopeName(t *testing.T) {
 	writeSpecFile(t, specFile, `
 spec Test {
   scope my_scope {
-    use http
     contract {
       input { x: int }
       output { y: int }

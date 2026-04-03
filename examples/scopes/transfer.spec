@@ -1,8 +1,9 @@
 scope transfer {
-  use http
-  config {
-    path: "/api/v1/accounts/transfer"
-    method: "POST"
+  action transfer(from: Account, to: Account, amount: int) {
+    let result = http.post("/api/v1/accounts/transfer", {
+      from: from, to: to, amount: amount
+    })
+    return result
   }
 
   contract {
@@ -16,6 +17,7 @@ scope transfer {
       to: Account
       error: string?
     }
+    action: transfer
   }
 
   # Money is neither created nor destroyed on successful transfers.
@@ -46,9 +48,9 @@ scope transfer {
       amount: 30
     }
     then {
-      from.balance: from.balance - amount
-      to.balance: to.balance + amount
-      error: null
+      output.from.balance == input.from.balance - amount
+      output.to.balance == input.to.balance + amount
+      error == null
     }
   }
 
@@ -58,7 +60,7 @@ scope transfer {
       amount > from.balance
     }
     then {
-      error: "insufficient_funds"
+      error == "insufficient_funds"
     }
   }
 
@@ -68,7 +70,7 @@ scope transfer {
       amount == 0
     }
     then {
-      error: "invalid_amount"
+      error == "invalid_amount"
     }
   }
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // convertPaths converts OpenAPI paths to speclang scopes.

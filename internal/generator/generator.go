@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // Generator produces random valid inputs from a contract and model definitions.

@@ -2,9 +2,9 @@
 # Each scope uses the process adapter to run specrun verify on a fixture spec.
 
 scope verify_http_adapter {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -16,6 +16,7 @@ scope verify_http_adapter {
       scenarios_run: int
       scenarios_passed: int
     }
+    action: run
   }
 
   scenario http_fixtures_pass {
@@ -23,17 +24,17 @@ scope verify_http_adapter {
       file: "testdata/self/http_adapter.spec"
     }
     then {
-      exit_code: 0
-      scenarios_run: 8
-      scenarios_passed: 8
+      exit_code == 0
+      scenarios_run == 8
+      scenarios_passed == 8
     }
   }
 }
 
 scope verify_process_adapter {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -45,6 +46,7 @@ scope verify_process_adapter {
       scenarios_run: int
       scenarios_passed: int
     }
+    action: run
   }
 
   scenario process_fixtures_pass {
@@ -52,9 +54,9 @@ scope verify_process_adapter {
       file: "testdata/self/process_adapter.spec"
     }
     then {
-      exit_code: 0
-      scenarios_run: 4
-      scenarios_passed: 4
+      exit_code == 0
+      scenarios_run == 4
+      scenarios_passed == 4
     }
   }
 }

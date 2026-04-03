@@ -100,6 +100,32 @@ func TestLexUnterminatedString(t *testing.T) {
 	}
 }
 
+func TestLexSingleQuotedString(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex(`'hello'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenString, "hello")
+}
+
+func TestLexSingleQuotedStringWithDoubleQuotes(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex(`'[data-testid="email"]'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenString, `[data-testid="email"]`)
+}
+
+func TestLexUnterminatedSingleQuotedString(t *testing.T) {
+	t.Parallel()
+	_, err := Lex(`'hello`)
+	if err == nil {
+		t.Fatal("expected error for unterminated single-quoted string")
+	}
+}
+
 func TestLexComments(t *testing.T) {
 	t.Parallel()
 	tokens, err := Lex("foo # this is a comment\nbar")
@@ -136,6 +162,18 @@ func TestTokenFileField(t *testing.T) {
 	if tok.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, tok.String())
 	}
+}
+
+func TestLexLetAndReturn(t *testing.T) {
+	t.Parallel()
+	tokens, err := Lex("let x return y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToken(t, tokens, 0, TokenLet, "let")
+	assertToken(t, tokens, 1, TokenIdent, "x")
+	assertToken(t, tokens, 2, TokenReturn, "return")
+	assertToken(t, tokens, 3, TokenIdent, "y")
 }
 
 // Helpers

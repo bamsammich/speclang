@@ -1,8 +1,8 @@
 # Verifies that specrun verify detects incorrect implementations.
 scope verify_fail {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -16,6 +16,7 @@ scope verify_fail {
       invariants_checked: int
       invariants_passed: int
     }
+    action: run
   }
 
   # The broken server credits the to-account but never debits the from-account,
@@ -25,11 +26,11 @@ scope verify_fail {
       file: "testdata/self/broken_transfer.spec"
     }
     then {
-      exit_code: 1
-      scenarios_run: 1
-      scenarios_passed: 0
-      invariants_checked: 1
-      invariants_passed: 0
+      exit_code == 1
+      scenarios_run == 1
+      scenarios_passed == 0
+      invariants_checked == 1
+      invariants_passed == 0
     }
   }
 }

@@ -14,6 +14,10 @@ func main() {
 		port = p
 	}
 
+	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintln(w, "ok")
+	})
+
 	http.HandleFunc("POST /api/v1/accounts/transfer", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			From struct {

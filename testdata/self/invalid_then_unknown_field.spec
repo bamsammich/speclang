@@ -1,6 +1,5 @@
 spec Bad {
   scope broken {
-    use http
     contract {
       input {
         x: int
@@ -14,7 +13,7 @@ spec Bad {
         x: 1
       }
       then {
-        typo_field: 0
+        typo_field == 0
       }
     }
   }

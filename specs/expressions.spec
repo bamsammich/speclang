@@ -1,8 +1,8 @@
 # Verifies that env() expressions work in config and given blocks.
 scope env_in_config {
-  use process
-  config {
-    args: env(SPECTEST_EXPR_ARGS, "parse")
+  action run(file: string) {
+    let result = process.exec(env(SPECTEST_EXPR_ARGS, "parse"), file)
+    return result
   }
 
   contract {
@@ -13,6 +13,7 @@ scope env_in_config {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario parse_with_env_config {
@@ -20,17 +21,17 @@ scope env_in_config {
       file: "testdata/self/env_config.spec"
     }
     then {
-      exit_code: 0
-      name: "EnvConfig"
+      exit_code == 0
+      name == "EnvConfig"
     }
   }
 }
 
 # Verifies that string concatenation with + works in then block assertions.
 scope string_concat {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -41,6 +42,7 @@ scope string_concat {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario concat_in_then {
@@ -48,17 +50,17 @@ scope string_concat {
       file: "testdata/self/minimal.spec"
     }
     then {
-      exit_code: 0
-      name: "Mini" + "mal"
+      exit_code == 0
+      name == "Mini" + "mal"
     }
   }
 }
 
 # Verifies that array-form args in config blocks work correctly.
 scope array_args {
-  use process
-  config {
-    args: ["parse"]
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -69,6 +71,7 @@ scope array_args {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario parse_with_array_args {
@@ -76,16 +79,16 @@ scope array_args {
       file: "testdata/self/minimal.spec"
     }
     then {
-      exit_code: 0
-      name: "Minimal"
+      exit_code == 0
+      name == "Minimal"
     }
   }
 }
 
 scope env_in_given {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -96,6 +99,7 @@ scope env_in_given {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario parse_with_env_given {
@@ -103,8 +107,8 @@ scope env_in_given {
       file: env(SPECTEST_NONEXISTENT_FILE, "testdata/self/env_given.spec")
     }
     then {
-      exit_code: 0
-      name: "EnvGiven"
+      exit_code == 0
+      name == "EnvGiven"
     }
   }
 }

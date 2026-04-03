@@ -39,9 +39,9 @@ which specrun
 specrun install playwright
 ```
 
-### 2c. For specs with target services, ensure Docker is available
+### 2c. For specs with services, ensure Docker is available
 
-If the spec declares `services` in the `target` block, Docker must be running. `specrun verify` will manage containers automatically.
+If the spec declares a `services` block, Docker must be running. `specrun verify` will manage containers automatically.
 
 ### 3. Run verification
 

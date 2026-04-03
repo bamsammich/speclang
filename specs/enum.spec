@@ -1,8 +1,8 @@
 # Verifies the parser and generator handle enum types.
 scope parse_enum {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -13,6 +13,7 @@ scope parse_enum {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   # Enum spec should parse successfully.
@@ -21,17 +22,17 @@ scope parse_enum {
       file: "testdata/self/enum.spec"
     }
     then {
-      exit_code: 0
-      name: "EnumTest"
+      exit_code == 0
+      name == "EnumTest"
     }
   }
 }
 
 # Verifies the parser rejects empty enum types.
 scope parse_enum_invalid {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -41,6 +42,7 @@ scope parse_enum_invalid {
     output {
       exit_code: int
     }
+    action: run
   }
 
   # Empty enum() should fail at parse time.
@@ -49,16 +51,16 @@ scope parse_enum_invalid {
       file: "testdata/self/invalid_enum_empty.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 }
 
 # Verifies the validator rejects invalid enum variants.
 scope validate_enum_invalid {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -68,6 +70,7 @@ scope validate_enum_invalid {
     output {
       exit_code: int
     }
+    action: run
   }
 
   # Assigning a string not in the variant set should fail validation.
@@ -76,16 +79,16 @@ scope validate_enum_invalid {
       file: "testdata/self/invalid_enum_variant.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 }
 
 # Verifies the generator produces valid enum values.
 scope generate_enum {
-  use process
-  config {
-    args: "generate testdata/self/enum.spec --scope enum_inputs --seed"
+  action run(seed: int) {
+    let result = process.exec("generate", "testdata/self/enum.spec", "--scope", "enum_inputs", "--seed", seed)
+    return result
   }
 
   contract {
@@ -97,6 +100,7 @@ scope generate_enum {
       adapter_name: any
       subcommand: any
     }
+    action: run
   }
 
   # Generation should succeed across seeds.

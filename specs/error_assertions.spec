@@ -2,9 +2,9 @@
 
 # Verifies the parser accepts specs with error pseudo-field in then blocks.
 scope parse_error_pseudo_field {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -15,6 +15,7 @@ scope parse_error_pseudo_field {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario error_pseudo_field_parses {
@@ -22,17 +23,17 @@ scope parse_error_pseudo_field {
       file: "testdata/self/error_pseudo_field.spec"
     }
     then {
-      exit_code: 0
-      name: "ErrorPseudoFieldTest"
+      exit_code == 0
+      name == "ErrorPseudoFieldTest"
     }
   }
 }
 
 # Verifies specrun verify passes on a spec using the error pseudo-field.
 scope verify_error_pseudo_field {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -44,6 +45,7 @@ scope verify_error_pseudo_field {
       scenarios_run: int
       scenarios_passed: int
     }
+    action: run
   }
 
   scenario error_pseudo_field_passes {
@@ -51,9 +53,9 @@ scope verify_error_pseudo_field {
       file: "testdata/self/error_pseudo_field.spec"
     }
     then {
-      exit_code: 0
-      scenarios_run: 1
-      scenarios_passed: 1
+      exit_code == 0
+      scenarios_run == 1
+      scenarios_passed == 1
     }
   }
 }

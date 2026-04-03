@@ -1,15 +1,14 @@
 spec EnumTest {
   description: "Fixture exercising enum type for generator and parser testing"
 
-  target {
+  http {
     base_url: "http://localhost:8080"
   }
 
   scope enum_inputs {
-    use http
-    config {
-      path: "/test"
-      method: "POST"
+    action run(adapter_name: string, subcommand: string, opt_role: string) {
+      let result = http.post("/test", { adapter_name: adapter_name, subcommand: subcommand, opt_role: opt_role })
+      return result
     }
 
     contract {
@@ -21,6 +20,7 @@ spec EnumTest {
       output {
         ok: bool
       }
+      action: run
     }
 
     scenario smoke {
@@ -30,7 +30,7 @@ spec EnumTest {
         opt_role: "admin"
       }
       then {
-        ok: true
+        ok == true
       }
     }
   }

@@ -1,6 +1,5 @@
 spec Bad {
   scope broken {
-    use http
     contract {
       input {
         name: string
@@ -14,7 +13,7 @@ spec Bad {
         name: null
       }
       then {
-        result: 0
+        result == 0
       }
     }
   }

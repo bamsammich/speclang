@@ -6,9 +6,9 @@
 # The conservation invariant fails for any amount > 0. After shrinking,
 # the counterexample should converge toward the failure boundary.
 scope shrinking {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -21,6 +21,7 @@ scope shrinking {
       invariants_passed: int
       failures: any
     }
+    action: run
   }
 
   # The invariant-only fixture has a single generative failure.
@@ -30,10 +31,10 @@ scope shrinking {
       file: "testdata/self/broken_transfer_invariant_only.spec"
     }
     then {
-      exit_code: 1
-      invariants_checked: 1
-      invariants_passed: 0
-      failures.0.shrunk: true
+      exit_code == 1
+      invariants_checked == 1
+      invariants_passed == 0
+      failures.0.shrunk == true
     }
   }
 
@@ -44,7 +45,7 @@ scope shrinking {
       file: "testdata/self/broken_transfer_invariant_only.spec"
     }
     then {
-      failures.0.input.amount: 1
+      failures.0.input.amount == 1
     }
   }
 
@@ -54,8 +55,8 @@ scope shrinking {
       file: "testdata/self/broken_transfer_invariant_only.spec"
     }
     then {
-      failures.0.input.from.id: ""
-      failures.0.input.to.id: ""
+      failures.0.input.from.id == ""
+      failures.0.input.to.id == ""
     }
   }
 
@@ -65,7 +66,7 @@ scope shrinking {
       file: "testdata/self/broken_transfer_invariant_only.spec"
     }
     then {
-      failures.0.input.to.balance: 0
+      failures.0.input.to.balance == 0
     }
   }
 }

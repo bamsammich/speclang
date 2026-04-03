@@ -1,8 +1,8 @@
 # Verifies the parser accepts valid specs and produces expected AST structure.
 scope parse_valid {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -13,6 +13,7 @@ scope parse_valid {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   scenario minimal_spec {
@@ -20,8 +21,8 @@ scope parse_valid {
       file: "testdata/self/minimal.spec"
     }
     then {
-      exit_code: 0
-      name: "Minimal"
+      exit_code == 0
+      name == "Minimal"
     }
   }
 
@@ -30,8 +31,8 @@ scope parse_valid {
       file: "examples/transfer.spec"
     }
     then {
-      exit_code: 0
-      name: "AccountAPI"
+      exit_code == 0
+      name == "AccountAPI"
     }
   }
 
@@ -41,8 +42,8 @@ scope parse_valid {
       file: "testdata/openapi/import_valid.spec"
     }
     then {
-      exit_code: 0
-      name: "ImportTest"
+      exit_code == 0
+      name == "ImportTest"
     }
   }
 
@@ -52,8 +53,8 @@ scope parse_valid {
       file: "testdata/proto/import_valid.spec"
     }
     then {
-      exit_code: 0
-      name: "ProtoImportTest"
+      exit_code == 0
+      name == "ProtoImportTest"
     }
   }
 
@@ -63,8 +64,8 @@ scope parse_valid {
       file: "testdata/self/contains.spec"
     }
     then {
-      exit_code: 0
-      name: "ContainsTest"
+      exit_code == 0
+      name == "ContainsTest"
     }
   }
 
@@ -74,8 +75,8 @@ scope parse_valid {
       file: "testdata/self/if_expr.spec"
     }
     then {
-      exit_code: 0
-      name: "IfExprTest"
+      exit_code == 0
+      name == "IfExprTest"
     }
   }
 
@@ -85,8 +86,8 @@ scope parse_valid {
       file: "testdata/playwright/login.spec"
     }
     then {
-      exit_code: 0
-      name: "LoginUI"
+      exit_code == 0
+      name == "LoginUI"
     }
   }
 
@@ -96,8 +97,8 @@ scope parse_valid {
       file: "testdata/self/quantifiers.spec"
     }
     then {
-      exit_code: 0
-      name: "Quantifiers"
+      exit_code == 0
+      name == "Quantifiers"
     }
   }
 
@@ -107,8 +108,19 @@ scope parse_valid {
       file: "testdata/self/before_block.spec"
     }
     then {
-      exit_code: 0
-      name: "BeforeBlock"
+      exit_code == 0
+      name == "BeforeBlock"
+    }
+  }
+
+  # Verifies that after blocks parse correctly.
+  scenario after_block {
+    given {
+      file: "testdata/self/after_block.spec"
+    }
+    then {
+      exit_code == 0
+      name == "AfterBlock"
     }
   }
 
@@ -118,17 +130,17 @@ scope parse_valid {
       file: "testdata/self/plugin_assertion_target.spec"
     }
     then {
-      exit_code: 0
-      name: "PluginAssertionTarget"
+      exit_code == 0
+      name == "PluginAssertionTarget"
     }
   }
 }
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
 scope parse_invalid {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -138,6 +150,7 @@ scope parse_invalid {
     output {
       exit_code: int
     }
+    action: run
   }
 
   scenario unterminated_spec {
@@ -145,7 +158,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_unterminated.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -154,7 +167,7 @@ scope parse_invalid {
       file: "testdata/include/circular/a.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -164,7 +177,7 @@ scope parse_invalid {
       file: "testdata/openapi/import_unknown_adapter.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -174,37 +187,27 @@ scope parse_invalid {
       file: "testdata/openapi/import_bad_syntax.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
-  # Scope without 'use <plugin>' should fail.
-  scenario missing_use_directive {
-    given {
-      file: "testdata/self/invalid_missing_use.spec"
-    }
-    then {
-      exit_code: 1
-    }
-  }
-
-  # Multiple 'use' directives in same scope should fail.
+  # 'use' in scope body is rejected in v3.
   scenario multiple_use_directives {
     given {
       file: "testdata/self/invalid_multiple_use.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
-  # 'use' at spec level (outside scope) should fail.
+  # 'use' at spec level (outside scope) should fail (v3 rejects 'use' entirely).
   scenario use_at_spec_level {
     given {
       file: "testdata/self/invalid_use_at_spec_level.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -214,7 +217,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_unknown_token.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -224,7 +227,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_malformed_contract.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -234,7 +237,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_malformed_then.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -244,7 +247,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_unterminated_string.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -254,7 +257,7 @@ scope parse_invalid {
       file: "testdata/self/invalid_single_ampersand.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -264,26 +267,26 @@ scope parse_invalid {
       file: "testdata/include/duplicate/root.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
   # Duplicate scope names across includes should fail.
   scenario duplicate_scope_include {
     given {
-      file: "testdata/include/duplicate_scope/root.spec"
+      file: "testdata/include/v3duplicate_scope/root.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 }
 
 # Verifies the validator rejects semantically invalid specs with a non-zero exit code.
 scope validate_invalid {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -293,6 +296,7 @@ scope validate_invalid {
     output {
       exit_code: int
     }
+    action: run
   }
 
   # Unknown type in model field should fail validation.
@@ -301,7 +305,7 @@ scope validate_invalid {
       file: "testdata/self/invalid_unknown_type.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -311,7 +315,7 @@ scope validate_invalid {
       file: "testdata/self/invalid_type_mismatch.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -321,7 +325,7 @@ scope validate_invalid {
       file: "testdata/self/invalid_null_non_optional.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
@@ -331,17 +335,10 @@ scope validate_invalid {
       file: "testdata/self/invalid_missing_required_field.spec"
     }
     then {
-      exit_code: 1
+      exit_code == 1
     }
   }
 
-  # Then target not in contract output should fail validation.
-  scenario then_unknown_output {
-    given {
-      file: "testdata/self/invalid_then_unknown_field.spec"
-    }
-    then {
-      exit_code: 1
-    }
-  }
+  # Note: then_unknown_output removed for v3 — expression assertions
+  # don't validate field names against the contract output.
 }

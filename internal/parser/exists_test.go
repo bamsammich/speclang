@@ -8,7 +8,6 @@ func TestParseExistsExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { name: string }
       output { status: string }
@@ -44,7 +43,6 @@ func TestParseHasKeyExpr(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use http
     contract {
       input { name: string }
       output { status: string }
@@ -85,7 +83,6 @@ func TestParseExistsInThen(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test {
-    use process
     contract {
       input { file: string }
       output { exit_code: int }
@@ -95,7 +92,7 @@ spec Test {
         file: "test.spec"
       }
       then {
-        exit_code: 0
+        exit_code == 0
       }
     }
   }

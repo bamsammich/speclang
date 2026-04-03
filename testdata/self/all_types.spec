@@ -1,15 +1,14 @@
 spec AllTypesTest {
   description: "Fixture exercising all types with constraints for generator invariant testing"
 
-  target {
+  http {
     base_url: "http://localhost:8080"
   }
 
   scope all_types {
-    use http
-    config {
-      path: "/test"
-      method: "POST"
+    action run(name: string, flag: bool, data: bytes, tags: []string, metadata: map[string, int], count: int, score: float, opt_name: string, opt_count: int) {
+      let result = http.post("/test", { name: name, flag: flag, data: data, tags: tags, metadata: metadata, count: count, score: score, opt_name: opt_name, opt_count: opt_count })
+      return result
     }
 
     contract {
@@ -27,6 +26,7 @@ spec AllTypesTest {
       output {
         ok: bool
       }
+      action: run
     }
   }
 }

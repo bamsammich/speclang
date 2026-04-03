@@ -1,8 +1,8 @@
 # Verifies the generator produces constraint-satisfying outputs for all supported types.
 scope generate_all_types {
-  use process
-  config {
-    args: "generate testdata/self/all_types.spec --scope all_types --seed"
+  action run(seed: int) {
+    let result = process.exec("generate", "testdata/self/all_types.spec", "--scope", "all_types", "--seed", seed)
+    return result
   }
 
   contract {
@@ -21,6 +21,7 @@ scope generate_all_types {
       opt_name: any
       opt_count: any
     }
+    action: run
   }
 
   # Generation should succeed across seeds.

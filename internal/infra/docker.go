@@ -408,7 +408,7 @@ func httpHealthCheck(port int, path string) bool {
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusInternalServerError
+	return resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
 }
 
 func tcpHealthCheck(port int) bool {

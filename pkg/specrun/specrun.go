@@ -4,13 +4,14 @@
 package specrun
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/bamsammich/speclang/v2/internal/generator"
-	"github.com/bamsammich/speclang/v2/internal/parser"
-	"github.com/bamsammich/speclang/v2/internal/runner"
-	"github.com/bamsammich/speclang/v2/internal/validator"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/generator"
+	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/runner"
+	"github.com/bamsammich/speclang/v3/internal/validator"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // Options configures verification behavior.
@@ -46,7 +47,7 @@ func FormatErrors(errs []error) string {
 
 // Verify runs the full verification pipeline.
 // If registry is nil, DefaultRegistry() is used.
-func Verify(s *spec.Spec, registry *spec.Registry, opts Options) (*spec.Result, error) {
+func Verify(ctx context.Context, s *spec.Spec, registry *spec.Registry, opts Options) (*spec.Result, error) {
 	if registry == nil {
 		registry = DefaultRegistry()
 	}
@@ -55,13 +56,13 @@ func Verify(s *spec.Spec, registry *spec.Registry, opts Options) (*spec.Result, 
 	if err != nil {
 		return nil, err
 	}
-	defer closeAdapters(adapters)
+	defer closeAdapters(ctx, adapters)
 
 	r := runner.New(s, adapters, opts.Seed)
 	if opts.Iterations > 0 {
 		r.SetN(opts.Iterations)
 	}
-	return r.Verify()
+	return r.Verify(ctx)
 }
 
 // Generate produces one random input for a named scope.
@@ -89,7 +90,7 @@ func buildAdapterMap(s *spec.Spec, reg *spec.Registry) (map[string]spec.Adapter,
 		}
 		adp, err := reg.Adapter(scope.Use)
 		if err != nil {
-			closeAdapters(adapters)
+			closeAdapters(context.Background(), adapters)
 			return nil, fmt.Errorf("adapter %q: %w", scope.Use, err)
 		}
 		adapters[scope.Use] = adp
@@ -97,8 +98,8 @@ func buildAdapterMap(s *spec.Spec, reg *spec.Registry) (map[string]spec.Adapter,
 	return adapters, nil
 }
 
-func closeAdapters(adapters map[string]spec.Adapter) {
+func closeAdapters(ctx context.Context, adapters map[string]spec.Adapter) {
 	for _, adp := range adapters {
-		adp.Close() //nolint:errcheck // best-effort cleanup
+		adp.Close(ctx) //nolint:errcheck // best-effort cleanup
 	}
 }
