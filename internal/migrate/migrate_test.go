@@ -91,6 +91,72 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// TestMigrateFile_FollowsIncludes verifies that MigrateFile walks the include tree
+// and returns migrated output for all files.
+func TestMigrateFile_FollowsIncludes(t *testing.T) {
+	t.Parallel()
+
+	results, err := MigrateFile("testdata/with_includes/root.v2.spec")
+	if err != nil {
+		t.Fatalf("MigrateFile: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 migrated files, got %d", len(results))
+	}
+
+	// Root should be first.
+	if !strings.HasSuffix(results[0].Path, "root.v2.spec") {
+		t.Errorf("first file should be root, got %s", results[0].Path)
+	}
+	if !strings.HasSuffix(results[1].Path, "scopes.v2.spec") {
+		t.Errorf("second file should be scopes, got %s", results[1].Path)
+	}
+
+	// Root should have adapter config.
+	if !strings.Contains(results[0].Output, "http {") {
+		t.Error("root output missing http adapter config")
+	}
+
+	// Scopes file should have synthesized action with == assertions.
+	if !strings.Contains(results[1].Output, "error == null") {
+		t.Error("scopes output should have error == null, got:\n" + results[1].Output)
+	}
+
+	// Both should parse as valid v3.
+	for _, mf := range results {
+		if mf.Warning != "" {
+			t.Errorf("%s: v3 parse warning: %s", mf.Path, mf.Warning)
+		}
+	}
+}
+
+// TestCollectIncludes verifies include tree walking.
+func TestCollectIncludes(t *testing.T) {
+	t.Parallel()
+
+	abs, err := filepath.Abs("testdata/with_includes/root.v2.spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := collectIncludes(abs)
+	if err != nil {
+		t.Fatalf("collectIncludes: %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d: %v", len(files), files)
+	}
+
+	if !strings.HasSuffix(files[0], "root.v2.spec") {
+		t.Errorf("first file should be root, got %s", files[0])
+	}
+	if !strings.HasSuffix(files[1], "scopes.v2.spec") {
+		t.Errorf("second file should be scopes, got %s", files[1])
+	}
+}
+
 // TestTransformAssertion_ColonToEquals verifies colon assertions become ==.
 func TestTransformAssertion_ColonToEquals(t *testing.T) {
 	t.Parallel()

@@ -223,22 +223,31 @@ func migrateCmd() *cli.Command {
 }
 
 func runMigrate(specFile string, write bool) int {
-	output, err := migrate.MigrateFile(specFile)
+	results, err := migrate.MigrateFile(specFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "migrate error: %v\n", err)
 		return 1
 	}
 
-	if write {
-		if err := os.WriteFile(specFile, []byte(output), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "write error: %v\n", err)
-			return 1
+	for _, mf := range results {
+		if mf.Warning != "" {
+			fmt.Fprintf(os.Stderr, "warning: %s: %s\n", mf.Path, mf.Warning)
 		}
-		fmt.Fprintf(os.Stderr, "migrated: %s\n", specFile)
-		return 0
+
+		if write {
+			if err := os.WriteFile(mf.Path, []byte(mf.Output), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "write error: %v\n", err)
+				return 1
+			}
+			fmt.Fprintf(os.Stderr, "migrated: %s\n", mf.Path)
+		} else {
+			if len(results) > 1 {
+				fmt.Fprintf(os.Stdout, "# --- %s ---\n", mf.Path)
+			}
+			fmt.Print(mf.Output)
+		}
 	}
 
-	fmt.Print(output)
 	return 0
 }
 
