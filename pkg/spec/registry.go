@@ -7,13 +7,13 @@ import (
 
 // PluginDef describes a registered plugin's schema and adapter.
 type PluginDef struct {
-	Actions    map[string]ActionDef
+	Actions    map[string]PluginActionDef
 	Assertions map[string]AssertionDef
 	Adapter    Adapter
 }
 
-// ActionDef describes a plugin action's parameter schema.
-type ActionDef struct {
+// PluginActionDef describes a plugin action's parameter schema.
+type PluginActionDef struct {
 	Params []Param
 }
 

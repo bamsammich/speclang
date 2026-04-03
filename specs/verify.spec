@@ -1,8 +1,8 @@
 # Verifies that specrun verify passes correct implementations.
 scope verify_pass {
-  use process
-  config {
-    args: "verify --json"
+  action run(file: string) {
+    let result = process.exec("verify", "--json", file)
+    return result
   }
 
   contract {
@@ -17,6 +17,7 @@ scope verify_pass {
       invariants_passed: int
       scopes: any
     }
+    action: run
   }
 
   # End-to-end: the transfer example must pass all checks.
@@ -25,11 +26,11 @@ scope verify_pass {
       file: "examples/transfer.spec"
     }
     then {
-      exit_code: 0
-      scenarios_run: 3
-      scenarios_passed: 3
-      invariants_checked: 3
-      invariants_passed: 3
+      exit_code == 0
+      scenarios_run == 3
+      scenarios_passed == 3
+      invariants_checked == 3
+      invariants_passed == 3
     }
   }
 

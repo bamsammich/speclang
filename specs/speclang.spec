@@ -2,22 +2,26 @@
 spec Speclang {
   description: "Black-box verification of the specrun CLI: parsing, generation, and end-to-end verify"
 
-  target {
-    services {
-      transfer_server {
-        build: "../examples/server"
-        port: 8080
-      }
-      broken_server {
-        build: "../testdata/self/broken_server"
-        port: 8081
-      }
-      http_test_server {
-        build: "../testdata/self/http_server"
-        port: 8082
-      }
-    }
+  process {
     command: env(SPECRUN_BIN, "./specrun")
+  }
+
+  services {
+    transfer_server {
+      build: "../examples/server"
+      port: 8080
+      health: "/healthz"
+    }
+    broken_server {
+      build: "../testdata/self/broken_server"
+      port: 8081
+      health: "/healthz"
+    }
+    http_test_server {
+      build: "../testdata/self/http_server"
+      port: 8082
+      health: "/healthz"
+    }
   }
 
   include "parse.spec"

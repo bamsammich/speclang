@@ -1,7 +1,7 @@
 spec TypesTest {
   description: "Test spec exercising float, bytes, array, map, and len()"
 
-  target {
+  http {
     base_url: "http://localhost:8080"
   }
 
@@ -11,10 +11,9 @@ spec TypesTest {
   }
 
   scope typed_inputs {
-    use http
-    config {
-      path: "/test"
-      method: "POST"
+    action run(rating: float, data: bytes, tags: []string, metadata: map[string, int], items: []Item) {
+      let result = http.post("/test", { rating: rating, data: data, tags: tags, metadata: metadata, items: items })
+      return result
     }
 
     contract {
@@ -28,6 +27,7 @@ spec TypesTest {
       output {
         ok: bool
       }
+      action: run
     }
   }
 }

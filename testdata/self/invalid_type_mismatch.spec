@@ -1,6 +1,5 @@
 spec Bad {
   scope broken {
-    use http
     contract {
       input {
         count: int
@@ -14,7 +13,7 @@ spec Bad {
         count: "not_an_int"
       }
       then {
-        result: 0
+        result == 0
       }
     }
   }

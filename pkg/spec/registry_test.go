@@ -1,27 +1,20 @@
 package spec_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // stubAdapter is a minimal Adapter implementation for testing.
 type stubAdapter struct{}
 
-func (stubAdapter) Init(map[string]string) error { return nil }
-
-func (stubAdapter) Action(string, json.RawMessage) (*spec.Response, error) {
-	return nil, nil
-}
-
-func (stubAdapter) Assert(string, string, json.RawMessage) (*spec.Response, error) {
-	return nil, nil
-}
-
-func (stubAdapter) Reset() error { return nil }
-func (stubAdapter) Close() error { return nil }
+func (stubAdapter) Init(_ context.Context, _ map[string]string) error                          { return nil }
+func (stubAdapter) Call(_ context.Context, _ string, _ json.RawMessage) (*spec.Response, error) { return nil, nil }
+func (stubAdapter) Reset() error                                                                { return nil }
+func (stubAdapter) Close(_ context.Context) error                                               { return nil }
 
 func TestRegistry_RegisterAndLookup(t *testing.T) {
 	r := spec.NewRegistry()
@@ -29,7 +22,7 @@ func TestRegistry_RegisterAndLookup(t *testing.T) {
 
 	r.Register("http", spec.PluginDef{
 		Adapter: adp,
-		Actions: map[string]spec.ActionDef{
+		Actions: map[string]spec.PluginActionDef{
 			"get": {Params: []spec.Param{{Name: "url", Type: spec.TypeExpr{Name: "string"}}}},
 		},
 	})

@@ -1,11 +1,11 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
-	"reflect"
 	"strings"
 )
 
@@ -27,7 +27,7 @@ func NewProcessAdapter() *ProcessAdapter {
 	return &ProcessAdapter{}
 }
 
-func (a *ProcessAdapter) Init(config map[string]string) error {
+func (a *ProcessAdapter) Init(_ context.Context, config map[string]string) error {
 	cmd, ok := config["command"]
 	if !ok {
 		return errors.New("process adapter requires 'command' in config")
@@ -39,11 +39,48 @@ func (a *ProcessAdapter) Init(config map[string]string) error {
 	return nil
 }
 
-func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, error) {
-	if name != "exec" {
-		return nil, fmt.Errorf("unknown process action %q (only 'exec' is supported)", name)
+func (a *ProcessAdapter) Call(ctx context.Context, method string, args json.RawMessage) (*Response, error) {
+	// Action: exec
+	if method == "exec" {
+		return a.doExec(ctx, args)
 	}
 
+	// Queries — return current value in Actual
+	if a.last == nil {
+		return nil, errors.New("no command has been executed yet")
+	}
+
+	var actual any
+
+	switch {
+	case method == "exit_code":
+		actual = float64(a.last.exitCode)
+	case method == "stderr":
+		actual = a.last.rawStderr
+	case method == "stdout" && a.last.stdout == nil:
+		actual = a.last.rawStdout
+	case method == "stdout":
+		actual = a.last.stdout
+	default:
+		path := strings.TrimPrefix(method, "stdout.")
+		if a.last.stdout == nil {
+			return nil, fmt.Errorf("stdout is not JSON, cannot extract path %q", path)
+		}
+		val, err := extractPath(a.last.stdout, path)
+		if err != nil {
+			return nil, err
+		}
+		actual = val
+	}
+
+	actualJSON, err := json.Marshal(actual)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling actual value: %w", err)
+	}
+	return &Response{OK: true, Actual: actualJSON}, nil
+}
+
+func (a *ProcessAdapter) doExec(ctx context.Context, args json.RawMessage) (*Response, error) {
 	var rawArgs []json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &rawArgs); err != nil {
@@ -62,7 +99,7 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	}
 
 	//nolint:gosec // process adapter intentionally executes user-specified commands from spec config
-	cmd := exec.Command(a.Command, cmdArgs...)
+	cmd := exec.CommandContext(ctx, a.Command, cmdArgs...)
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -85,9 +122,12 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	//nolint:errcheck // best-effort JSON parse; stdout may not be JSON
 	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout)), &parsed)
 
-	// Build the result that gets returned as Actual (for the runner's executeInput)
+	// Build the result that gets returned as Actual (for the runner's executeInput).
+	// Includes exit_code, stdout/stderr, and any parsed JSON fields.
 	result := map[string]any{
 		"exit_code": exitCode,
+		"stdout":    stdout,
+		"stderr":    stderr,
 	}
 	for k, v := range parsed {
 		result[k] = v
@@ -104,68 +144,11 @@ func (a *ProcessAdapter) Action(name string, args json.RawMessage) (*Response, e
 	return &Response{OK: true, Actual: json.RawMessage(resultJSON)}, nil
 }
 
-func (a *ProcessAdapter) Assert(
-	property string,
-	_ string,
-	expected json.RawMessage,
-) (*Response, error) {
-	if a.last == nil {
-		return nil, errors.New("no command has been executed yet")
-	}
-
-	var actual any
-
-	switch {
-	case property == "exit_code":
-		actual = float64(a.last.exitCode)
-	case property == "stderr":
-		actual = a.last.rawStderr
-	case property == "stdout" && a.last.stdout == nil:
-		actual = a.last.rawStdout
-	case property == "stdout":
-		actual = a.last.stdout
-	default:
-		path := strings.TrimPrefix(property, "stdout.")
-		if a.last.stdout == nil {
-			return nil, fmt.Errorf("stdout is not JSON, cannot extract path %q", path)
-		}
-		val, err := extractPath(a.last.stdout, path)
-		if err != nil {
-			return nil, err
-		}
-		actual = val
-	}
-
-	// Normalize both sides through JSON for consistent comparison.
-	actualJSON, err := json.Marshal(actual)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling actual value: %w", err)
-	}
-
-	var actualNorm, expectedNorm any
-	if err := json.Unmarshal(actualJSON, &actualNorm); err != nil {
-		return nil, fmt.Errorf("normalizing actual: %w", err)
-	}
-	if err := json.Unmarshal(expected, &expectedNorm); err != nil {
-		return nil, fmt.Errorf("normalizing expected: %w", err)
-	}
-
-	if reflect.DeepEqual(actualNorm, expectedNorm) {
-		return &Response{OK: true, Actual: actualJSON}, nil
-	}
-
-	return &Response{
-		OK:     false,
-		Actual: actualJSON,
-		Error:  fmt.Sprintf("expected %s, got %s", string(expected), string(actualJSON)),
-	}, nil
-}
-
 func (a *ProcessAdapter) Reset() error {
 	a.last = nil
 	return nil
 }
 
-func (*ProcessAdapter) Close() error {
+func (*ProcessAdapter) Close(_ context.Context) error {
 	return nil
 }

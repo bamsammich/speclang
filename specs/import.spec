@@ -10,9 +10,9 @@
 # Models sorted alphabetically: Owner at 0, Pet at 1.
 # Scopes sorted alphabetically: create_pet at 0, list_pets at 1.
 scope import_openapi {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -25,6 +25,7 @@ scope import_openapi {
       models: any
       scopes: any
     }
+    action: run
   }
 
   # Verifies model names from components/schemas (implicitly verifies count = 2).
@@ -33,10 +34,10 @@ scope import_openapi {
       file: "testdata/openapi/import_valid.spec"
     }
     then {
-      exit_code: 0
-      name: "ImportTest"
-      models.0.name: "Owner"
-      models.1.name: "Pet"
+      exit_code == 0
+      name == "ImportTest"
+      models.0.name == "Owner"
+      models.1.name == "Pet"
     }
   }
 
@@ -46,12 +47,12 @@ scope import_openapi {
       file: "testdata/openapi/import_valid.spec"
     }
     then {
-      exit_code: 0
-      models.0.fields.0.name: "id"
-      models.0.fields.0.type.name: "int"
-      models.0.fields.1.name: "name"
-      models.0.fields.1.type.name: "string"
-      models.0.fields.1.type.optional: true
+      exit_code == 0
+      models.0.fields.0.name == "id"
+      models.0.fields.0.type.name == "int"
+      models.0.fields.1.name == "name"
+      models.0.fields.1.type.name == "string"
+      models.0.fields.1.type.optional == true
     }
   }
 
@@ -61,14 +62,14 @@ scope import_openapi {
       file: "testdata/openapi/import_valid.spec"
     }
     then {
-      exit_code: 0
-      models.1.fields.0.name: "id"
-      models.1.fields.0.type.name: "int"
-      models.1.fields.1.name: "name"
-      models.1.fields.1.type.name: "string"
-      models.1.fields.2.name: "tag"
-      models.1.fields.2.type.name: "string"
-      models.1.fields.2.type.optional: true
+      exit_code == 0
+      models.1.fields.0.name == "id"
+      models.1.fields.0.type.name == "int"
+      models.1.fields.1.name == "name"
+      models.1.fields.1.type.name == "string"
+      models.1.fields.2.name == "tag"
+      models.1.fields.2.type.name == "string"
+      models.1.fields.2.type.optional == true
     }
   }
 
@@ -78,9 +79,9 @@ scope import_openapi {
       file: "testdata/openapi/import_valid.spec"
     }
     then {
-      exit_code: 0
-      scopes.0.name: "create_pet"
-      scopes.1.name: "list_pets"
+      exit_code == 0
+      scopes.0.name == "create_pet"
+      scopes.1.name == "list_pets"
     }
   }
 }
@@ -88,9 +89,9 @@ scope import_openapi {
 # OpenAPI constraints: verifies minimum/maximum constraints are preserved.
 # constraints.yaml has 1 model (BoundedItem) with constrained int fields.
 scope import_openapi_constraints {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -101,6 +102,7 @@ scope import_openapi_constraints {
       exit_code: int
       models: any
     }
+    action: run
   }
 
   # Verifies BoundedItem fields exist with correct types and constraint operators.
@@ -110,17 +112,17 @@ scope import_openapi_constraints {
       file: "testdata/openapi/import_constraints.spec"
     }
     then {
-      exit_code: 0
-      models.0.name: "BoundedItem"
-      models.0.fields.0.name: "price"
-      models.0.fields.0.type.name: "int"
-      models.0.fields.0.constraint.op: "&&"
-      models.0.fields.1.name: "quantity"
-      models.0.fields.1.type.name: "int"
-      models.0.fields.1.constraint.op: "&&"
-      models.0.fields.2.name: "rating"
-      models.0.fields.2.type.name: "int"
-      models.0.fields.2.type.optional: true
+      exit_code == 0
+      models.0.name == "BoundedItem"
+      models.0.fields.0.name == "price"
+      models.0.fields.0.type.name == "int"
+      models.0.fields.0.constraint.op == "&&"
+      models.0.fields.1.name == "quantity"
+      models.0.fields.1.type.name == "int"
+      models.0.fields.1.constraint.op == "&&"
+      models.0.fields.2.name == "rating"
+      models.0.fields.2.type.name == "int"
+      models.0.fields.2.type.optional == true
     }
   }
 }
@@ -128,9 +130,9 @@ scope import_openapi_constraints {
 # OpenAPI $ref resolution: verifies that $ref fields resolve to model type names.
 # refs.yaml has Order.customer as $ref to Customer.
 scope import_openapi_refs {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -141,6 +143,7 @@ scope import_openapi_refs {
       exit_code: int
       models: any
     }
+    action: run
   }
 
   # Verifies $ref field resolves to the referenced model name.
@@ -149,16 +152,16 @@ scope import_openapi_refs {
       file: "testdata/openapi/import_refs.spec"
     }
     then {
-      exit_code: 0
-      models.0.name: "Customer"
-      models.1.name: "Order"
-      models.1.fields.0.name: "customer"
-      models.1.fields.0.type.name: "Customer"
-      models.1.fields.1.name: "id"
-      models.1.fields.1.type.name: "int"
-      models.1.fields.2.name: "note"
-      models.1.fields.2.type.name: "string"
-      models.1.fields.2.type.optional: true
+      exit_code == 0
+      models.0.name == "Customer"
+      models.1.name == "Order"
+      models.1.fields.0.name == "customer"
+      models.1.fields.0.type.name == "Customer"
+      models.1.fields.1.name == "id"
+      models.1.fields.1.type.name == "int"
+      models.1.fields.2.name == "note"
+      models.1.fields.2.type.name == "string"
+      models.1.fields.2.type.optional == true
     }
   }
 }
@@ -168,9 +171,9 @@ scope import_openapi_refs {
 # Models sorted: CreateUserRequest, CreateUserResponse, GetUserRequest, GetUserResponse, User.
 # Scopes sorted: CreateUser, GetUser.
 scope import_proto {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -183,6 +186,7 @@ scope import_proto {
       models: any
       scopes: any
     }
+    action: run
   }
 
   # Verifies model names from protobuf messages (implicitly verifies count = 5).
@@ -191,13 +195,13 @@ scope import_proto {
       file: "testdata/proto/import_valid.spec"
     }
     then {
-      exit_code: 0
-      name: "ProtoImportTest"
-      models.0.name: "CreateUserRequest"
-      models.1.name: "CreateUserResponse"
-      models.2.name: "GetUserRequest"
-      models.3.name: "GetUserResponse"
-      models.4.name: "User"
+      exit_code == 0
+      name == "ProtoImportTest"
+      models.0.name == "CreateUserRequest"
+      models.1.name == "CreateUserResponse"
+      models.2.name == "GetUserRequest"
+      models.3.name == "GetUserResponse"
+      models.4.name == "User"
     }
   }
 
@@ -207,16 +211,16 @@ scope import_proto {
       file: "testdata/proto/import_valid.spec"
     }
     then {
-      exit_code: 0
-      models.4.fields.0.name: "email"
-      models.4.fields.0.type.name: "string"
-      models.4.fields.1.name: "id"
-      models.4.fields.1.type.name: "int"
-      models.4.fields.2.name: "name"
-      models.4.fields.2.type.name: "string"
-      models.4.fields.3.name: "phone"
-      models.4.fields.3.type.name: "string"
-      models.4.fields.3.type.optional: true
+      exit_code == 0
+      models.4.fields.0.name == "email"
+      models.4.fields.0.type.name == "string"
+      models.4.fields.1.name == "id"
+      models.4.fields.1.type.name == "int"
+      models.4.fields.2.name == "name"
+      models.4.fields.2.type.name == "string"
+      models.4.fields.3.name == "phone"
+      models.4.fields.3.type.name == "string"
+      models.4.fields.3.type.optional == true
     }
   }
 
@@ -226,12 +230,12 @@ scope import_proto {
       file: "testdata/proto/import_valid.spec"
     }
     then {
-      exit_code: 0
-      models.1.name: "CreateUserResponse"
-      models.1.fields.0.name: "success"
-      models.1.fields.0.type.name: "bool"
-      models.1.fields.1.name: "user"
-      models.1.fields.1.type.name: "User"
+      exit_code == 0
+      models.1.name == "CreateUserResponse"
+      models.1.fields.0.name == "success"
+      models.1.fields.0.type.name == "bool"
+      models.1.fields.1.name == "user"
+      models.1.fields.1.type.name == "User"
     }
   }
 
@@ -241,9 +245,9 @@ scope import_proto {
       file: "testdata/proto/import_valid.spec"
     }
     then {
-      exit_code: 0
-      scopes.0.name: "CreateUser"
-      scopes.1.name: "GetUser"
+      exit_code == 0
+      scopes.0.name == "CreateUser"
+      scopes.1.name == "GetUser"
     }
   }
 }
@@ -251,9 +255,9 @@ scope import_proto {
 # Protobuf streaming: verifies streaming RPCs are skipped, only unary RPCs produce scopes.
 # streaming.proto has 4 RPCs: 1 unary (SendEvent), 3 streaming (skipped).
 scope import_proto_streaming {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -265,6 +269,7 @@ scope import_proto_streaming {
       models: any
       scopes: any
     }
+    action: run
   }
 
   # Verifies only unary RPC produces a scope; streaming RPCs are skipped.
@@ -273,10 +278,10 @@ scope import_proto_streaming {
       file: "testdata/proto/import_streaming.spec"
     }
     then {
-      exit_code: 0
-      models.0.name: "Ack"
-      models.1.name: "Event"
-      scopes.0.name: "SendEvent"
+      exit_code == 0
+      models.0.name == "Ack"
+      models.1.name == "Event"
+      scopes.0.name == "SendEvent"
     }
   }
 }

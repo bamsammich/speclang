@@ -10,11 +10,6 @@ func TestParseFieldRefExpr_ArrayIndex(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test_scope {
-    use http
-    config {
-      path: "/test"
-      method: "GET"
-    }
     contract {
       input {}
       output {
@@ -50,11 +45,6 @@ func TestParseFieldRefExpr_NestedArrayIndex(t *testing.T) {
 spec Test {
   model Item { name: string }
   scope test_scope {
-    use http
-    config {
-      path: "/test"
-      method: "GET"
-    }
     contract {
       input {}
       output {
@@ -85,11 +75,6 @@ func TestParseField_KeywordAsFieldName(t *testing.T) {
 	spec, err := Parse(`
 spec Test {
   scope test_scope {
-    use http
-    config {
-      path: "/test"
-      method: "GET"
-    }
     contract {
       input {}
       output {

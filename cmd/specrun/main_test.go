@@ -224,14 +224,14 @@ func TestVerify_ProcessAdapter(t *testing.T) {
 	bin := specrunBin(t)
 
 	specContent := `spec EchoTest {
-  target {
+  process {
     command: "echo"
   }
 
   scope echo {
-    use process
-    config {
-      args: "{\"hello\":\"world\"}"
+    action run_echo() {
+      let result = process.exec("{\"hello\":\"world\"}")
+      return result
     }
 
     contract {
@@ -239,6 +239,7 @@ func TestVerify_ProcessAdapter(t *testing.T) {
       output {
         exit_code: int
       }
+      action: run_echo
     }
 
     invariant always_succeeds {

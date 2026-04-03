@@ -1,8 +1,8 @@
 package specrun
 
 import (
-	"github.com/bamsammich/speclang/v2/internal/adapter"
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v3/internal/adapter"
+	"github.com/bamsammich/speclang/v3/pkg/spec"
 )
 
 // DefaultRegistry returns a fresh Registry with the three built-in plugins
@@ -23,7 +23,7 @@ func registerHTTP(r *spec.Registry) {
 		return
 	}
 	r.Register("http", spec.PluginDef{
-		Actions: map[string]spec.ActionDef{
+		Actions: map[string]spec.PluginActionDef{
 			"get": {Params: []spec.Param{{Name: "path", Type: spec.TypeExpr{Name: "string"}}}},
 			"post": {
 				Params: []spec.Param{
@@ -57,7 +57,7 @@ func registerHTTP(r *spec.Registry) {
 func registerProcess(r *spec.Registry) {
 	adp := adapter.NewProcessAdapter()
 	r.Register("process", spec.PluginDef{
-		Actions: map[string]spec.ActionDef{
+		Actions: map[string]spec.PluginActionDef{
 			"exec": {Params: []spec.Param{{Name: "args", Type: spec.TypeExpr{Name: "string"}}}},
 		},
 		Assertions: map[string]spec.AssertionDef{
@@ -72,7 +72,7 @@ func registerProcess(r *spec.Registry) {
 func registerPlaywright(r *spec.Registry) {
 	adp := adapter.NewPlaywrightAdapter()
 	r.Register("playwright", spec.PluginDef{
-		Actions: map[string]spec.ActionDef{
+		Actions: map[string]spec.PluginActionDef{
 			"goto": {
 				Params: []spec.Param{{Name: "url", Type: spec.TypeExpr{Name: "string"}}},
 			},

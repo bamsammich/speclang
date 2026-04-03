@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/bamsammich/speclang/v2/pkg/spec"
+import "github.com/bamsammich/speclang/v3/pkg/spec"
 
 // AST type aliases — all types are defined in pkg/spec and re-exported here
 // for backward compatibility.
@@ -44,3 +44,7 @@ type ExistsExpr = spec.ExistsExpr
 type HasKeyExpr = spec.HasKeyExpr
 type RegexLiteral = spec.RegexLiteral
 type IfExpr = spec.IfExpr
+type ActionDef = spec.ActionDef
+type LetBinding = spec.LetBinding
+type ReturnStmt = spec.ReturnStmt
+type AdapterCall = spec.AdapterCall

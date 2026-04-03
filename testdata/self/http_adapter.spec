@@ -4,16 +4,15 @@
 spec HTTPAdapterTest {
   description: "Verifies all HTTP adapter actions and assertion properties"
 
-  target {
+  http {
     base_url: env(HTTP_TEST_URL, "http://localhost:8082")
   }
 
   # GET — list items, check status, body dot-path, and response header
   scope http_get {
-    use http
-    config {
-      path: "/api/items"
-      method: "GET"
+    action run() {
+      let result = http.get("/api/items")
+      return result
     }
 
     contract {
@@ -24,24 +23,24 @@ spec HTTPAdapterTest {
         count: int
         items: any
       }
+      action: run
     }
 
     scenario list_items {
       given {}
       then {
-        status: 200
-        count: 2
-        header.Requestid: "test-123"
+        status == 200
+        count == 2
+        header.Requestid == "test-123"
       }
     }
   }
 
   # GET — single item with dot-path assertions
   scope http_get_item {
-    use http
-    config {
-      path: "/api/items/1"
-      method: "GET"
+    action run() {
+      let result = http.get("/api/items/1")
+      return result
     }
 
     contract {
@@ -52,24 +51,24 @@ spec HTTPAdapterTest {
         name: string
         tags: any
       }
+      action: run
     }
 
     scenario get_single_item {
       given {}
       then {
-        status: 200
-        id: 1
-        name: "alpha"
+        status == 200
+        id == 1
+        name == "alpha"
       }
     }
   }
 
   # POST — create item, check 201 status and echoed body
   scope http_post {
-    use http
-    config {
-      path: "/api/items"
-      method: "POST"
+    action run(name: string) {
+      let result = http.post("/api/items", { name: name })
+      return result
     }
 
     contract {
@@ -81,6 +80,7 @@ spec HTTPAdapterTest {
         id: int
         name: string
       }
+      action: run
     }
 
     scenario create_item {
@@ -88,19 +88,18 @@ spec HTTPAdapterTest {
         name: "gamma"
       }
       then {
-        status: 201
-        id: 42
-        name: "gamma"
+        status == 201
+        id == 42
+        name == "gamma"
       }
     }
   }
 
   # PUT — update item, check echoed body
   scope http_put {
-    use http
-    config {
-      path: "/api/items/1"
-      method: "PUT"
+    action run(name: string) {
+      let result = http.put("/api/items/1", { name: name })
+      return result
     }
 
     contract {
@@ -112,6 +111,7 @@ spec HTTPAdapterTest {
         id: int
         name: string
       }
+      action: run
     }
 
     scenario update_item {
@@ -119,19 +119,18 @@ spec HTTPAdapterTest {
         name: "alpha-updated"
       }
       then {
-        status: 200
-        id: 1
-        name: "alpha-updated"
+        status == 200
+        id == 1
+        name == "alpha-updated"
       }
     }
   }
 
   # DELETE — delete item
   scope http_delete {
-    use http
-    config {
-      path: "/api/items/1"
-      method: "DELETE"
+    action run() {
+      let result = http.delete("/api/items/1")
+      return result
     }
 
     contract {
@@ -140,20 +139,25 @@ spec HTTPAdapterTest {
         status: any
         deleted: any
       }
+      action: run
     }
 
     scenario delete_item {
       given {}
       then {
-        status: 200
-        deleted: true
+        status == 200
+        deleted == true
       }
     }
   }
 
   # Multi-step workflow — POST to create, then GET to verify
   scope http_multi_step {
-    use http
+    action run(name: string) {
+      http.post("/api/resources", { name: name })
+      let result = http.get("/api/resources/1")
+      return result
+    }
 
     contract {
       input {
@@ -164,25 +168,29 @@ spec HTTPAdapterTest {
         id: int
         name: string
       }
+      action: run
     }
 
     scenario create_then_verify {
       given {
         name: "widget"
-        http.post("/api/resources", { name: "widget" })
-        http.get("/api/resources/1")
       }
       then {
-        status: 200
-        id: 1
-        name: "widget"
+        status == 200
+        id == 1
+        name == "widget"
       }
     }
   }
 
   # Multi-step with header persistence — set header, then make two requests
   scope http_multi_step_headers {
-    use http
+    action run() {
+      http.header("Authorization", "Bearer multi-token")
+      http.header("X-Custom", "persistent-value")
+      let result = http.get("/api/headers")
+      return result
+    }
 
     contract {
       input {}
@@ -191,28 +199,26 @@ spec HTTPAdapterTest {
         auth: string
         custom: string
       }
+      action: run
     }
 
     scenario headers_persist_across_calls {
-      given {
-        http.header("Authorization", "Bearer multi-token")
-        http.header("X-Custom", "persistent-value")
-        http.get("/api/headers")
-      }
+      given {}
       then {
-        status: 200
-        auth: "Bearer multi-token"
-        custom: "persistent-value"
+        status == 200
+        auth == "Bearer multi-token"
+        custom == "persistent-value"
       }
     }
   }
 
   # Header action — set persistent headers then make a request
   scope http_header {
-    use http
-    config {
-      path: "/api/headers"
-      method: "GET"
+    action run() {
+      http.header("Authorization", "Bearer test-token")
+      http.header("X-Custom", "custom-value")
+      let result = http.get("/api/headers")
+      return result
     }
 
     contract {
@@ -222,18 +228,15 @@ spec HTTPAdapterTest {
         auth: string
         custom: string
       }
+      action: run
     }
 
     scenario custom_headers {
-      given {
-        http.header("Authorization", "Bearer test-token")
-        http.header("X-Custom", "custom-value")
-        http.get("/api/headers")
-      }
+      given {}
       then {
-        status: 200
-        auth: "Bearer test-token"
-        custom: "custom-value"
+        status == 200
+        auth == "Bearer test-token"
+        custom == "custom-value"
       }
     }
   }

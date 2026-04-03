@@ -1,9 +1,9 @@
 # Verifies the exists() and has_key() functions parse and that the parser
 # produces expected AST structure for specs containing these functions.
 scope parse_exists {
-  use process
-  config {
-    args: "parse"
+  action run(file: string) {
+    let result = process.exec("parse", file)
+    return result
   }
 
   contract {
@@ -14,6 +14,7 @@ scope parse_exists {
       exit_code: int
       name: string
     }
+    action: run
   }
 
   # Spec containing exists() should parse successfully.
@@ -22,8 +23,8 @@ scope parse_exists {
       file: "testdata/self/exists_function.spec"
     }
     then {
-      exit_code: 0
-      name: "ExistsTest"
+      exit_code == 0
+      name == "ExistsTest"
     }
   }
 
@@ -33,8 +34,8 @@ scope parse_exists {
       file: "testdata/self/has_key_function.spec"
     }
     then {
-      exit_code: 0
-      name: "HasKeyTest"
+      exit_code == 0
+      name == "HasKeyTest"
     }
   }
 }

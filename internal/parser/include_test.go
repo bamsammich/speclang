@@ -8,7 +8,7 @@ import (
 
 func TestResolveIncludes_Basic(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "basic", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "v3basic", "root.spec")
 	tokens, err := lexFile(root)
 	if err != nil {
 		t.Fatalf("lexing root: %v", err)
@@ -124,7 +124,7 @@ func TestResolveIncludes_Circular(t *testing.T) {
 
 func TestParseFile_WithIncludes(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "basic", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "v3basic", "root.spec")
 	spec, err := ParseFile(root)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -187,7 +187,7 @@ func TestParseFile_DuplicateModelError(t *testing.T) {
 
 func TestParseFile_DuplicateScopeError(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "duplicate_scope", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "v3duplicate_scope", "root.spec")
 	_, err := ParseFile(root)
 	if err == nil {
 		t.Fatal("expected error for duplicate scope")

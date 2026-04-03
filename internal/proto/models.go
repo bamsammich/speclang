@@ -8,7 +8,7 @@ import (
 
 	pb "github.com/yoheimuta/go-protoparser/v4/parser"
 
-	"github.com/bamsammich/speclang/v2/internal/parser"
+	"github.com/bamsammich/speclang/v3/internal/parser"
 )
 
 // convertMessages extracts all messages from a proto file and converts
