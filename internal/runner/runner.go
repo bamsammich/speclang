@@ -664,6 +664,15 @@ func (sr *scopeRunner) executeGivenInput(sc *parser.Scenario) (map[string]any, e
 				return nil, err
 			}
 		}
+		// Run the contract action with the accumulated input.
+		if sr.scopeDef.Contract != nil && sr.scopeDef.Contract.Action != "" {
+			if _, err := sr.executeInput(input); err != nil {
+				return nil, err
+			}
+			if sr.lastActionError != "" && !expectsError {
+				return nil, fmt.Errorf("action failed: %s", sr.lastActionError)
+			}
+		}
 		return input, nil
 	}
 
