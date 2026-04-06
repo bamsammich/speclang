@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/fatih/color"
@@ -23,6 +24,7 @@ import (
 	"github.com/bamsammich/speclang/v3/internal/runner"
 	"github.com/bamsammich/speclang/v3/pkg/spec"
 	"github.com/bamsammich/speclang/v3/pkg/specrun"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -501,16 +503,30 @@ func printFailedCheck(check runner.CheckResult) {
 	}
 
 	f := check.Failure
-	if f.Input != nil {
-		if inputJSON, err := json.MarshalIndent(f.Input, "          ", "  "); err == nil {
-			fmt.Printf("        input:\n          %s\n", inputJSON)
-		}
+	detail := buildFailureDetail(f)
+	buf, err := yaml.Marshal(detail)
+	if err != nil {
+		return
 	}
-	if f.Expected != nil {
-		fmt.Printf("        expected: %v\n", f.Expected)
+	for _, line := range strings.Split(strings.TrimRight(string(buf), "\n"), "\n") {
+		fmt.Printf("        %s\n", line)
 	}
-	if f.Actual != nil {
-		fmt.Printf("        actual:   %v\n", f.Actual)
+}
+
+// failureDetail is the YAML-serialized failure context shown to the user.
+type failureDetail struct {
+	Description string `yaml:"description,omitempty"`
+	Expected    any    `yaml:"expected,omitempty"`
+	Actual      any    `yaml:"actual,omitempty"`
+	Input       any    `yaml:"input,omitempty"`
+}
+
+func buildFailureDetail(f *spec.Failure) failureDetail {
+	return failureDetail{
+		Description: f.Description,
+		Expected:    f.Expected,
+		Actual:      f.Actual,
+		Input:       f.Input,
 	}
 }
 
