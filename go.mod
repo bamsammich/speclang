@@ -4,12 +4,13 @@ go 1.26.1
 
 require (
 	github.com/getkin/kin-openapi v0.134.0
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/docker/docker v27.5.1+incompatible
 	github.com/docker/go-connections v0.6.0
+	github.com/fatih/color v1.19.0
 	github.com/playwright-community/playwright-go v0.5700.1
 	github.com/urfave/cli/v3 v3.7.0
 	github.com/yoheimuta/go-protoparser/v4 v4.14.2
@@ -22,7 +23,6 @@ require (
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
