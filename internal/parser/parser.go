@@ -1073,7 +1073,7 @@ func (p *parser) parseArgList() ([]Expr, error) {
 
 // parseParam parses: name: type
 func (p *parser) parseParam() (*Param, error) {
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
