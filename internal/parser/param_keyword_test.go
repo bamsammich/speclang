@@ -51,3 +51,34 @@ spec Test {
 		t.Errorf("expected second param 'before', got %q", action.Params[1].Name)
 	}
 }
+
+// TestParseAction_MoreKeywordsAsParamNames covers the "same is likely true for
+// other scope-block keywords" list from issue #113: contract, invariant,
+// scenario, when, after — in addition to before which Task 1 covers.
+func TestParseAction_MoreKeywordsAsParamNames(t *testing.T) {
+	t.Parallel()
+	cases := []string{"after", "contract", "invariant", "scenario", "when"}
+	for _, kw := range cases {
+		kw := kw
+		t.Run(kw, func(t *testing.T) {
+			t.Parallel()
+			src := `
+spec Test {
+  scope s {
+    action foo(` + kw + `: string) {
+      return ` + kw + `
+    }
+  }
+}
+`
+			spec, err := Parse(src)
+			if err != nil {
+				t.Fatalf("expected parse to succeed for param name %q, got: %v", kw, err)
+			}
+			got := spec.Scopes[0].Actions[0].Params[0].Name
+			if got != kw {
+				t.Errorf("expected param name %q, got %q", kw, got)
+			}
+		})
+	}
+}

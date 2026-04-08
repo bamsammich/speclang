@@ -116,8 +116,9 @@ func isIdentLike(typ TokenType) bool {
 		TokenInput, TokenOutput,
 		TokenModel, TokenAction,
 		TokenTarget, TokenLocators,
-		TokenGiven, TokenThen,
+		TokenGiven, TokenWhen, TokenThen,
 		TokenScope, TokenConfig,
+		TokenContract, TokenInvariant, TokenScenario,
 		TokenBefore, TokenAfter,
 		TokenLet, TokenReturn:
 		return true
