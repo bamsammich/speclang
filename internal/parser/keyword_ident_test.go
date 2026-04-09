@@ -52,15 +52,19 @@ spec Test {
 	}
 }
 
-// TestParseAction_MoreKeywordsAsParamNames covers scope-block keywords from
-// issue #113 that were newly enabled as param names: contract, invariant,
-// scenario, when. `after` is a control case — it was already accepted before
-// this fix via isIdentLike.
+// TestParseAction_MoreKeywordsAsParamNames covers keywords that are valid as
+// param names via isIdentLike. `after` is a control case — it was already
+// accepted before issue #113. `when` was added by #113 and is safe because it
+// does not declare scope-level blocks.
+//
+// Note: "contract", "invariant", and "scenario" are intentionally NOT tested
+// here. Those keywords declare scope-level blocks; including them in
+// isIdentLike caused a regression where `scenario nested {}` inside a then
+// block silently parsed as a field reference instead of a syntax error.
 func TestParseAction_MoreKeywordsAsParamNames(t *testing.T) {
 	t.Parallel()
-	// `after` is a control: it was accepted before Task 3. The others were newly
-	// enabled by extending isIdentLike with Contract/Invariant/Scenario/When.
-	cases := []string{"after", "contract", "invariant", "scenario", "when"}
+	// `after` is a control: accepted before #113. `when` was added by #113.
+	cases := []string{"after", "when"}
 	for _, kw := range cases {
 		kw := kw
 		t.Run(kw, func(t *testing.T) {

@@ -110,6 +110,12 @@ func (*parser) errAt(tok Token, msg string) error {
 // isIdentLike returns true if the token can be used as an identifier in
 // expression context. Keywords like "input", "output", "error" commonly
 // appear as field names in expressions.
+//
+// Note: TokenContract, TokenInvariant, and TokenScenario are intentionally
+// NOT included here. These keywords declare scope-level blocks, and treating
+// them as valid identifiers in expression position silently swallows syntax
+// errors — e.g. `scenario nested {}` inside a then block would parse as a
+// field reference instead of producing a parse error.
 func isIdentLike(typ TokenType) bool {
 	switch typ {
 	case TokenIdent,
@@ -118,7 +124,6 @@ func isIdentLike(typ TokenType) bool {
 		TokenTarget, TokenLocators,
 		TokenGiven, TokenWhen, TokenThen,
 		TokenScope, TokenConfig,
-		TokenContract, TokenInvariant, TokenScenario,
 		TokenBefore, TokenAfter,
 		TokenLet, TokenReturn:
 		return true
