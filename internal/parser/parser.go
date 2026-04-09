@@ -110,13 +110,19 @@ func (*parser) errAt(tok Token, msg string) error {
 // isIdentLike returns true if the token can be used as an identifier in
 // expression context. Keywords like "input", "output", "error" commonly
 // appear as field names in expressions.
+//
+// Note: TokenContract, TokenInvariant, and TokenScenario are intentionally
+// NOT included here. These keywords declare scope-level blocks, and treating
+// them as valid identifiers in expression position silently swallows syntax
+// errors — e.g. `scenario nested {}` inside a then block would parse as a
+// field reference instead of producing a parse error.
 func isIdentLike(typ TokenType) bool {
 	switch typ {
 	case TokenIdent,
 		TokenInput, TokenOutput,
 		TokenModel, TokenAction,
 		TokenTarget, TokenLocators,
-		TokenGiven, TokenThen,
+		TokenGiven, TokenWhen, TokenThen,
 		TokenScope, TokenConfig,
 		TokenBefore, TokenAfter,
 		TokenLet, TokenReturn:
@@ -151,7 +157,7 @@ func (p *parser) parse() (*Spec, error) {
 		return nil, err
 	}
 	spec := &Spec{Pos: posFrom(specTok)}
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +319,7 @@ func (p *parser) parseSpecServices() ([]*Service, error) {
 
 	var services []*Service
 	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
-		key, err := p.expect(TokenIdent)
+		key, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +345,7 @@ func (p *parser) parseTarget() (*Target, error) {
 
 	t := &Target{Pos: posFrom(targetTok), Fields: make(map[string]Expr)}
 	for p.peek().Type != TokenRBrace {
-		key, err := p.expect(TokenIdent)
+		key, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -375,7 +381,7 @@ func (p *parser) parseServices(t *Target) error {
 	}
 
 	for p.peek().Type != TokenRBrace {
-		key, err := p.expect(TokenIdent)
+		key, err := p.expectIdent()
 		if err != nil {
 			return err
 		}
@@ -645,7 +651,7 @@ func (p *parser) parseLocators() (map[string]string, error) {
 
 	locs := make(map[string]string)
 	for p.peek().Type != TokenRBrace {
-		key, err := p.expect(TokenIdent)
+		key, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -691,7 +697,7 @@ func (p *parser) parseLocatorSelector() (string, error) {
 // parseModel parses: model Name { field: type ... }
 func (p *parser) parseModel() (*Model, error) {
 	p.advance() // consume "model"
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -927,7 +933,7 @@ func (p *parser) parseFieldBlock() ([]*Field, error) {
 // Steps can be: let bindings, adapter.method() calls, action() calls, return statements.
 func (p *parser) parseAction() (*ActionDef, error) {
 	p.advance() // consume "action"
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1024,7 +1030,7 @@ func (p *parser) parseCallOrAdapterCall() (GivenStep, error) {
 	if p.peek().Type == TokenDot {
 		// Namespaced: adapter.method(args)
 		p.advance() // consume .
-		method, err := p.expect(TokenIdent)
+		method, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -1073,7 +1079,7 @@ func (p *parser) parseArgList() ([]Expr, error) {
 
 // parseParam parses: name: type
 func (p *parser) parseParam() (*Param, error) {
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1090,7 +1096,7 @@ func (p *parser) parseParam() (*Param, error) {
 // parseCall is kept for backward compatibility with v2 Call AST nodes.
 // Prefer parseCallOrAdapterCall for v3 parsing.
 func (p *parser) parseCall() (*Call, error) {
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1098,7 +1104,7 @@ func (p *parser) parseCall() (*Call, error) {
 	c := &Call{Pos: posFrom(name)}
 	if p.peek().Type == TokenDot {
 		p.advance() // consume .
-		method, err := p.expect(TokenIdent)
+		method, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -1131,7 +1137,7 @@ func (p *parser) parseCall() (*Call, error) {
 // parseInvariant parses: invariant name { [when expr:] assertions... }
 func (p *parser) parseInvariant() (*Invariant, error) {
 	p.advance() // consume "invariant"
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1173,7 +1179,7 @@ func (p *parser) parseInvariant() (*Invariant, error) {
 // parseScenario parses: scenario name { given/when/then blocks }
 func (p *parser) parseScenario() (*Scenario, error) {
 	p.advance() // consume "scenario"
-	name, err := p.expect(TokenIdent)
+	name, err := p.expectIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -1838,7 +1844,7 @@ func (p *parser) parseObjectLiteral() (Expr, error) {
 	obj := ObjectLiteral{Pos: posFrom(lbrace)}
 
 	for p.peek().Type != TokenRBrace {
-		key, err := p.expect(TokenIdent)
+		key, err := p.expectIdent()
 		if err != nil {
 			return nil, err
 		}

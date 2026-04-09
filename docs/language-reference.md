@@ -756,6 +756,43 @@ error validating spec:
     action: parameter "amount" type mismatch: expected float, got int
 ```
 
+## Keywords
+
+### Contextual keywords
+
+Most keywords are **contextual** -- they are reserved at statement-start positions but can be used as identifiers in name positions (action parameters, field names, model/action/scope/scenario/invariant names, and object literal keys).
+
+Contextual keywords: `before`, `after`, `given`, `when`, `then`, `input`, `output`, `model`, `action`, `target`, `locators`, `scope`, `config`, `let`, `return`.
+
+Example -- cursor-based pagination uses `before` and `after` as parameter names, which is valid:
+
+```
+action list(before: string?, after: string?) {
+  let result = http.get("/api/items", { before: before, after: after })
+  return result.body
+}
+
+scope items {
+  contract {
+    input {
+      before: string?
+      after: string?
+    }
+    output {
+      items: []Item
+      next_cursor: string?
+    }
+    action: list
+  }
+}
+```
+
+### Reserved keywords
+
+The following keywords are reserved everywhere and **cannot** be used as identifiers: `spec`, `contract`, `invariant`, `scenario`, `include`, `import`, `if`, `else`, `service`, `env`, `null`, `true`, `false`.
+
+`contract`, `invariant`, and `scenario` are intentionally excluded from contextual use -- they declare scope-level blocks, and treating them as identifiers in expression position would silently accept malformed specs rather than producing a parse error.
+
 ## Plugin Definition
 
 Plugins are defined in `.plugin` files. Built-in plugins (http, process, playwright) are compiled into specrun. External plugins communicate via JSON over stdin/stdout.
