@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bamsammich/speclang/v3/internal/parser"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/parser"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // primitives are type names that don't need model resolution.

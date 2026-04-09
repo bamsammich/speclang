@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // v3Writer emits formatted v3 spec text from AST nodes.

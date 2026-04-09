@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // hasSynthesizableConfig returns true if the scope has v2 config that can be

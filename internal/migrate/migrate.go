@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bamsammich/speclang/v3/internal/parser"
-	"github.com/bamsammich/speclang/v3/internal/v2parser"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/parser"
+	"github.com/bamsammich/speclang/v4/internal/v2parser"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // MigratedFile represents a single migrated file with its path and v3 output.

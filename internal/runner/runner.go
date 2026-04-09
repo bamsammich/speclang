@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/bamsammich/speclang/v3/internal/adapter"
-	"github.com/bamsammich/speclang/v3/internal/generator"
-	"github.com/bamsammich/speclang/v3/internal/parser"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/adapter"
+	"github.com/bamsammich/speclang/v4/internal/generator"
+	"github.com/bamsammich/speclang/v4/internal/parser"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // errorPseudoField is the name of the pseudo-field used to assert against action errors.

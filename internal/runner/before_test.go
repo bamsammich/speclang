@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/bamsammich/speclang/v3/internal/adapter"
-	"github.com/bamsammich/speclang/v3/internal/runner"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/adapter"
+	"github.com/bamsammich/speclang/v4/internal/runner"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // recordingAdapter is a test adapter that records all calls in order.

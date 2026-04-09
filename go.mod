@@ -1,4 +1,4 @@
-module github.com/bamsammich/speclang/v3
+module github.com/bamsammich/speclang/v4
 
 go 1.26.1
 

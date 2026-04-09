@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/bamsammich/speclang/v3/internal/parser"
+	"github.com/bamsammich/speclang/v4/internal/parser"
 )
 
 func testdataPath(name string) string {

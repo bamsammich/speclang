@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bamsammich/speclang/v3/internal/adapter"
-	"github.com/bamsammich/speclang/v3/internal/runner"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/adapter"
+	"github.com/bamsammich/speclang/v4/internal/runner"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // letGivenAdapter returns a JSON response so let bindings can extract fields.

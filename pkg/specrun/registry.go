@@ -1,8 +1,8 @@
 package specrun
 
 import (
-	"github.com/bamsammich/speclang/v3/internal/adapter"
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/internal/adapter"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // DefaultRegistry returns a fresh Registry with the three built-in plugins

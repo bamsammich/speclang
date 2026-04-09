@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bamsammich/speclang/v3/pkg/spec"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // stubAdapter is a minimal Adapter implementation for testing.
