@@ -52,11 +52,14 @@ spec Test {
 	}
 }
 
-// TestParseAction_MoreKeywordsAsParamNames covers the "same is likely true for
-// other scope-block keywords" list from issue #113: contract, invariant,
-// scenario, when, after — in addition to before which Task 1 covers.
+// TestParseAction_MoreKeywordsAsParamNames covers scope-block keywords from
+// issue #113 that were newly enabled as param names: contract, invariant,
+// scenario, when. `after` is a control case — it was already accepted before
+// this fix via isIdentLike.
 func TestParseAction_MoreKeywordsAsParamNames(t *testing.T) {
 	t.Parallel()
+	// `after` is a control: it was accepted before Task 3. The others were newly
+	// enabled by extending isIdentLike with Contract/Invariant/Scenario/When.
 	cases := []string{"after", "contract", "invariant", "scenario", "when"}
 	for _, kw := range cases {
 		kw := kw
@@ -81,4 +84,73 @@ spec Test {
 			}
 		})
 	}
+}
+
+// TestKeywordsInNamePositions confirms block keywords can appear in every
+// identifier-like name position in a spec, not just action parameters.
+func TestKeywordsInNamePositions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("model name", func(t *testing.T) {
+		t.Parallel()
+		_, err := Parse(`spec T { model before { x: int } }`)
+		if err != nil {
+			t.Fatalf("model named 'before' should parse: %v", err)
+		}
+	})
+
+	t.Run("scenario name", func(t *testing.T) {
+		t.Parallel()
+		_, err := Parse(`
+spec T {
+  scope s {
+    contract { input { x: int } output { y: int } }
+    scenario before {
+      given { x: 1 }
+      then { y == 1 }
+    }
+  }
+}
+`)
+		if err != nil {
+			t.Fatalf("scenario named 'before' should parse: %v", err)
+		}
+	})
+
+	t.Run("invariant name", func(t *testing.T) {
+		t.Parallel()
+		_, err := Parse(`
+spec T {
+  scope s {
+    contract { input { x: int } output { y: int } action: foo }
+    action foo(x: int) { return x }
+    invariant before {
+      y == x
+    }
+  }
+}
+`)
+		if err != nil {
+			t.Fatalf("invariant named 'before' should parse: %v", err)
+		}
+	})
+
+	t.Run("object literal key", func(t *testing.T) {
+		t.Parallel()
+		_, err := Parse(`
+spec T {
+  scope s {
+    scenario smoke {
+      given {
+        http.post("/x", { before: "2026-01-01", after: "2026-12-31" })
+      }
+      then { true == true }
+    }
+  }
+}
+`)
+		if err != nil {
+			t.Fatalf("object literal key 'before' should parse: %v", err)
+		}
+	})
 }
