@@ -166,7 +166,7 @@ func buildConstraint(fieldName string, sch *openapi3.Schema) parser.Expr {
 	}
 
 	if lower != nil && upper != nil {
-		return parser.BinaryOp{Left: lower, Op: "&&", Right: upper}
+		return parser.BinaryOp{Left: lower, Op: "and", Right: upper}
 	}
 	if lower != nil {
 		return lower

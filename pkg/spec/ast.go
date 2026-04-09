@@ -392,6 +392,9 @@ func FormatExpr(e Expr) string {
 	case BinaryOp:
 		return FormatExpr(v.Left) + " " + v.Op + " " + FormatExpr(v.Right)
 	case UnaryOp:
+		if v.Op == "not" {
+			return "not " + FormatExpr(v.Operand)
+		}
 		return v.Op + FormatExpr(v.Operand)
 	case LenExpr:
 		return "len(" + FormatExpr(v.Arg) + ")"

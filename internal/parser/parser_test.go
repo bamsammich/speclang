@@ -577,16 +577,16 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "and before or",
-			input: "spec T { scope s { invariant i { a || b && c } } }",
+			input: "spec T { scope s { invariant i { a or b and c } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				or, ok := expr.(parser.BinaryOp)
-				if !ok || or.Op != "||" {
-					t.Fatalf("expected ||, got %v", expr)
+				if !ok || or.Op != "or" {
+					t.Fatalf("expected or, got %v", expr)
 				}
 				and, ok := or.Right.(parser.BinaryOp)
-				if !ok || and.Op != "&&" {
-					t.Errorf("expected && on right of ||, got %v", or.Right)
+				if !ok || and.Op != "and" {
+					t.Errorf("expected and on right of or, got %v", or.Right)
 				}
 			},
 		},
@@ -622,12 +622,12 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "unary negation",
-			input: "spec T { scope s { invariant i { !a } } }",
+			input: "spec T { scope s { invariant i { not a } } }",
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				unary, ok := expr.(parser.UnaryOp)
-				if !ok || unary.Op != "!" {
-					t.Fatalf("expected UnaryOp{!}, got %v", expr)
+				if !ok || unary.Op != "not" {
+					t.Fatalf("expected UnaryOp{not}, got %v", expr)
 				}
 			},
 		},

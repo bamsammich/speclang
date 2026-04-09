@@ -116,10 +116,10 @@ scope import_openapi_constraints {
       models.0.name == "BoundedItem"
       models.0.fields.0.name == "price"
       models.0.fields.0.type.name == "int"
-      models.0.fields.0.constraint.op == "&&"
+      models.0.fields.0.constraint.op == "and"
       models.0.fields.1.name == "quantity"
       models.0.fields.1.type.name == "int"
-      models.0.fields.1.constraint.op == "&&"
+      models.0.fields.1.constraint.op == "and"
       models.0.fields.2.name == "rating"
       models.0.fields.2.type.name == "int"
       models.0.fields.2.type.optional == true

@@ -65,20 +65,38 @@ func TestLexTransferSpec(t *testing.T) {
 
 func TestLexOperators(t *testing.T) {
 	t.Parallel()
-	tokens, err := Lex("== != > < >= <= + - * / % && ||")
+	tokens, err := Lex("== != > < >= <= + - * / % and or")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []TokenType{
-		TokenEq, TokenNeq, TokenGt, TokenLt, TokenGte, TokenLte,
-		TokenPlus, TokenMinus, TokenStar, TokenSlash, TokenPercent, TokenAnd, TokenOr, TokenEOF,
+	expected := []struct {
+		typ TokenType
+		val string
+	}{
+		{TokenEq, "=="},
+		{TokenNeq, "!="},
+		{TokenGt, ">"},
+		{TokenLt, "<"},
+		{TokenGte, ">="},
+		{TokenLte, "<="},
+		{TokenPlus, "+"},
+		{TokenMinus, "-"},
+		{TokenStar, "*"},
+		{TokenSlash, "/"},
+		{TokenPercent, "%"},
+		{TokenAnd, "and"},
+		{TokenOr, "or"},
+		{TokenEOF, ""},
 	}
 	if len(tokens) != len(expected) {
 		t.Fatalf("expected %d tokens, got %d", len(expected), len(tokens))
 	}
 	for i, exp := range expected {
-		if tokens[i].Type != exp {
-			t.Errorf("token %d: expected %s, got %s", i, exp, tokens[i].Type)
+		if tokens[i].Type != exp.typ {
+			t.Errorf("token %d: expected type %s, got %s", i, exp.typ, tokens[i].Type)
+		}
+		if exp.val != "" && tokens[i].Value != exp.val {
+			t.Errorf("token %d: expected value %q, got %q", i, exp.val, tokens[i].Value)
 		}
 	}
 }

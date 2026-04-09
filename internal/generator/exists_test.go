@@ -166,7 +166,7 @@ func TestEvalExists_WithNegation(t *testing.T) {
 		"output": map[string]any{},
 	}
 	expr := parser.UnaryOp{
-		Op:      "!",
+		Op:      "not",
 		Operand: parser.ExistsExpr{Arg: parser.FieldRef{Path: "output.missing"}},
 	}
 	val, ok := Eval(expr, vars)

@@ -111,12 +111,12 @@ scope generate_enum {
   # Generated adapter_name values must be valid variants.
   invariant adapter_name_is_valid {
     when exit_code == 0:
-      output.adapter_name == "http" || output.adapter_name == "process" || output.adapter_name == "playwright"
+      output.adapter_name == "http" or output.adapter_name == "process" or output.adapter_name == "playwright"
   }
 
   # Generated subcommand values must be valid variants.
   invariant subcommand_is_valid {
     when exit_code == 0:
-      output.subcommand == "parse" || output.subcommand == "generate" || output.subcommand == "verify" || output.subcommand == "install"
+      output.subcommand == "parse" or output.subcommand == "generate" or output.subcommand == "verify" or output.subcommand == "install"
   }
 }

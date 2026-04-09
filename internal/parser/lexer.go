@@ -87,9 +87,15 @@ const (
 	TokenStar    // *
 	TokenSlash   // /
 	TokenPercent // %
-	TokenAnd     // &&
-	TokenOr      // ||
-	TokenNot     // !
+	TokenAnd     // and
+	TokenOr      // or
+	TokenNot     // not
+	TokenIn      // in
+	TokenImplies // implies
+	TokenEnum    // enum
+	TokenConstrain // constrain
+	TokenWhere   // where
+	TokenArrow   // ->
 	TokenAssign  // =
 
 	// Special
@@ -156,6 +162,12 @@ var tokenNames = map[TokenType]string{
 	TokenAnd:       "And",
 	TokenOr:        "Or",
 	TokenNot:       "Not",
+	TokenIn:        "In",
+	TokenImplies:   "Implies",
+	TokenEnum:      "Enum",
+	TokenConstrain: "Constrain",
+	TokenWhere:     "Where",
+	TokenArrow:     "Arrow",
 	TokenAssign:    "Assign",
 	TokenComment:   "Comment",
 	TokenEOF:       "EOF",
@@ -199,6 +211,14 @@ var keywords = map[string]TokenType{
 	"return":    TokenReturn,
 	"true":      TokenBool,
 	"false":     TokenBool,
+	"and":       TokenAnd,
+	"or":        TokenOr,
+	"not":       TokenNot,
+	"in":        TokenIn,
+	"implies":   TokenImplies,
+	"enum":      TokenEnum,
+	"constrain": TokenConstrain,
+	"where":     TokenWhere,
 }
 
 // singleCharTokens maps single characters to their token types.
@@ -215,7 +235,6 @@ var singleCharTokens = map[rune]TokenType{
 	'@': TokenAt,
 	'?': TokenQuestion,
 	'+': TokenPlus,
-	'-': TokenMinus,
 	'*': TokenStar,
 	'/': TokenSlash,
 	'%': TokenPercent,
@@ -347,19 +366,30 @@ func escapeChar(ch rune) []rune {
 func (l *lexer) lexNumber() {
 	startLine, startCol := l.line, l.col
 	start := l.pos
-	for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+	for l.pos < len(l.src) && (unicode.IsDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
 		l.advance()
 	}
 	// Check for decimal point followed by digit → float literal
 	if l.pos < len(l.src)-1 && l.src[l.pos] == '.' && unicode.IsDigit(l.src[l.pos+1]) {
 		l.advance() // consume '.'
-		for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+		for l.pos < len(l.src) && (unicode.IsDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
 			l.advance()
 		}
-		l.emit(TokenFloat, string(l.src[start:l.pos]), startLine, startCol)
+		l.emit(TokenFloat, stripUnderscores(l.src[start:l.pos]), startLine, startCol)
 		return
 	}
-	l.emit(TokenInt, string(l.src[start:l.pos]), startLine, startCol)
+	l.emit(TokenInt, stripUnderscores(l.src[start:l.pos]), startLine, startCol)
+}
+
+// stripUnderscores removes underscores from numeric literals (e.g., 1_000_000 → 1000000).
+func stripUnderscores(src []rune) string {
+	var out []rune
+	for _, ch := range src {
+		if ch != '_' {
+			out = append(out, ch)
+		}
+	}
+	return string(out)
 }
 
 func (l *lexer) lexIdent() {
@@ -380,6 +410,18 @@ func (l *lexer) lexSymbol() error {
 	line, col := l.line, l.col
 	ch := l.src[l.pos]
 
+	// Handle '-' separately: could be '-' (minus) or '->' (arrow).
+	if ch == '-' {
+		l.advance()
+		if l.pos < len(l.src) && l.src[l.pos] == '>' {
+			l.emit(TokenArrow, "->", line, col)
+			l.advance()
+		} else {
+			l.emit(TokenMinus, "-", line, col)
+		}
+		return nil
+	}
+
 	// Single-character tokens.
 	if typ, ok := singleCharTokens[ch]; ok {
 		l.emit(typ, string(ch), line, col)
@@ -398,15 +440,16 @@ func (l *lexer) lexOperator(line, col int, ch rune) error {
 	case '=':
 		l.emitCompound(line, col, '=', TokenEq, "==", TokenAssign, "=")
 	case '!':
-		l.emitCompound(line, col, '=', TokenNeq, "!=", TokenNot, "!")
+		if l.pos < len(l.src) && l.src[l.pos] == '=' {
+			l.emit(TokenNeq, "!=", line, col)
+			l.advance()
+		} else {
+			return fmt.Errorf("%d:%d: unexpected character '!' (use 'not' for logical negation)", line, col)
+		}
 	case '>':
 		l.emitCompound(line, col, '=', TokenGte, ">=", TokenGt, ">")
 	case '<':
 		l.emitCompound(line, col, '=', TokenLte, "<=", TokenLt, "<")
-	case '&':
-		return l.expectDouble(line, col, '&', TokenAnd, "&&")
-	case '|':
-		return l.expectDouble(line, col, '|', TokenOr, "||")
 	default:
 		return fmt.Errorf("%d:%d: unexpected character %s", line, col, strconv.QuoteRune(ch))
 	}
@@ -430,12 +473,3 @@ func (l *lexer) emitCompound(
 	l.emit(singleTyp, singleVal, line, col)
 }
 
-// expectDouble handles operators that require two identical characters (e.g., && ||).
-func (l *lexer) expectDouble(line, col int, ch rune, typ TokenType, val string) error {
-	if l.pos >= len(l.src) || l.src[l.pos] != ch {
-		return fmt.Errorf("%d:%d: unexpected character '%c' (expected '%s')", line, col, ch, val)
-	}
-	l.emit(typ, val, line, col)
-	l.advance()
-	return nil
-}

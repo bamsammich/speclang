@@ -786,6 +786,15 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 		return TypeExpr{Pos: posFrom(lbracket), Name: "array", ElemType: &elemType}, nil
 	}
 
+	// Enum type: enum("val1", "val2", ...) — enum is now a keyword token
+	if p.peek().Type == TokenEnum {
+		name := p.advance()
+		if p.peek().Type == TokenLParen {
+			return p.parseEnumType(name)
+		}
+		return TypeExpr{Pos: posFrom(name), Name: typeEnum}, nil
+	}
+
 	name, err := p.expectIdent()
 	if err != nil {
 		return TypeExpr{}, err
@@ -794,11 +803,6 @@ func (p *parser) parseTypeExprInner() (TypeExpr, error) {
 	// Map type: map[K, V]
 	if name.Value == typeMap && p.peek().Type == TokenLBracket {
 		return p.parseMapType(name)
-	}
-
-	// Enum type: enum("val1", "val2", ...)
-	if name.Value == typeEnum && p.peek().Type == TokenLParen {
-		return p.parseEnumType(name)
 	}
 
 	return TypeExpr{Pos: posFrom(name), Name: name.Value}, nil
@@ -1398,24 +1402,27 @@ func (p *parser) parseFieldPath() (string, error) {
 // Precedence levels (ascending).
 const (
 	precNone       = 0
-	precOr         = 1
-	precAnd        = 2
-	precEquality   = 3
-	precComparison = 4
-	precAdditive   = 5
-	precMultiply   = 6
+	precImplies    = 1
+	precOr         = 2
+	precAnd        = 3
+	precEquality   = 4
+	precComparison = 5
+	precAdditive   = 6
+	precMultiply   = 7
 )
 
 // infixPrec returns the precedence of an infix operator token, or 0 if not infix.
 func infixPrec(typ TokenType) int {
 	switch typ {
+	case TokenImplies:
+		return precImplies
 	case TokenOr:
 		return precOr
 	case TokenAnd:
 		return precAnd
 	case TokenEq, TokenNeq:
 		return precEquality
-	case TokenLt, TokenGt, TokenLte, TokenGte:
+	case TokenLt, TokenGt, TokenLte, TokenGte, TokenIn:
 		return precComparison
 	case TokenPlus, TokenMinus:
 		return precAdditive
@@ -1438,8 +1445,10 @@ var opStrings = map[TokenType]string{
 	TokenStar:    "*",
 	TokenSlash:   "/",
 	TokenPercent: "%",
-	TokenAnd:     "&&",
-	TokenOr:      "||",
+	TokenAnd:     "and",
+	TokenOr:      "or",
+	TokenImplies: "implies",
+	TokenIn:      "in",
 }
 
 // opString returns the string representation of an operator token.
@@ -1482,7 +1491,7 @@ func (p *parser) parseExprPrec(minPrec int) (Expr, error) {
 	return left, nil
 }
 
-// parseUnary handles unary operators: !, -
+// parseUnary handles unary operators: not, -
 func (p *parser) parseUnary() (Expr, error) {
 	tok := p.peek()
 	switch tok.Type {
@@ -1492,7 +1501,7 @@ func (p *parser) parseUnary() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return UnaryOp{Pos: posFrom(tok), Op: "!", Operand: operand}, nil
+		return UnaryOp{Pos: posFrom(tok), Op: "not", Operand: operand}, nil
 	case TokenMinus:
 		p.advance()
 		operand, err := p.parseUnary()

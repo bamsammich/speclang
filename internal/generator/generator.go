@@ -445,7 +445,7 @@ func (c *evalCtx) evalUnary(e parser.UnaryOp) (any, bool) {
 		return nil, false
 	}
 	switch e.Op {
-	case "!":
+	case "not":
 		b, isBool := val.(bool)
 		if !isBool {
 			return nil, false
@@ -604,8 +604,26 @@ func (c *evalCtx) evalChainedComparison(
 
 func evalBinaryValues(op string, left, right any) (any, bool) {
 	switch op {
-	case "&&", "||":
+	case "and", "or":
 		return evalBoolOp(op, left, right)
+	case "implies":
+		lb, lok := left.(bool)
+		rb, rok := right.(bool)
+		if !lok || !rok {
+			return nil, false
+		}
+		return !lb || rb, true
+	case "in":
+		arr, ok := right.([]any)
+		if !ok {
+			return nil, false
+		}
+		for _, v := range arr {
+			if left == v {
+				return true, true
+			}
+		}
+		return false, true
 	case "==", "!=":
 		return evalEqualityOp(op, left, right)
 	case "<", "<=", ">", ">=", "+", "-", "*", "/", "%":
@@ -661,7 +679,7 @@ func evalBoolOp(op string, left, right any) (any, bool) {
 	if !lok || !rok {
 		return nil, false
 	}
-	if op == "&&" {
+	if op == "and" {
 		return lb && rb, true
 	}
 	return lb || rb, true

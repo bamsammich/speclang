@@ -133,7 +133,7 @@ func TestParseQuantifierWithComplexPredicate(t *testing.T) {
       output { ok: bool }
     }
     invariant bounded {
-      all(input.nums, n => n >= 0 && n <= 100)
+      all(input.nums, n => n >= 0 and n <= 100)
     }
   }
 }`
@@ -148,12 +148,12 @@ func TestParseQuantifierWithComplexPredicate(t *testing.T) {
 		t.Fatalf("expected AllExpr, got %T", inv.Assertions[0].Expr)
 	}
 
-	// Predicate should be a && BinaryOp
+	// Predicate should be an "and" BinaryOp
 	binOp, ok := allExpr.Predicate.(parser.BinaryOp)
 	if !ok {
 		t.Fatalf("expected BinaryOp for predicate, got %T", allExpr.Predicate)
 	}
-	if binOp.Op != "&&" {
-		t.Errorf("expected op '&&', got %q", binOp.Op)
+	if binOp.Op != "and" {
+		t.Errorf("expected op 'and', got %q", binOp.Op)
 	}
 }

@@ -18,7 +18,7 @@ spec Test {
       }
     }
     invariant order {
-      when error == null && len(output.items) > 1:
+      when error == null and len(output.items) > 1:
         output.items.0 >= output.items.1
     }
   }
@@ -53,7 +53,7 @@ spec Test {
       }
     }
     invariant first_name {
-      when error == null && len(output.results) > 0:
+      when error == null and len(output.results) > 0:
         output.results.0.name != ""
     }
   }
