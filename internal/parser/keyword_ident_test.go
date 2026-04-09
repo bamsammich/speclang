@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -157,4 +158,34 @@ spec T {
 			t.Fatalf("object literal key 'before' should parse: %v", err)
 		}
 	})
+}
+
+// TestStructuralKeywordsRejectedAsIdentifiers guards the intentional exclusion
+// of contract/invariant/scenario from isIdentLike. These tokens declare
+// scope-level blocks; accepting them as identifiers in expression position
+// silently parses malformed specs (e.g. "scenario nested {}" in a then block
+// becomes a field reference instead of a parse error).
+func TestStructuralKeywordsRejectedAsIdentifiers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		keyword string
+		src     string
+	}{
+		{"scenario", `spec T { scope s { contract { input { x: int } output { y: int } } scenario smoke { given { x: 1 } then { scenario == 1 } } } }`},
+		{"contract", `spec T { scope s { scenario smoke { then { contract == 1 } } } }`},
+		{"invariant", `spec T { scope s { scenario smoke { then { invariant == 1 } } } }`},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.keyword, func(t *testing.T) {
+			t.Parallel()
+			_, err := Parse(tc.src)
+			if err == nil {
+				t.Fatalf("expected parse error for %q in expression position, got none", tc.keyword)
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), tc.keyword) {
+				t.Errorf("expected error to mention %q, got: %v", tc.keyword, err)
+			}
+		})
+	}
 }
