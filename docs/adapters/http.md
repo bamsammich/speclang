@@ -1,47 +1,32 @@
 # HTTP Adapter
 
-The HTTP adapter (`use http`) tests REST APIs. It supports single-request scopes and multi-step workflows.
+The HTTP adapter tests REST APIs. It is built into `specrun` — no subprocess or external binary required.
 
 ## Configuration
 
-### Target Block
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `base_url` | Yes | API base URL. Supports `env()` expressions and `service()` references. |
+Configure at the top level of the spec file (not inside a `target` block):
 
 ```
-target {
+http {
   base_url: env(APP_URL, "http://localhost:8080")
 }
 ```
 
-Or with [target services](../services.md):
+With a service reference:
 
 ```
-target {
-  services {
-    app { build: "./server"  port: 8080 }
-  }
+services {
+  app { build: "./server", port: 8080, health: "/healthz" }
+}
+
+http {
   base_url: service(app)
 }
 ```
 
-### Scope Config
-
-| Key | Description |
-|-----|-------------|
-| `path` | Request path (for single-request scopes) |
-| `method` | HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"` |
-
-```
-config {
-  path: "/api/v1/accounts/transfer"
-  method: "POST"
-}
-```
-
-When `given` contains action calls, `config` is not used for request dispatch -- each action call specifies its own path.
+| Key | Required | Description |
+|-----|----------|-------------|
+| `base_url` | Yes | API base URL. Supports `env()` expressions and `service()` references. |
 
 ## Actions
 
@@ -51,58 +36,66 @@ When `given` contains action calls, `config` is not used for request dispatch --
 | `http.post(path, body)` | URL path + JSON body | POST request |
 | `http.put(path, body)` | URL path + JSON body | PUT request |
 | `http.delete(path)` | URL path | DELETE request |
-| `http.header(name, value)` | header name + value | Set persistent header |
+| `http.header(name, value)` | header name + value | Set persistent header for subsequent calls |
+
+Headers and cookies persist across calls within a single scenario/invariant iteration.
 
 ## Assertions
 
+Assertions reference `output.*` in `then` blocks and invariants:
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `status` | `int` | HTTP status code |
-| `body` | `any` | Full response body (parsed JSON) |
-| `header.<name>` | `string` | Response header value |
-| `<field.path>` | `any` | Dot-path into JSON response body |
-| `<field.path>.0.<field>` | `any` | Array index access in dot-path |
+| `output.status` | `int` | HTTP status code |
+| `output.body` | `any` | Full response body (parsed JSON) |
+| `output.header.<name>` | `string` | Response header value |
+| `output.<field.path>` | `any` | Dot-path into JSON response body |
+| `output.items.0.name` | `any` | Array index access in dot-path (zero-based) |
+
+The `then` block assertions apply to what the contract's `action` block returned.
 
 ## Single-Request Pattern
 
-Use scope `config` to define the endpoint. All `given` assignments become the request body.
+The contract's `action` block calls the endpoint and returns the response:
 
 ```
-spec AccountAPI {
-  target {
-    base_url: env(APP_URL, "http://localhost:8080")
-  }
+http {
+  base_url: env(APP_URL, "http://localhost:8080")
+}
 
-  model Account {
-    id: string
-    balance: int
-  }
+model Account {
+  id: string
+  balance: int
+}
 
-  scope transfer {
-    use http
+model TransferResult {
+  from: Account
+  to: Account
+  error: string?
+}
 
-    config {
-      path: "/api/v1/accounts/transfer"
-      method: "POST"
+scope transfer {
+  contract Transfer -> TransferResult {
+    from: Account
+    to: Account
+    amount: int { 0 < amount <= from.balance }
+
+    action {
+      return http.post("/api/v1/accounts/transfer", {
+        from: from, to: to, amount: amount
+      })
     }
 
-    contract {
-      input {
-        from: Account
-        to: Account
-        amount: int { 0 < amount <= from.balance }
-      }
-      output {
-        from: Account
-        to: Account
-        error: string?
-      }
-    }
-
+    # Money is conserved on successful transfers.
     invariant conservation {
-      when error == null:
-        output.from.balance + output.to.balance
-          == input.from.balance + input.to.balance
+      output.error == null implies
+        output.from.balance + output.to.balance == from.balance + to.balance
+    }
+
+    # Balances never go negative.
+    invariant non_negative {
+      output.from.balance >= 0
+      output.to.balance >= 0
     }
 
     scenario success {
@@ -112,19 +105,15 @@ spec AccountAPI {
         amount: 30
       }
       then {
-        from.balance: from.balance - amount
-        to.balance: to.balance + amount
-        error: null
+        output.from.balance == input.from.balance - amount
+        output.to.balance == input.to.balance + amount
+        output.error == null
       }
     }
 
     scenario overdraft {
-      when {
-        amount > from.balance
-      }
-      then {
-        error: "insufficient_funds"
-      }
+      when { amount > from.balance }
+      then { output.error == "insufficient_funds" }
     }
   }
 }
@@ -132,37 +121,68 @@ spec AccountAPI {
 
 ## Multi-Step Pattern
 
-Use action calls in `given` blocks for multi-step workflows. Headers and cookies persist across calls within a scenario. `then` assertions apply to the last response.
+Use `let` bindings in the action block for multi-step workflows. `then` assertions apply to the value returned by the action:
 
 ```
+http {
+  base_url: env(APP_URL, "http://localhost:8080")
+}
+
+model Widget {
+  id: int
+  name: string
+}
+
 scope create_and_verify {
-  use http
+  contract CreateWidget -> Widget {
+    name: string
 
-  contract {
-    input { name: string }
-    output { id: int, name: string }
-  }
-
-  scenario create_then_get {
-    given {
-      name: "widget"
-      http.post("/api/resources", { name: "widget" })
-      http.get("/api/resources/1")
+    action {
+      let created = http.post("/api/widgets", { name: name })
+      let item = http.get("/api/widgets/" + created.body.id)
+      return item.body
     }
-    then {
-      status: 200
-      id: 1
-      name: "widget"
+
+    scenario create_then_get {
+      given { name: "widget" }
+      then {
+        output.id != null
+        output.name == "widget"
+      }
     }
   }
+}
+```
 
-  scenario with_auth {
-    given {
-      http.header("Authorization", "Bearer token")
-      http.get("/api/protected")
+## Authentication Pattern
+
+Use a top-level `action` for shared auth setup and call it from `before` blocks:
+
+```
+http {
+  base_url: env(APP_URL, "http://localhost:8080")
+}
+
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+}
+
+scope protected_resource {
+  before {
+    login("admin", "test")
+  }
+
+  contract GetResource -> ResourceResult {
+    id: string
+
+    action {
+      return http.get("/api/resources/" + id)
     }
-    then {
-      status: 200
+
+    scenario exists {
+      given { id: "r1" }
+      then { output.status == 200 }
     }
   }
 }
@@ -174,8 +194,8 @@ Dot-paths support numeric segments for array indexing:
 
 ```
 then {
-  items.0.name: "first"
-  items.1.name: "second"
+  output.items.0.name == "first"
+  output.items.1.name == "second"
 }
 ```
 

@@ -12,41 +12,49 @@ LLMs tasked with writing code to satisfy a specification will optimize against v
 
 ## Core Language Design
 
-See [docs/language-reference.md](docs/language-reference.md) for the complete syntax reference.
+See [docs/language-reference.md](docs/language-reference.md) for the complete syntax reference and [docs/v4-syntax.md](docs/v4-syntax.md) for the layer-by-layer structural reference.
 
 ### Settled Decisions
 
-- **v3 is the current syntax version** — see [docs/plans/2026-03-29-v3-language-design.md](docs/plans/2026-03-29-v3-language-design.md) for the full design and [docs/migration-v3.md](docs/migration-v3.md) for migration from v2
+- **v4 is the current syntax version** — see [docs/plans/2026-04-09-v4-language-design.md](docs/plans/2026-04-09-v4-language-design.md) for the full design and [docs/migration-v4.md](docs/migration-v4.md) for migration from v3
+- **Filename is spec identity** — no `spec Name { }` wrapper; top-level declarations live directly in the file
+- **Contract is the unit of verification** — `contract Name -> ReturnModel { fields, action { body }, invariants, scenarios }`
+- **Optional inheritance** — `contract Name: InputModel -> ReturnModel { constrain { ... } ... }` to layer constraints onto an inherited input model
+- **Field resolution rules**: bare names → contract fields (input); `output.<field>` → return type; `config.<key>` → spec config
+- **Logical operators are word-form**: `and`, `or`, `not`, `in`, `implies` (lowest precedence)
 - **Calling convention**: `adapter.method(args)` for all adapter interactions — both actions and assertions
 - **Plugin architecture**: Plugins are either **built-in** (http, process, playwright — compiled into specrun) or **external** (adapter binary on PATH communicating via JSON stdin/stdout)
 - **Adapter naming**: Adapters are named inline per call (e.g., `http.post(...)`, `playwright.fill(...)`) — no `use` directive
 - **Adapter config**: Namespaced config blocks at spec level (`http { base_url: ... }`, `playwright { headless: true }`)
-- **Assertion syntax in `then` blocks**: `expr operator value` (e.g., `playwright.visible('[data-testid="x"]') == true`, `error == null`). Operators: `==`, `!=`, `>`, `>=`, `<`, `<=`. No `:` for equality.
+- **Assertion syntax in `then` blocks**: `expr operator value` (e.g., `output.balance >= 0`, `output.error == null`). Operators: `==`, `!=`, `>`, `>=`, `<`, `<=`. No `:` for equality.
 - **Error pseudo-field**: `error` in assertions checks action errors when `error` is NOT a contract output field
 - **Variables**: `let name = expr` for immutable bindings — captures action results, scoped to block
-- **Custom actions**: `action name(param: type, ...) { body }` at spec or scope level, with `let`, `return`, typed params
-- **Contract action**: `action: name` in contract binds input generation to a defined action
-- **Three scenario types** (ascending verification strength):
+- **Reusable actions**: `action name(param: type, ...) { body }` at top level, with `let`, `return`, typed params — invoked from `before`/`after`/`given` blocks
+- **Three verification members** (ascending strength):
   - `scenario` with `given` — concrete values, smoke test / documentation
   - `scenario` with `when` — predicate over input class, runtime generates across matching space
-  - `invariant` — universal law, must hold for ALL valid inputs; requires contract `action`
+  - `invariant` — universal law, must hold for ALL valid inputs
 - **Runtime is a Go binary** that parses specs, generates inputs, and delegates execution to adapters
-- **Scope-based grouping**: Contracts, invariants, scenarios, and actions live inside named `scope` blocks
+- **Optional `scope` grouping**: When two or more contracts share before/after lifecycle, group them in a named `scope { before { } after { } contract... contract... }`. Contracts can also live at the top level standalone.
 - **Counterexample shrinking**: Binary-search shrinking (ints toward 0, strings toward shorter prefixes, nested models recursively)
 - **Services**: `services` block at spec level declares Docker containers as test infrastructure. `service(name)` expression resolves to the running container's URL. Compose support via `compose: "path"` for multi-service setups
+- **Composing specs**: `include` is for shared, non-runnable fragments (models, actions, adapter config). `specrun verify <glob>` is for running multiple independent runnable specs. **Don't compose runnable specs via `include`** — see [docs/language-reference.md](docs/language-reference.md) section "Includes vs. glob execution".
 
 ### Language Features
 
-- **Types**: `int`, `float`, `string`, `bytes`, `bool`, `any`, `[]T` (array), `map[K,V]`, `enum("a","b",...)`, model references, `T?` (optional)
-- **Expressions**: all arithmetic/comparison/logical operators, chained comparisons (`0 < x <= y`), division (`/`), modulo (`%`)
+- **Types**: `int`, `float`, `string`, `bytes`, `bool`, `any`, `[]T` (array), `map[K,V]`, inline `enum("a","b",...)`, named enum refs (`enum Role { admin, user, viewer }` referenced as `Role.admin`), model references, `T?` (optional)
+- **Expressions**: arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`), chained comparisons (`0 < x <= y`), logical (`and`, `or`, `not`), `in` (with array-literal RHS: `status in ["pending", "active"]`), `implies` (lowest precedence)
+- **Numeric literals**: underscore separators allowed (`1_000_000`, `3.14_159`)
 - **Built-in functions**: `len()`, `contains()`, `exists()`, `has_key()`, `all(arr, x => pred)`, `any(arr, x => pred)`
 - **Conditional expressions**: `if cond then a else b`
+- **State-dependent fields**: `tracking: string when status == "shipped"` — field is conditionally present based on sibling field values
+- **Config block**: `config { max_transfer: 1_000_000 }` at top level; referenced as `config.max_transfer` in expressions
 - **Variables**: `let name = expr` for immutable bindings in before/after/given/action bodies
 - **After block**: `after { steps... }` at scope level — runs after every scenario/invariant iteration, even on failure; errors are logged but never affect test results
 - **Single-quoted strings**: `'[data-testid="email"]'` for CSS selectors containing double quotes
-- **Include/Import**: `include "path"`, `import openapi("path")`, `import proto("path")`
+- **Include/Import**: `include "path"` (top-level only), `import openapi("path")`, `import proto("path")`
 - **Dot-path array indexing**: `items.0.name` for array element access
-- **Compile-time validation**: type checking, model resolution, action signature matching, assertion operator validation
+- **Compile-time validation**: type checking, model resolution, named enum variant validation, `output.` prefix enforcement, circular `when` detection, assertion operator validation
 
 ### Anti-Gaming Properties
 
@@ -54,6 +62,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 - Metamorphic test composition varies across runs
 - `when`-predicate scenarios generate from the full valid input space, not enumerated examples
 - The implementing agent sees property signatures but never the generator strategy
+- See [docs/writing-specs-that-prove-things.md](docs/writing-specs-that-prove-things.md) for the SLO-thinking framing on writing specs that actually prove something rather than passing tautologically
 
 ## Runtime Architecture
 
@@ -88,18 +97,19 @@ spec files (.spec)              implementation (black box)
 | `process` | CLI tools / subprocesses | [docs/adapters/process.md](docs/adapters/process.md) |
 | `playwright` | Browser UIs | [docs/adapters/playwright.md](docs/adapters/playwright.md) |
 
-## Prototype Scope
+## Importers
 
-Phase 1: **HTTP plugin + runtime core**
-Phase 2: **Playwright plugin + built-in adapter**
-Phase 3: Go unit plugin + adapter
-Phase 4: Metamorphic relation support
+| Source | Docs |
+|--------|------|
+| OpenAPI 3.0 | [docs/imports/openapi.md](docs/imports/openapi.md) |
+| Protobuf 3 | [docs/imports/protobuf.md](docs/imports/protobuf.md) |
 
 ## Project Structure
 
 ```
 speclang/
 ├── CLAUDE.md
+├── README.md
 ├── go.mod
 ├── .claude-plugin/
 │   └── plugin.json           # Claude Code plugin manifest
@@ -117,11 +127,14 @@ speclang/
 │   ├── hooks.json            # session-start hook registration
 │   └── session-start.sh      # injects speclang awareness on session start
 ├── cmd/
-│   └── specrun/          # CLI entrypoint
-│       └── main.go
+│   └── specrun/              # CLI entrypoint
+│       └── main.go           # verify, parse, generate, migrate, install
 ├── docs/
 │   ├── getting-started.md
-│   ├── language-reference.md
+│   ├── language-reference.md             # full v4 syntax reference
+│   ├── v4-syntax.md                      # layer-by-layer structural reference
+│   ├── migration-v4.md                   # v3 → v4 migration guide
+│   ├── writing-specs-that-prove-things.md # SLO-thinking guide / anti-patterns
 │   ├── self-verification.md
 │   ├── adapters/
 │   │   ├── http.md
@@ -132,7 +145,7 @@ speclang/
 │       └── protobuf.md
 ├── pkg/
 │   ├── spec/             # Public API — types, interfaces, registry
-│   │   ├── ast.go        # Spec, Scope, Model, Field, Expr types
+│   │   ├── ast.go        # Spec, Scope, Model, Field, Contract, NamedEnum, Expr types
 │   │   ├── adapter.go    # Adapter interface, Request, Response
 │   │   ├── registry.go   # Registry, PluginDef, ActionDef, AssertionDef
 │   │   ├── result.go     # Result, ScopeResult, CheckResult, Failure
@@ -141,7 +154,8 @@ speclang/
 │       ├── specrun.go    # Parse, ParseFile, Validate, Verify, Generate
 │       └── registry.go   # DefaultRegistry (http, process, playwright)
 ├── internal/
-│   ├── parser/           # spec file → AST (lexer, parser, includes, imports)
+│   ├── parser/           # v4 spec file → AST (lexer, parser, includes, imports)
+│   ├── v3parser/         # preserved v3 parser (used by migration tool)
 │   ├── generator/        # AST → test inputs + counterexample shrinking
 │   ├── runner/           # orchestrates generate → execute → check
 │   ├── validator/        # compile-time type checking and semantic validation
@@ -149,6 +163,7 @@ speclang/
 │   ├── infra/            # Docker/compose service lifecycle management
 │   ├── openapi/          # OpenAPI import resolver
 │   ├── proto/            # Protobuf import resolver
+│   ├── migrate/          # v2 → v3 → v4 migration transforms
 │   └── plugin/           # plugin spec file loading
 ├── plugins/
 │   ├── http.plugin       # HTTP plugin definition
@@ -161,36 +176,31 @@ speclang/
 │   ├── scopes/
 │   │   └── transfer.spec # scope transfer (contract, invariants, scenarios)
 │   ├── openapi/          # OpenAPI import example
-│   │   ├── petstore.yaml # sample OpenAPI 3.0 spec
-│   │   └── petstore.spec # spec importing from OpenAPI schema
-│   ├── proto/            # Protobuf import example
-│   │   ├── user.proto    # sample protobuf service definition
-│   │   └── user.spec     # spec importing from protobuf schema
-│   └── server/           # trivial Go HTTP server to test against
-│       └── main.go
+│   └── proto/            # Protobuf import example
 ├── specs/                # self-verification specs (speclang verifying itself)
-│   ├── speclang.spec     # root: use process, includes parse/generate/verify
-│   ├── parse.spec        # parse_valid + parse_invalid scopes
-│   ├── import.spec       # import behavioral verification (OpenAPI + Protobuf)
+│   ├── speclang.spec     # root: aggregates all self-verification scopes
+│   ├── parse.spec        # parser behavior (valid, invalid, validation)
+│   ├── import.spec       # OpenAPI + Protobuf import behavior
 │   ├── generate.spec     # generator constraint satisfaction
+│   ├── generate_types.spec # generator coverage across all types
 │   ├── verify.spec       # verify_pass scope
 │   ├── verify_fail.spec  # verify_fail scope (broken implementation detection)
-│   ├── shrinking.spec    # shrinking scope (counterexample minimality)
-│   └── services.spec     # service lifecycle, service ref parsing, validation
+│   ├── shrinking.spec    # counterexample shrinking minimality
+│   ├── services.spec     # service lifecycle, service ref parsing
+│   ├── glob.spec         # glob CLI matching, no-contract skip behavior
+│   ├── v4_features.spec  # v4-specific features (enum, in, implies, config, etc.)
+│   ├── adapters.spec     # adapter behavior
+│   ├── cli_flags.spec    # CLI flag handling
+│   ├── enum.spec         # enum semantics
+│   ├── error_assertions.spec # error pseudo-field
+│   ├── exists.spec       # exists() built-in
+│   ├── expressions.spec  # expression evaluation
+│   └── types.spec        # type system
 └── testdata/
     ├── include/          # multi-file include test fixtures
-    │   ├── basic/        # root includes models + scopes
-    │   ├── nested/       # A → B → C transitive includes
-    │   ├── circular/     # A ↔ B circular include (error case)
-    │   ├── duplicate/    # duplicate model names (error case)
-    │   └── duplicate_scope/  # duplicate scope names (error case)
     ├── playwright/       # Playwright adapter test fixtures
-    └── self/             # self-verification test fixtures
-        ├── minimal.spec
-        ├── invalid_unterminated.spec
-        ├── broken_transfer.spec
-        ├── broken_transfer_invariant_only.spec
-        └── broken_server/main.go
+    ├── migrate_v4/       # v3 → v4 migration fixtures
+    └── self/             # self-verification fixtures
 ```
 
 ## Tech Stack
@@ -205,41 +215,32 @@ speclang/
 ## Commands
 
 ```bash
-go build ./cmd/specrun                                          # build the CLI
-go test ./...                                                   # run all tests
-./specrun verify examples/transfer.spec                         # run verification
-./specrun parse examples/transfer.spec                          # parse spec, output AST as JSON
-./specrun generate examples/transfer.spec --scope transfer      # generate one input as JSON
-./specrun verify examples/transfer.spec --json                  # verify with JSON output
-./specrun verify specs/speclang.spec                            # self-verification
-./specrun verify spec.spec --keep-services                      # keep containers running after verify
-./specrun install playwright                                    # install playwright browsers (chromium)
+go build ./cmd/specrun                                              # build the CLI
+go test ./...                                                       # run all tests
+./specrun verify examples/transfer.spec                             # verify a single spec
+./specrun verify specs/*.spec                                       # verify all matched specs (each independent)
+./specrun verify specs/**/*.spec                                    # recursive glob
+./specrun parse examples/transfer.spec                              # parse spec, output AST as JSON
+./specrun generate examples/transfer.spec --scope transfer          # generate one input as JSON
+./specrun verify examples/transfer.spec --json                      # verify with JSON-lines output
+./specrun verify specs/speclang.spec                                # self-verification
+./specrun verify spec.spec --keep-services                          # keep containers running after verify
+./specrun migrate --to v4 path/to/v3-spec.spec                      # migrate v3 → v4 (default target)
+./specrun install playwright                                        # install playwright browsers (chromium)
 ```
 
 ## Self-Verification
 
 Speclang verifies itself with its own specs via `specs/speclang.spec`. See [docs/self-verification.md](docs/self-verification.md) for details.
 
-The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior. The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `target` block — these containers are managed automatically during verification when Docker is available:
-
-- **parse_valid** — parser accepts valid specs and produces expected AST structure
-- **parse_invalid** — parser rejects malformed specs with exit code 1
-- **parse_validation** — parser validates types and produces type errors
-- **import_openapi_*** — OpenAPI imports produce correct models, constraints, and refs
-- **import_proto_*** — protobuf imports produce correct models and scopes
-- **generate** — generator produces constraint-satisfying outputs across seeds
-- **generate_types** — generator handles all types (float, bytes, arrays, maps, optionals)
-- **verify_pass** — `specrun verify` passes correct implementations
-- **verify_fail** — `specrun verify` detects incorrect implementations
-- **shrinking** — counterexample shrinking produces minimal values
-- **verify_service_lifecycle** — services start, health-check, and respond correctly
-- **parse_service_ref** — `service(name)` expressions parse correctly
-- **invalid_service_ref** — unknown service references are rejected
+The self-verification spec uses the process adapter to invoke `specrun` subcommands and verify their behavior. The root spec (`specs/speclang.spec`) declares services for `transfer_server`, `broken_server`, and `http_test_server` in its `services` block — these containers are managed automatically during verification when Docker is available.
 
 Run self-verification:
 ```bash
 SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec
 ```
+
+Current coverage: **86 scenarios + 21 invariants** across parser, validator, generator, runner, importers, services, glob CLI, and v4 language features.
 
 ## Claude Code Plugin
 

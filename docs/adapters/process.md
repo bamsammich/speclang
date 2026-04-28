@@ -1,41 +1,28 @@
 # Process Adapter
 
-The process adapter (`use process`) executes subprocesses and asserts against their output. It mirrors the HTTP adapter's pattern.
+The process adapter executes subprocesses and asserts against their output. It is built into `specrun` — no external binary required. This adapter is also how speclang's self-verification suite works (it invokes `specrun` subcommands as a subprocess).
 
 ## Configuration
 
-### Target Block
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `command` | Yes | Binary to run. Supports `env()` expressions and `service()` references. |
+Configure at the top level of the spec file:
 
 ```
-target {
+process {
   command: "./my-binary"
 }
 ```
 
-### Scope Config
+| Key | Required | Description |
+|-----|----------|-------------|
+| `command` | Yes | Binary to run. Supports `env()` expressions. |
 
-| Key | Description |
-|-----|-------------|
-| `args` | Base arguments prepended to every exec call. String (space-split) or array (preferred). |
-
-`args` accepts two forms:
+## Action: `process.exec`
 
 ```
-config {
-  args: "verify --json"                                    # string form: split on whitespace
-  args: ["verify", "--json", "path with spaces/file.spec"] # array form (preferred): each element is one arg
-}
+process.exec(arg, arg, ...)
 ```
 
-Array form preserves arguments containing spaces as single arguments. Each element is evaluated as an expression, so `env()` refs and string concatenation work inside array elements.
-
-## Action: `exec`
-
-Runs `command [...args] [...input_fields]`. Captures:
+Arguments are joined with the configured `command` and executed as a subprocess. Captures:
 
 - Exit code
 - Stdout (best-effort JSON parse; raw string if not JSON)
@@ -43,79 +30,71 @@ Runs `command [...args] [...input_fields]`. Captures:
 
 ## Assertions
 
+Assertions reference `output.*` in `then` blocks and invariants:
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `exit_code` | `int` | Process exit code |
-| `stdout` | `any` | Full stdout (parsed JSON or raw string) |
-| `stdout.<field.path>` | `any` | Dot-path into parsed JSON stdout |
-| `stdout.<field>.<N>.<field>` | `any` | Array index in dot-path (zero-based) |
-| `stderr` | `string` | Raw stderr output |
+| `output.exit_code` | `int` | Process exit code |
+| `output.stdout` | `any` | Full stdout (parsed JSON or raw string) |
+| `output.stdout.<field.path>` | `any` | Dot-path into parsed JSON stdout |
+| `output.stdout.items.0.name` | `any` | Array index in dot-path (zero-based) |
+| `output.stderr` | `string` | Raw stderr output |
 
 ## Examples
 
 ### Testing a CLI Tool
 
 ```
-spec CLI {
-  target {
-    command: "./mytool"
-  }
+process {
+  command: env(MYCLI_BIN, "./mytool")
+}
 
-  scope help {
-    use process
-
-    config {
-      args: "--help"
-    }
-
-    contract {
-      input {}
-      output {
-        ok: bool
-      }
+scope help {
+  contract HelpContract -> HelpResult {
+    action {
+      return process.exec("--help")
     }
 
     scenario shows_help {
       given {}
-      then {
-        exit_code: 0
-      }
+      then { output.exit_code == 0 }
     }
   }
+}
+
+model HelpResult {
+  exit_code: int
+  stdout: any
+  stderr: string
 }
 ```
 
 ### Testing JSON Output
 
 ```
-spec Parser {
-  target {
-    command: "./specrun"
-  }
+process {
+  command: env(SPECRUN_BIN, "./specrun")
+}
 
-  scope parse_valid {
-    use process
+model ParseResult {
+  exit_code: int
+  scopes: any
+}
 
-    config {
-      args: "parse"
+scope parse_valid {
+  contract ParseValidContract -> ParseResult {
+    file: string
+
+    action {
+      let result = process.exec("parse", file)
+      return result
     }
 
-    contract {
-      input {
-        spec_file: string
-      }
-      output {
-        name: string
-      }
-    }
-
-    scenario parses_spec {
-      given {
-        spec_file: "examples/transfer.spec"
-      }
+    scenario parses_transfer_spec {
+      given { file: "examples/transfer.spec" }
       then {
-        exit_code: 0
-        stdout.name: "AccountAPI"
+        output.exit_code == 0
+        output.scopes != null
       }
     }
   }
@@ -128,9 +107,72 @@ Dot-paths into stdout JSON support numeric segments for array indexing:
 
 ```
 then {
-  stdout.items.0.name: "first"
-  stdout.scopes.0.name: "transfer"
+  output.stdout.items.0.name == "first"
+  output.stdout.scopes.0.name == "transfer"
 }
 ```
 
-Out-of-range indices produce an assertion failure. This is the same behavior as the HTTP adapter.
+Out-of-range indices produce an assertion failure.
+
+### Invariant Over Generated Inputs
+
+```
+process {
+  command: env(SPECRUN_BIN, "./specrun")
+}
+
+model VerifyResult {
+  exit_code: int
+}
+
+scope verify_pass {
+  contract VerifyPassContract -> VerifyResult {
+    file: string
+
+    action {
+      return process.exec("verify", "--json", file)
+    }
+
+    # All parseable specs must exit 0 when verified.
+    invariant verify_succeeds {
+      output.exit_code == 0
+    }
+  }
+}
+```
+
+## Self-Verification Pattern
+
+The speclang self-verification suite uses the process adapter to invoke `specrun` as a black-box binary. This is the canonical pattern for verifying any CLI tool:
+
+```
+process {
+  command: env(SPECRUN_BIN, "./specrun")
+}
+
+model ParseResult {
+  exit_code: int
+}
+
+scope parse_valid {
+  contract ParseValidContract -> ParseResult {
+    file: string
+
+    action {
+      let result = process.exec("parse", file)
+      return result
+    }
+
+    scenario minimal_spec {
+      given { file: "testdata/self/minimal.spec" }
+      then { output.exit_code == 0 }
+    }
+  }
+}
+```
+
+Run with:
+```bash
+go build -o specrun ./cmd/specrun
+SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec
+```

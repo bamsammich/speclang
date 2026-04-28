@@ -2,30 +2,50 @@
 
 ## Context
 
-Evaluation of [Allium](https://juxt.github.io/allium/) identified readability improvements for speclang. Combined with long-standing friction around contract/action redundancy and implicit field resolution, v4 is a major language redesign: contracts become self-contained behavioral promises, operators become English words, and several new expression features ship.
+Evaluation of [Allium](https://juxt.github.io/allium/) identified readability improvements for speclang. Combined with long-standing friction around contract/action redundancy and implicit field resolution, v4 is a major language redesign: contracts become self-contained behavioral promises, operators become English words, the `spec` wrapper is removed, and several new expression features ship.
 
 ## v4 Language Structure
 
-### Layer 1: `spec` — the root container
+### Layer 1: Spec file — the root
 
-Everything lives inside a single spec. It's the file-level declaration.
+A `.spec` file IS a spec. No wrapper keyword. The filename is the spec's identity. Top-level declarations appear directly in the file.
 
 ```
-spec AccountAPI {
-  description: "..."
-
-  config { ... }           # spec-level constants
-  http { ... }             # adapter configuration
-  services { ... }         # Docker infrastructure
-  model Account { ... }    # data structures
-  enum Role { ... }        # named enumerations
-  action login(...) { ... } # reusable procedures
-  contract Transfer -> TransferResult { ... }  # behavioral promises
-  scope admin { ... }      # optional grouping
-  include "other.spec"
-  import openapi("schema.yaml")
+# transfer.spec — the filename is the spec identity
+http {
+  base_url: service(app)
 }
+
+services {
+  app { build: "./server", port: 8080, health: "/healthz" }
+}
+
+include "shared/models.spec"
+
+config {
+  max_transfer: 1_000_000
+}
+
+model TransferResult {
+  from: Account
+  to: Account
+  error: string?
+}
+
+contract Transfer -> TransferResult { ... }
 ```
+
+**Include semantics:**
+- `include` is a **top-level-only directive** — imports declarations from another file
+- **Include-once** by resolved absolute path — diamond includes are safe (second include silently skipped)
+- No fragment files — included files must be valid top-level declaration files
+- Duplicate declarations from includes are errors (no structural dedupe)
+- Included files are themselves valid spec files (can be run standalone if they have contracts)
+
+**CLI execution:**
+- `specrun verify <glob>` — each matched file is an independent spec unit, verified independently
+- Files with no contracts are valid but skipped (logged: "transfer_models.spec: no contracts, skipping")
+- Included files resolved relative to the including file's directory
 
 ### Layer 2: Declarations — the building blocks
 
@@ -38,7 +58,7 @@ model Account {
 }
 ```
 
-**`enum`** — a named set of values. Referenced by name as a field type. Variants referenced with qualified syntax `EnumName.variant` in assertions, constraints, and predicates.
+**`enum`** — a named set of values. Variants referenced with qualified syntax `EnumName.variant`.
 ```
 enum Role { admin, user, viewer }
 
@@ -50,12 +70,6 @@ then { output.role == Role.admin }
 
 # In predicates
 when { status in (OrderStatus.pending, OrderStatus.cancelled) }
-
-# In constraints
-model Order {
-  status: OrderStatus
-  tracking: string when status == OrderStatus.shipped
-}
 ```
 
 Inline enums (`enum("a", "b")`) still use string comparison — they have no name to qualify.
@@ -94,8 +108,8 @@ services {
 
 The primary unit of verification. Declares what the system promises and proves it.
 
-**Contains**: fields (input), `action` block (implementation), invariants, scenarios  
-**Lives in**: spec level or inside a scope
+**Contains**: fields (input), `action` block (implementation), invariants, scenarios
+**Lives in**: top level or inside a scope
 
 ```
 contract <Name> -> <ReturnModel> {
@@ -173,13 +187,14 @@ scenario <name> {
 
 | Construct | Lives in | Contains |
 |-----------|----------|----------|
-| `spec` | file root | everything |
-| `model` | spec | fields |
-| `enum` | spec | variants |
-| `config` | spec | key-value constants |
-| `action` | spec | imperative steps (no verification) |
-| `scope` | spec | before, after, contracts |
-| `contract` | spec or scope | fields, action block, invariants, scenarios |
+| file | filesystem | everything (file = spec) |
+| `include` | top level only | imports declarations from another file |
+| `model` | top level | fields |
+| `enum` | top level | variants |
+| `config` | top level | key-value constants |
+| `action` | top level | imperative steps (no verification) |
+| `scope` | top level | before, after, contracts |
+| `contract` | top level or scope | fields, action block, invariants, scenarios |
 | `invariant` | contract | assertions |
 | `scenario` | contract | given/when + then |
 
@@ -188,171 +203,185 @@ scenario <name> {
 ### Breaking changes
 | Change | v3 | v4 |
 |--------|----|----|
+| Spec wrapper | `spec Name { ... }` | No wrapper — file is the spec |
 | Logical operators | `&&`, `\|\|`, `!` | `and`, `or`, `not` |
 | Contract structure | `scope { contract { input/output/action: name } }` | `contract Name -> ReturnType { fields, action { }, invariants, scenarios }` |
 | Output field refs | bare names in assertions | `output.` prefix required |
 | Scope role | owns single contract + invariants + scenarios | optional grouping for shared before/after |
+| Include semantics | Token splicing, anywhere in block | Top-level-only declaration import, include-once |
+| Description | `description: "..."` inside spec block | Removed (use comments, filename is identity) |
 
 ### Additive features
 | Feature | Syntax |
 |---------|--------|
-| Named enums | `enum Role { admin, user, viewer }` |
-| `in` keyword | `status in ("pending", "active")` |
+| Named enums | `enum Role { admin, user, viewer }` with `Role.admin` refs |
+| `in` keyword | `status in ("pending", "active")` — parenthesis form preferred; bracket form `[...]` also accepted |
 | Underscore numeric separators | `1_000_000`, `3.14_159` |
 | `implies` operator | `a implies b` (lowest precedence) |
 | State-dependent field presence | `tracking: string when status == "shipped"` |
 | Config block | `config { max_retries: 3 }` with `config.key` refs |
 | Contract model inheritance | `contract Foo: InputModel -> OutputModel { constrain { ... } }` |
+| Glob execution | `specrun verify specs/*.spec` runs each match independently |
 | Reserve `where` | Keyword reserved for future use |
 
 ## Full Example — v4
 
+### Shared infrastructure (shared/infra.spec)
 ```
-spec AccountAPI {
-  description: "REST API for inter-account money transfers"
+services {
+  app {
+    build: "./server"
+    port: 8080
+    health: "/healthz"
+  }
+}
 
-  http {
-    base_url: service(app)
+http {
+  base_url: service(app)
+}
+
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+}
+```
+
+### Shared models (shared/models.spec)
+```
+model Account {
+  id: string
+  balance: int { balance >= 0 }
+}
+
+enum TransferError { insufficient_funds, invalid_amount, same_account }
+```
+
+### Transfer spec (transfer.spec)
+```
+include "shared/infra.spec"
+include "shared/models.spec"
+
+config {
+  max_transfer: 1_000_000
+}
+
+model TransferResult {
+  from: Account
+  to: Account
+  error: string?
+}
+
+scope transfers {
+  before {
+    login("admin", "test")
   }
 
-  services {
-    app {
-      build: "./server"
-      port: 8080
-      health: "/healthz"
-    }
-  }
-
-  config {
-    max_transfer: 1_000_000
-  }
-
-  model Account {
-    id: string
-    balance: int { balance >= 0 }
-  }
-
-  model TransferResult {
+  contract Transfer -> TransferResult {
     from: Account
     to: Account
-    error: string?
-  }
+    amount: int { 0 < amount <= from.balance }
 
-  enum TransferError { insufficient_funds, invalid_amount, same_account }
-
-  action login(username: string, password: string) {
-    let result = http.post("/api/auth/login", { username: username, password: password })
-    http.header("Authorization", "Bearer " + result.body.access_token)
-  }
-
-  scope transfers {
-    before {
-      login("admin", "test")
+    action {
+      return http.post("/api/v1/accounts/transfer", {
+        from: from, to: to, amount: amount
+      })
     }
 
-    contract Transfer -> TransferResult {
-      from: Account
-      to: Account
-      amount: int { 0 < amount <= from.balance }
+    invariant conservation {
+      output.error == null implies
+        output.from.balance + output.to.balance
+          == from.balance + to.balance
+    }
 
-      action {
-        return http.post("/api/v1/accounts/transfer", {
-          from: from, to: to, amount: amount
-        })
-      }
+    invariant non_negative {
+      output.from.balance >= 0
+      output.to.balance >= 0
+    }
 
-      invariant conservation {
-        output.error == null implies
-          output.from.balance + output.to.balance
-            == from.balance + to.balance
-      }
+    invariant no_mutation_on_error {
+      output.error != null implies
+        output.from.balance == from.balance
+        and output.to.balance == to.balance
+    }
 
-      invariant non_negative {
-        output.from.balance >= 0
-        output.to.balance >= 0
+    scenario success {
+      given {
+        from: { id: "alice", balance: 100 }
+        to: { id: "bob", balance: 50 }
+        amount: 30
       }
+      then {
+        output.from.balance == from.balance - amount
+        output.to.balance == to.balance + amount
+        output.error == null
+      }
+    }
 
-      invariant no_mutation_on_error {
-        output.error != null implies
-          output.from.balance == from.balance
-          and output.to.balance == to.balance
-      }
+    scenario overdraft {
+      when { amount > from.balance }
+      then { output.error == TransferError.insufficient_funds }
+    }
 
-      scenario success {
-        given {
-          from: { id: "alice", balance: 100 }
-          to: { id: "bob", balance: 50 }
-          amount: 30
-        }
-        then {
-          output.from.balance == from.balance - amount
-          output.to.balance == to.balance + amount
-          output.error == null
-        }
-      }
-
-      scenario overdraft {
-        when { amount > from.balance }
-        then { output.error == "insufficient_funds" }
-      }
-
-      scenario zero_transfer {
-        when { amount == 0 }
-        then { output.error == "invalid_amount" }
-      }
+    scenario zero_transfer {
+      when { amount == 0 }
+      then { output.error == TransferError.invalid_amount }
     }
   }
 }
+```
+
+### CLI usage
+```bash
+specrun verify transfer.spec              # verify single spec
+specrun verify specs/*.spec               # verify all specs independently
+specrun verify specs/**/*.spec            # recursive glob
 ```
 
 ## Implementation Order
 
 Ascending blast radius. Each step must pass `go test ./...` before proceeding.
 
-### Step 1: Module path bump
+### Step 1: Module path bump (DONE)
 
 `github.com/bamsammich/speclang/v3` → `github.com/bamsammich/speclang/v4` in `go.mod` and all Go imports.
 
-### Step 2: Preserve v3 parser
+### Step 2: Preserve v3 parser (DONE)
 
-Copy `internal/parser/` → `internal/v3parser/` before any modifications. The migration tool (Step 10) needs to parse v3 syntax.
+Copy `internal/parser/` → `internal/v3parser/` before any modifications.
 
-### Step 3: Lexer changes
+### Step 3: Lexer changes (DONE)
 
-All token-level changes in one step:
-
-- **Reserve keywords**: `where`, `in`, `implies`, `enum`, `constrain`
-- **Word operators**: add `"and"`, `"or"`, `"not"` to keyword map → `TokenAnd`, `TokenOr`, `TokenNot`. Remove `&`/`|` operator lexing. `!` alone becomes error; only `!=` survives
-- **Underscore numerics**: modify `lexNumber()` to consume `_` between digits
-
-**Files**: `internal/parser/lexer.go`, `internal/parser/lexer_test.go`
+Word operators, new keywords, underscore numerics, arrow token.
 
 ### Step 4: AST changes
 
 Restructure AST types for v4:
 
+- **Remove `Spec.Name`** — filename is identity, no wrapper
+- **Remove `Spec.Description`** — dropped
 - **Contract struct**: `Name`, `Fields []Field`, `Inherits string`, `Constraints []Expr`, `ReturnType TypeExpr`, `Action *ActionBlock`, `Invariants`, `Scenarios`
 - **ActionBlock struct**: `Body []Step` (no signature — uses contract fields)
-- **Spec struct**: add `Contracts []*Contract`, `Enums []*NamedEnum`, `Config map[string]Expr`
+- **Spec struct**: add `Contracts []*Contract`, `Enums []*NamedEnum`, `Config map[string]Expr`. Keep `Models`, `Actions`, `Scopes`, `AdapterConfigs`, `Services`
 - **Scope struct**: add `Contracts []*Contract`, remove single `Contract` pointer. Keep `Before`/`After`
 - **Field struct**: add `When Expr` for state-dependent presence
 - **NamedEnum struct**: `Name string`, `Variants []string`
-- Update `FormatExpr`: space after `"not"`, handle `"in"`, `"implies"`
-- All operator strings: `"and"`, `"or"`, `"not"`, `"in"`, `"implies"`
 
 **Files**: `pkg/spec/ast.go`
 
 ### Step 5: Parser changes
 
-- **Contract parsing**: `contract Name -> Type { fields... action { body } invariant... scenario... }` and `contract Name: Model -> Type { constrain { ... } ... }`. Contracts at spec level or inside scope
-- **Named enums**: `enum Name { variant1, variant2 }`. Handle `TokenEnum` for both named declarations and inline `enum(...)`
-- **Config block**: `config { key: expr }` at spec level
-- **State-dependent fields**: `field: type when condition` in model/contract field parsing
-- **`in` operator**: `TokenIn` at comparison precedence, RHS as parenthesized list
-- **`implies` operator**: `precImplies` below `precOr`, renumber all precedence constants
-- **Operator strings**: `opStrings` map updated, `parseUnary` emits `"not"`
+- **Remove `spec Name { }` wrapper parsing** — top-level declarations parsed directly
+- **Include-once semantics** — track included paths, skip duplicates
+- **Include is top-level only** — error if include appears inside a block
+- **Contract parsing**: `contract Name -> Type { fields... action { body } invariant... scenario... }`
+- **Contract inheritance**: `contract Name: Model -> Type { constrain { ... } ... }`
+- **Named enums**: `enum Name { variant1, variant2 }`
+- **Config block**: `config { key: expr }` at top level
+- **State-dependent fields**: `field: type when condition`
+- **`in` operator**: RHS as parenthesized list
+- **`implies` operator**: lowest precedence
 
-**Files**: `internal/parser/parser.go`, `internal/parser/parser_test.go`, `internal/parser/quantifier_test.go`
+**Files**: `internal/parser/parser.go`, `internal/parser/parser_test.go`, `internal/parser/include.go`
 
 ### Step 6: Validator changes
 
@@ -373,7 +402,7 @@ Restructure AST types for v4:
 - Resolve `config.key` in expressions
 - Generate contract fields as input (new contract structure)
 
-**Files**: `internal/generator/generator.go`, `internal/generator/exists_test.go`
+**Files**: `internal/generator/generator.go`
 
 ### Step 8: Runner changes
 
@@ -385,39 +414,46 @@ Restructure AST types for v4:
 
 **Files**: `internal/runner/runner.go`
 
-### Step 9: Importers
+### Step 9: CLI changes
+
+- `specrun verify` accepts glob patterns, runs each matched file as independent spec unit
+- Skip files with no contracts (log note, not error)
+- `specrun parse` works without spec wrapper
+
+**Files**: `cmd/specrun/main.go`
+
+### Step 10: Importers
 
 **OpenAPI** (`internal/openapi/models.go`):
-- `Op: "and"` (was `"&&"`)
 - Generate contracts from operations (request body → contract fields, response → return type model)
 
 **Protobuf** (`internal/proto/`):
 - Generate contracts from RPCs (request message → inherited model, response → return type)
 
-### Step 10: Migration tool (v3 → v4)
+### Step 11: Migration tool (v3 → v4)
 
-Two transformation categories:
-
-**Token-level**: `&&`→`and`, `||`→`or`, `!`→`not ` (respecting string boundaries, not touching `!=`)
+**Token-level**: `&&`→`and`, `||`→`or`, `!`→`not `
 
 **Structural** (AST-based, uses preserved v3 parser):
+- Strip `spec Name { }` wrapper
 - `scope { contract { input/output } action name(...) { } invariant... }` → `contract Name -> OutputModel { fields action { body } invariant... }`
 - Extract output fields into a model declaration
 - Move invariants/scenarios from scope into contract
 - Wrap in scope if before/after exists
 - Add `output.` prefix to bare output field refs in assertions
+- Convert token-splicing includes to top-level includes
 
-**Files**: `internal/v3parser/` (preserved copy), `internal/migrate/v4.go`, `internal/migrate/v4_test.go`, `internal/migrate/testdata/`, `cmd/specrun/main.go`
+**Files**: `internal/v3parser/`, `internal/migrate/v4.go`, `internal/migrate/v4_test.go`, `cmd/specrun/main.go`
 
-### Step 11: Update all spec files
+### Step 12: Update all spec files
 
 Rewrite all `.spec` files in `specs/`, `testdata/`, `examples/` to v4 syntax. Add self-verification entries for new features.
 
-### Step 12: Documentation & skills
+### Step 13: Documentation & skills
 
 - `docs/language-reference.md` — full rewrite for v4
-- `docs/v4-syntax.md` — new: the layer-by-layer syntax structure from this design (spec → declarations → contract → scope → verification members)
-- `docs/migration-v4.md` — new migration guide
+- `docs/v4-syntax.md` — layer-by-layer syntax structure
+- `docs/migration-v4.md` — migration guide
 - `CLAUDE.md` — update version refs, settled decisions, project structure
 - `skills/author/SKILL.md` + `skills/author/references/api_reference.md` — syntax updates
 - `skills/verify/SKILL.md` — update if needed
@@ -427,19 +463,20 @@ Rewrite all `.spec` files in `specs/`, `testdata/`, `examples/` to v4 syntax. Ad
 
 1. `go test ./...` after every step
 2. `go build ./cmd/specrun` after every step
-3. After Step 11: `SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec`
-4. After Step 10: migrate v3 fixtures → validate round-trip
+3. After Step 12: `SPECRUN_BIN=./specrun ./specrun verify specs/speclang.spec`
+4. After Step 11: migrate v3 fixtures → validate round-trip
 5. Final: full test suite + self-verification + `go vet`
 
 ## Risk Areas
 
-- **Contract/scope interaction**: Runner must know which scope a contract belongs to for before/after inheritance
-- **Model inheritance resolution**: `contract Foo: Bar` requires Bar resolved first. Reject circular inheritance
-- **`enum` keyword collision**: Currently matched as identifier (`typeEnum = "enum"`). Must handle both `enum(...)` inline and `enum Name { }` declaration
-- **State-dependent field generation**: Topological sort needed. Circular `when` deps rejected
-- **`not` spacing in FormatExpr**: `not expr` needs space; `-expr` does not
-- **Migration structural complexity**: scope→contract restructuring is AST-level transformation, needs comprehensive fixtures
-- **v3 parser preservation**: Must copy `internal/parser/` BEFORE modifying
+- **No spec wrapper → parser entry point**: Parser currently expects `spec Name {`. Must be rewritten to parse top-level declarations directly. This is a significant parser change.
+- **Include-once tracking**: Must track resolved absolute paths. Relative path resolution must be consistent.
+- **Glob execution**: Must handle the case where included files are also matched by the glob (skip gracefully).
+- **Contract/scope interaction**: Runner must know which scope a contract belongs to for before/after inheritance.
+- **Model inheritance resolution**: `contract Foo: Bar` requires Bar resolved first. Reject circular inheritance.
+- **`enum` keyword collision**: Must handle both `enum(...)` inline and `enum Name { }` declaration.
+- **State-dependent field generation**: Topological sort needed. Circular `when` deps rejected.
+- **Migration complexity**: Stripping the spec wrapper + restructuring contracts is a multi-pass transformation.
 
 ## PR Topology
 

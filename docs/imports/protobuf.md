@@ -1,6 +1,6 @@
 # Working with Protobuf Schemas in Speclang
 
-Speclang can import models and scope scaffolds directly from `.proto` files. This lets you start from an existing protobuf service definition and layer verification properties on top.
+Speclang can import models and contract scaffolds directly from `.proto` files. This lets you start from an existing protobuf service definition and layer verification properties on top.
 
 ## Quick Start
 
@@ -33,18 +33,24 @@ service UserService {
 Write a speclang spec that imports it:
 
 ```
-spec UserAPI {
-  target {
-    base_url: env(APP_URL, "http://localhost:8080")
-  }
+import proto("api.proto")
 
-  import proto("api.proto")
-
-  # Each imported scope needs a `use <plugin>` declaration added.
-}
+# The import generates:
+#   model User { id: int  name: string  email: string? }
+#   model CreateUserRequest { name: string  email: string }
+#   model CreateUserResponse { user: User  success: bool }
+#   scope CreateUser {
+#     contract CreateUser -> CreateUserResponse {
+#       name: string
+#       email: string
+#       # action is empty — YOU must fill this in
+#     }
+#   }
+#
+# Fill in the action block with your transport call, then add invariants and scenarios.
 ```
 
-Then verify:
+Then verify (after completing the action block):
 
 ```bash
 specrun verify userapi.spec
@@ -100,27 +106,105 @@ Produces models `SearchResponse` and `SearchResponse_Result`.
 | `google.protobuf.Int32Value` / `Int64Value` | `int?` |
 | `google.protobuf.Any` / `Struct` / `Value` | Skipped |
 
-### Scopes (from `service` definitions)
+### Contracts (from `service` definitions)
 
-Each **unary** RPC method becomes a scope:
+Each **unary** RPC method becomes a **scope** containing one **contract**. This is the key v4 change from v3: the importer emits v4 contracts, not v3 scope/input/output structures.
+
+For each RPC:
 
 - **Scope name**: RPC method name (e.g., `CreateUser`)
-- **Config**: `service` and `method` populated from the service/RPC names
-- **Contract input**: Fields from the request message
-- **Contract output**: Fields from the response message
-- **Streaming RPCs**: Skipped with warning (speclang contracts are strictly request → response)
-- **No invariants or scenarios**: Those are hand-authored
+- **Contract name**: same as scope name
+- **Contract fields**: request message fields (or model inheritance via `contract Name: RequestModel`)
+- **Contract return type**: response message model name
+- **Contract action block**: **nil** — the importer does not know your transport
+- **No invariants or scenarios**: those are hand-authored
+
+**Streaming RPCs**: Skipped with warning. Speclang contracts are strictly request → response.
+
+## Asymmetry vs. OpenAPI Import
+
+**Protobuf import: action is nil.** This is intentional, not a bug.
+
+OpenAPI schemas encode transport (HTTP methods, paths) alongside the schema, so the OpenAPI importer can generate a complete `action { return http.post(...) }` block automatically.
+
+Protobuf schemas encode service contracts but not transport. A protobuf service might be called via:
+
+- Native gRPC (e.g., using a `grpc_cli` wrapper via the process adapter)
+- HTTP/JSON transcoding (e.g., gRPC-gateway, Connect, Twirp)
+- A custom adapter
+
+The importer leaves the action block empty, and you fill it in with the correct transport. Example patterns:
+
+**Pattern 1: HTTP transcoding (gRPC-gateway or Connect)**
+```
+http {
+  base_url: env(API_URL, "http://localhost:8080")
+}
+
+import proto("api.proto")
+
+# After import, extend the generated contract by writing a companion spec:
+scope CreateUser_verified {
+  contract CreateUserVerified -> CreateUserResponse {
+    name: string
+    email: string
+
+    action {
+      return http.post("/UserService/CreateUser", { name: name, email: email })
+    }
+
+    invariant created_user_id_positive {
+      output.success == true implies output.user.id > 0
+    }
+
+    scenario creates_successfully {
+      given { name: "alice", email: "alice@example.com" }
+      then {
+        output.success == true
+        output.user.name == "alice"
+      }
+    }
+  }
+}
+```
+
+**Pattern 2: Process adapter wrapping `grpc_cli`**
+```
+process {
+  command: env(GRPC_CLI_BIN, "grpc_cli")
+}
+
+import proto("api.proto")
+
+scope CreateUser_via_cli {
+  contract CreateUserCliContract -> CreateUserResponse {
+    name: string
+    email: string
+
+    action {
+      return process.exec("call", "localhost:50051", "UserService.CreateUser",
+        "name: '" + name + "', email: '" + email + "'")
+    }
+
+    scenario creates_successfully {
+      given { name: "alice", email: "alice@example.com" }
+      then { output.exit_code == 0 }
+    }
+  }
+}
+```
 
 ## Limitations
 
 - **No constraints**: Protobuf doesn't encode min/max. All fields are unconstrained.
-- **No float/double**: Speclang has no float type (#21).
-- **No repeated/array**: Speclang has no array type (#21).
-- **No map**: Speclang has no map type (#21).
+- **No float/double**: `float` and `double` fields are skipped.
+- **No repeated/array**: `repeated` fields are skipped.
+- **No map**: `map<K,V>` fields are skipped.
 - **No oneof/enum**: No union or enum types.
-- **No bytes**: No binary type.
+- **No bytes**: Binary fields are skipped.
 - **Single-file only**: Cross-file `import` in proto files is not resolved.
 - **Streaming RPCs**: Cannot be expressed in speclang's contract model.
+- **Action block nil**: You must complete the action block after importing.
 
 ## Example
 
@@ -128,4 +212,4 @@ See [`examples/proto/`](../../examples/proto/) for a complete example importing 
 
 ## Technical Details
 
-The import uses [go-protoparser](https://github.com/yoheimuta/go-protoparser) for `.proto` file parsing (zero external dependencies, no `protoc` required). The converter produces standard speclang AST nodes, making imported schemas indistinguishable from hand-written ones to the generator, runner, and adapter.
+The import uses [go-protoparser](https://github.com/yoheimuta/go-protoparser) for `.proto` file parsing (zero external dependencies, no `protoc` required). The converter produces standard v4 AST nodes (`*parser.Model`, `*parser.Scope`, `*parser.Contract`), making imported schemas indistinguishable from hand-written ones to the generator, runner, and validator — except that the contract's action block is nil until you fill it in.

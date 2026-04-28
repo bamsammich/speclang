@@ -1,232 +1,59 @@
 # Language Reference
 
-Complete syntax reference for the speclang specification language (v3).
+Complete syntax reference for speclang v4.
 
-## Spec Structure
+## 1. Overview
 
-Every spec file contains a single `spec` block:
+A `.spec` file IS a spec. There is no `spec Name { ... }` wrapper — top-level declarations appear directly in the file, and the filename is the spec's identity. Each file is verified independently by `specrun verify`; files containing no contracts are silently skipped.
 
-```
-spec <Name> {
-  description: "<text>"              # optional
+## 2. File structure
 
-  http { ... }                       # adapter configuration (one block per adapter)
-  playwright { ... }
-  process { ... }
+A spec file contains any number of top-level declarations, in any order:
 
-  services { ... }                   # Docker containers as test infrastructure
+| Declaration | Purpose |
+|-------------|---------|
+| `include "<path>"` | Import declarations from another file |
+| `import openapi("<path>")` / `import proto("<path>")` | Import models/contracts from external schema |
+| `model <Name> { ... }` | Named data structure |
+| `enum <Name> { <variant>, ... }` | Named enumeration |
+| `config { <key>: <expr> }` | Spec-level constants |
+| `action <name>(<params>) { ... }` | Reusable action with typed signature |
+| `contract <Name> -> <Type> { ... }` | Behavioral promise (top-level or in scope) |
+| `scope <name> { ... }` | Optional grouping of contracts sharing `before`/`after` |
+| `<adapter> { <key>: <expr> }` | Adapter configuration (e.g. `http { ... }`) |
+| `services { ... }` | Docker services as test infrastructure |
 
-  model <Name> { ... }              # data models
-  action <name>(<param>: <type>, ...) { ... }  # reusable actions
-  scope <name> { ... }              # test scopes
+Top-level order does not affect semantics (forward references are permitted). Includes are resolved before parsing; see [Includes](#15-includes).
 
-  include "<path>"                   # splice another file
-  import openapi("<path>")           # import from OpenAPI schema
-  import proto("<path>")             # import from protobuf schema
-}
-```
+## 3. Types
 
-## Include Directive
+| Type | Syntax |
+|------|--------|
+| Integer | `int` |
+| Floating-point | `float` |
+| String | `string` |
+| Binary | `bytes` (base64-encoded in JSON) |
+| Boolean | `bool` |
+| Untyped | `any` |
+| Array | `[]T` |
+| Map | `map[K, V]` |
+| Inline enum | `enum("a", "b", ...)` |
+| Named enum | `<EnumName>` (refers to a top-level `enum` declaration) |
+| Model | `<ModelName>` |
+| Optional | `T?` (trailing `?` binds to the outermost type — `[]int?` is an optional array, not an array of optionals) |
 
-```
-include "models/account.spec"
-include "scopes/transfer.spec"
-```
+Inline enums are anonymous sets of string variants. Named enums are declared at the top level (see [§5 Declarations](#5-declarations)); variants are referenced as `EnumName.variant`.
 
-Splices the contents of another file at the point of inclusion. The included file's tokens are inserted directly into the token stream, so the content must be syntactically valid at that position.
+## 4. Expressions
 
-- Paths are relative to the including file's directory
-- Recursive includes are supported (A includes B which includes C)
-- Circular includes are detected and produce an error
-- Duplicate model or scope names across included files produce an error
-- Can appear at top-level (before `spec`) or inside a `spec` block
+Expressions appear in constraints, `when` predicates, invariants, `then` assertions, `let` bindings, contract `constrain` blocks, adapter call arguments, and config values.
 
-## Import Directive
+### 4.1 Literals
 
-```
-import openapi("schema.yaml")
-import proto("service.proto")
-```
-
-Imports models and scopes from an external schema file. The adapter name determines the format.
-
-- Paths are relative to the spec file's directory
-- Imported scopes have contracts populated but no invariants or scenarios
-- Duplicate model or scope names between imported and hand-written produce an error
-
-See [OpenAPI Import](imports/openapi.md) and [Protobuf Import](imports/protobuf.md) for adapter-specific details.
-
-## Adapter Configuration
-
-Each adapter used in the spec gets a namespaced configuration block at the spec level. Only declare blocks for adapters you use.
-
-```
-spec MyApp {
-  http {
-    base_url: env(APP_URL, "http://localhost:8080")
-  }
-  playwright {
-    base_url: env(APP_URL, "http://localhost:8080")
-    headless: true
-    timeout: "5000"
-  }
-  process {
-    command: "./my-binary"
-    args: ["verify", "--json"]
-  }
-}
-```
-
-Common configuration keys:
-
-| Key | Adapter | Description |
-|-----|---------|-------------|
-| `base_url` | http, playwright | Server URL |
-| `command` | process | Binary to execute |
-| `args` | process | Arguments as `[]string` (preferred) or whitespace-split string |
-| `headless` | playwright | `true` or `false` (default `true`) |
-| `timeout` | playwright | Milliseconds (default `"5000"`) |
-
-Values can use `env(VAR)` or `env(VAR, "default")` to read environment variables, or `service(name)` to reference a declared service URL.
-
-## Services
-
-The `services` block declares Docker containers as test infrastructure. When services are declared, `specrun verify` manages their full lifecycle: cleanup stale containers, build/pull, start, health-check, run verification, then stop and remove.
-
-### Inline Services
-
-```
-spec MyApp {
-  services {
-    app {
-      build: "./server"           # Dockerfile directory (relative to spec file)
-      port: 8080                  # container port (host port may differ)
-      health: "/healthz"          # HTTP health check path (optional)
-      env { PORT: "8080" }        # environment variables (optional)
-      volumes {                   # volume mounts (optional)
-        "./fixtures": "/data"
-      }
-    }
-    db {
-      image: "postgres:16"        # pre-built image (alternative to build)
-      port: 5432
-      env { POSTGRES_PASSWORD: "test" }
-    }
-  }
-
-  http {
-    base_url: service(app)        # resolves to running container URL
-  }
-}
-```
-
-Each service must have either `build` (path to a directory containing a Dockerfile) or `image` (a Docker image reference). Service fields:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `build` | One of build/image | Dockerfile directory |
-| `image` | One of build/image | Pre-built Docker image |
-| `port` | No | Container port to expose (static mapping when specified, dynamic when omitted) |
-| `health` | No | HTTP path for health check (falls back to TCP port check) |
-| `env` | No | Environment variables passed to the container |
-| `volumes` | No | Host-to-container volume mounts |
-
-### Compose Support
-
-For multi-service setups, reference a docker-compose file instead of inline definitions:
-
-```
-spec MyApp {
-  services {
-    compose: "docker-compose.yml"
-  }
-
-  http {
-    base_url: service(app)
-  }
-}
-```
-
-The compose path is relative to the spec file. Service names in `service()` references must match compose service names.
-
-### `service(name)` Resolution
-
-`service(name)` resolves at runtime to `http://localhost:<port>` where `<port>` is the actual mapped host port of the named container. The name must match a service declared in the `services` block; unknown names are rejected during validation.
-
-### Health Checks
-
-- If `health` is specified, an HTTP GET is sent to `http://localhost:<port><health>` until a 200 response is received
-- If `health` is not specified, a TCP connection check is performed against the mapped port
-- Health checks have a timeout; failure to become healthy causes verification to abort
-
-### Container Lifecycle
-
-1. **Pre-flight cleanup**: Remove any stale containers from previous runs (identified by labels)
-2. **Build/pull**: Build images from Dockerfiles or pull pre-built images
-3. **Start**: Start containers with port mappings and environment variables
-4. **Health check**: Wait for each service to become healthy
-5. **Verify**: Run the spec verification
-6. **Teardown**: Stop and remove containers (unless `--keep-services`)
-
-### CLI Flags
-
-- `--keep-services` -- leave containers running after verification (useful for debugging)
-
-## Models
-
-```
-model Account {
-  id: string
-  balance: int
-  email: string?
-  role: enum("admin", "user")
-}
-```
-
-Models define data structures used in contracts. Fields have a name, type, and optional constraint.
-
-### Types
-
-| Type | Description | Example |
-|------|-------------|---------|
-| `int` | Integer | `42` |
-| `float` | Floating-point number | `3.14` |
-| `string` | String | `"hello"` |
-| `bytes` | Binary data (base64-encoded in JSON) | |
-| `bool` | Boolean | `true`, `false` |
-| `any` | Untyped (passed through) | |
-| `[]T` | Array of type T | `[]int`, `[]Account` |
-| `map[K, V]` | Map with key type K, value type V | `map[string, int]` |
-| `enum("a", "b", ...)` | Fixed set of string values | `enum("http", "process")` |
-| `<ModelName>` | Reference to a defined model | `Account` |
-
-Append `?` to make any type optional: `string?`, `[]int?`, `enum("a", "b")?`, `Account?`.
-
-### Constraints
-
-Constraints bound the input generator. They appear in braces after the type:
-
-```
-model Transfer {
-  amount: int { 0 < amount <= from.balance }
-  ratio: float { 0.0 < ratio && ratio <= 1.0 }
-  name: string { len(name) > 0 && len(name) <= 100 }
-  items: []string { len(items) >= 1 }
-}
-```
-
-Constraints can reference other fields in the same model or parent context. Chained comparisons like `0 < amount <= from.balance` are supported.
-
-## Expressions
-
-Expressions appear in constraints, invariants, `when` predicates, `then` assertions, and `let` bindings.
-
-### Literals
-
-| Literal | Example |
-|---------|---------|
-| Integer | `42`, `-1`, `0` |
-| Float | `3.14`, `0.5` |
+| Form | Example |
+|------|---------|
+| Integer | `42`, `-1`, `1_000_000` |
+| Float | `3.14`, `0.5`, `3.14_159` |
 | Double-quoted string | `"hello"` |
 | Single-quoted string | `'[data-testid="email"]'` |
 | Boolean | `true`, `false` |
@@ -234,125 +61,114 @@ Expressions appear in constraints, invariants, `when` predicates, `then` asserti
 | Object | `{ id: "alice", balance: 100 }` |
 | Array | `[1, 2, 3]`, `["a", "b"]` |
 
-Single-quoted strings exist for CSS selectors and other values containing double quotes. Both string forms are interchangeable.
+Underscores are allowed between digits in numeric literals and are stripped before parsing (`1_000_000` is lexed as `1000000`). Single-quoted strings are a convenience for CSS selectors containing double quotes; the two forms are otherwise interchangeable.
 
-### Field References
+### 4.2 Identifiers and member access
 
-Dot-separated paths into the data:
+Dot-separated paths into the data. Numeric segments index arrays by position (zero-based):
 
 ```
 from.balance
 output.error
-input.from.id
-result.body.items.0.name      # numeric segment indexes into array
+config.max_transfer
+result.body.items.0.name
+Role.admin
 ```
 
-Numeric segments in dot-paths index into arrays by position (zero-based).
+### 4.3 Built-in references
 
-### Service References
+| Form | Resolves to |
+|------|-------------|
+| `env(VAR)` | Environment variable (empty string if unset) |
+| `env(VAR, "default")` | Environment variable with default |
+| `service(name)` | URL of a running service declared in `services { }` |
+| `config.<key>` | Value from the spec's `config { }` block |
 
-```
-service(app)                  # resolves to URL of named service from services block
-```
+### 4.4 Operators
 
-Resolves at runtime to the URL of a running container declared in the `services` block. The name must match a declared service. See [Services](#services) for details.
+| Category | Operators | Notes |
+|----------|-----------|-------|
+| Arithmetic | `+` `-` `*` `/` `%` | `+` also concatenates when either operand is a string |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` | Chained form supported: `0 < x <= y` |
+| Membership | `in` | RHS is a list of values. Parenthesis form preferred: `status in ("pending", "active")`. Bracket form also accepted: `status in ["pending", "active"]`. Both are equivalent; parens read more naturally as a membership set. |
+| Logical | `and` `or` `not` | Word operators only — `&&`, `\|\|`, `!` are rejected by the lexer |
+| Implication | `implies` | Lowest precedence; `a implies b` ≡ `not a or b` |
+| Unary | `-` `not` | |
 
-### Environment Variables
+Precedence (lowest to highest): `implies` < `or` < `and` < `==`, `!=` < `<`, `<=`, `>`, `>=`, `in` < `+`, `-` < `*`, `/`, `%` < unary. All infix operators are left-associative.
 
-```
-env(APP_URL)                  # returns "" if unset
-env(APP_URL, "http://localhost:8080")  # with default
-```
-
-`env()` expressions work everywhere: adapter config, given block values, and call arguments. When the variable is unset and no default is provided, the expression evaluates to an empty string.
-
-### Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `+` | Addition / String concatenation | `a + b`, `"hello" + " world"` |
-| `-` | Subtraction | `a - b` |
-| `*` | Multiplication | `a * b` |
-| `/` | Division | `a / b` |
-| `%` | Modulo | `a % 2` |
-| `==` | Equal | `status == 200` |
-| `!=` | Not equal | `error != null` |
-| `>` | Greater than | `amount > 0` |
-| `<` | Less than | `balance < 1000` |
-| `>=` | Greater or equal | `count >= 1` |
-| `<=` | Less or equal | `amount <= from.balance` |
-| `&&` | Logical AND | `a > 0 && b > 0` |
-| `\|\|` | Logical OR | `error != null \|\| status == 200` |
-| `!` | Logical NOT | `!exists(field)` |
-
-The `+` operator performs string concatenation when either operand is a string. Non-string operands are automatically converted: `"count: " + 42` produces `"count: 42"`.
-
-Chained comparisons are supported: `0 < amount <= from.balance` is equivalent to `0 < amount && amount <= from.balance`.
-
-### Built-in Functions
+### 4.5 Built-in functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `len()` | `len(expr) -> int` | Length of string, array, or map |
-| `contains()` | `contains(haystack, needle) -> bool` | Substring check (strings) or element membership (arrays) |
-| `exists()` | `exists(expr) -> bool` | `true` if path resolves to a value (including `null`), `false` if path doesn't exist |
-| `has_key()` | `has_key(expr, "key") -> bool` | `true` if map contains the specified key |
-| `all()` | `all(array, elem => predicate) -> bool` | `true` if predicate holds for every element |
-| `any()` | `any(array, elem => predicate) -> bool` | `true` if predicate holds for at least one element |
+| `len(x)` | `len(expr) -> int` | Length of string, array, or map |
+| `contains(h, n)` | `contains(expr, expr) -> bool` | Substring (strings) or element membership (arrays) |
+| `exists(p)` | `exists(path) -> bool` | True if path resolves (including to `null`) |
+| `has_key(m, k)` | `has_key(expr, expr) -> bool` | True if map contains the key |
+| `all(arr, x => pred)` | `all(expr, ident => expr) -> bool` | Universal quantifier |
+| `any(arr, x => pred)` | `any(expr, ident => expr) -> bool` | Existential quantifier |
 
-Examples:
-
-```
-len(name) > 0
-contains(output.tags, "featured")
-exists(output.metadata.created_at)
-has_key(output.headers, "content-type")
-all(output.items, item => item.price > 0)
-any(output.users, u => u.role == "admin")
-```
-
-### Conditional Expressions
+### 4.6 Conditional expression
 
 ```
-if condition then expr else expr
+if <cond> then <expr> else <expr>
 ```
 
-The condition must evaluate to a boolean. Nesting is supported with parentheses:
+The condition must evaluate to a boolean. Nesting requires parentheses around the inner `if`.
+
+## 5. Declarations
+
+### 5.1 `model`
 
 ```
-if error == null then output.balance else (if error == "retry" then input.balance else 0)
+model Account {
+  id: string
+  balance: int { balance >= 0 }
+  email: string?
+  tracking: string when status == "shipped"
+}
 ```
 
-## Comments
+A model is a named record of typed fields. Each field may have a constraint (in braces after the type) and/or a state-dependent presence condition (`when <expr>` after the type/constraint — see [§11](#11-state-dependent-fields)). Optional commas between fields are tolerated.
 
-Lines starting with `#` are comments:
-
-```
-# Money is neither created nor destroyed on successful transfers.
-invariant conservation { ... }
-```
-
-## Variables
-
-`let` bindings create immutable named values. They are scoped to the block they appear in (action body, `before`, `given`).
+### 5.2 `enum` (named)
 
 ```
-let result = http.post("/api/auth/login", { username: "admin", password: "secret" })
-let token = result.body.access_token
-http.header("Authorization", "Bearer " + token)
+enum Role { admin, user, viewer }
+enum OrderStatus { pending, confirmed, shipped, cancelled }
 ```
 
-- Once bound, a variable cannot be reassigned
-- Variables are visible only within the block where they are defined
-- The right-hand side can be any expression: a literal, a field reference, an adapter call, or a custom action call
+A named enumeration. Variants are identifiers. Reference as `EnumName.variant`:
 
-## Actions
+```
+model User { role: Role }
 
-Actions are reusable, parameterized sequences of steps. They have typed parameters, can contain `let` bindings and adapter calls, and can return values.
+then { output.role == Role.admin }
 
-### Spec-Level Actions
+when { status in (OrderStatus.pending, OrderStatus.cancelled) }
+```
 
-Defined at spec level, callable from any scope:
+Inline `enum("a","b")` types are a separate construct (see [§3](#3-types)) and are matched using string literals, not qualified variants.
+
+### 5.3 `config`
+
+```
+config {
+  max_transfer: 1_000_000
+  api_version: "v2"
+  retries: 3
+}
+```
+
+Spec-level constants. Values are any expression. Reference with `config.<key>`:
+
+```
+amount: int { amount <= config.max_transfer }
+```
+
+Multiple `config { }` blocks are merged.
+
+### 5.4 `action` (reusable)
 
 ```
 action login(username: string, password: string) {
@@ -362,185 +178,125 @@ action login(username: string, password: string) {
 }
 ```
 
-### Scope-Level Actions
+A reusable procedure with typed parameters. The body is a sequence of steps: `let` bindings, adapter calls, local action calls, and `return`. Action calls appear in `before`/`after` blocks, `given` blocks, and contract `action { }` bodies.
 
-Defined inside a scope, private to that scope:
+Actions are defined at the top level only (they are no longer scoped to a `scope` in v4).
+
+### 5.5 `scope`
 
 ```
-scope transfer {
-  action transfer(from: Account, to: Account, amount: int) {
-    let result = http.post("/api/v1/accounts/transfer", {
-      from: from, to: to, amount: amount
-    })
-    return result.body
-  }
+scope transfers {
+  before { login("admin", "test") }
+  after  { http.delete("/api/session") }
+
+  contract Transfer -> TransferResult { ... }
+  contract Reverse  -> TransferResult { ... }
 }
 ```
 
-### Action Syntax
+An optional grouping of contracts that share `before` and `after` lifecycle blocks. Scopes do not own invariants, scenarios, or actions in v4 — those live inside contracts.
+
+### 5.6 `contract`
+
+See [§6](#6-contract).
+
+### 5.7 Adapter configuration blocks
 
 ```
-action <name>(<param>: <type>, ...) {
-  let <name> = <expr>           # variable binding
-  <adapter>.<method>(args...)   # adapter call
-  <action_name>(args...)        # call another action
-  return <expr>                 # return a value (optional)
-}
+http { base_url: service(app) }
+playwright { headless: true, timeout: "5000" }
+process { command: "./my-binary", args: ["verify", "--json"] }
 ```
 
-### Calling Actions
+One block per adapter used in the spec. Values are expressions (including `env()` and `service()`).
 
-Actions are called by name. Return values are captured with `let`:
+### 5.8 `services`
 
-```
-before {
-  let session = login("admin", "test")
-}
+See [§13](#13-services).
 
-given {
-  let order = create_order("widget-1", 3)
-  order_id: order.id
-}
-```
+## 6. Contract
 
-### Contract Action
+The centerpiece of verification. A contract is a self-contained behavioral promise: inputs, execution, and the properties that must hold.
 
-Scopes with invariants must declare which action the runtime calls with generated inputs. The `action:` field in the contract references a scope-level or spec-level action by name:
+### 6.1 Syntax (declared form)
 
 ```
-scope transfer {
-  action transfer(from: Account, to: Account, amount: int) {
-    let result = http.post("/api/v1/accounts/transfer", {
-      from: from, to: to, amount: amount
-    })
-    return result.body
-  }
+contract <Name> -> <ReturnType> {
+  <field>: <type>
+  <field>: <type> { <constraint> }
+  <field>: <type> when <condition>
 
-  contract {
-    input {
-      from: Account
-      to: Account
-      amount: int { 0 < amount <= from.balance }
-    }
-    output {
-      from: Account
-      to: Account
-      error: string?
-    }
-    action: transfer
-  }
-}
-```
-
-The runtime matches contract input field names to action parameter names. A signature mismatch is a compile-time validation error.
-
-## Adapter Calls
-
-All adapter interactions use the uniform `adapter.method(args...)` syntax. The adapter name is explicit in every call -- there is no ambient adapter context.
-
-```
-http.post("/api/items", { name: "widget" })
-http.get("/api/items/123")
-http.header("Authorization", "Bearer abc123")
-playwright.goto("/dashboard")
-playwright.fill('[data-testid="email"]', "alice@example.com")
-playwright.click('[data-testid="submit"]')
-process.run("echo", ["hello", "world"])
-```
-
-Adapter calls can appear in action bodies, `before` blocks, and `given` blocks. In `then` and invariant blocks, adapter calls that return values are used as expressions in assertions.
-
-## Scopes
-
-Scopes are named groupings that own a contract, invariants, and scenarios.
-
-```
-scope transfer {
-  action transfer(from: Account, to: Account, amount: int) { ... }
-
-  before { ... }
-  after { ... }
-  contract { ... }
-  invariant <name> { ... }
-  scenario <name> { ... }
-}
-```
-
-### Before Block
-
-A `before` block runs before each scenario's `given` and each invariant iteration. The adapter state is reset to a clean slate before `before` executes, ensuring isolation between iterations.
-
-```
-scope orders {
-  before {
-    let session = login("admin", "test")
+  action {
+    <steps...>
+    return <expr>
   }
 
-  contract { ... }
+  invariant <name> { <assertions> }
+  scenario  <name> { given { ... } then { ... } }
+  scenario  <name> { when  { ... } then { ... } }
 }
 ```
 
-**Composition:** `before` + `given` compose by concatenation -- before steps run first, then given steps. State established in `before` (headers, cookies) carries into `given` and the action execution.
-
-**Failure:** If any `before` step fails, the entire scope is aborted.
-
-**Reset:** Each iteration starts with a clean adapter state -- fresh HTTP client, empty headers, new cookie jar. For Playwright, cookies and localStorage are cleared.
-
-### After Block
-
-An `after` block is the teardown counterpart to `before`. It runs after every scenario and invariant iteration, including iterations that fail.
+### 6.2 Syntax (model-inheritance form)
 
 ```
-scope orders {
-  before {
-    let session = login("admin", "test")
+contract <Name>: <InputModel> -> <ReturnType> {
+  constrain {
+    <expression>
+    <expression>
   }
 
-  after {
-    http.delete("/api/session")
-  }
-
-  contract { ... }
+  action { ... }
+  invariant ...
+  scenario  ...
 }
 ```
 
-**Always runs:** `after` executes even when the scenario or invariant iteration fails. This makes it safe for cleanup that must happen regardless of outcome.
+When `InputModel` is specified, the contract inherits its fields as inputs. The optional `constrain { }` block adds expressions (bound-style constraints) over those inherited fields. This form is used when pairing with imported schemas (see [§14 Imports](#14-imports)).
 
-**Errors are logged, not fatal:** If an `after` step fails, the error is logged but does not affect the pass/fail result of the scenario or invariant. A failing `after` block will never turn a passing test into a failure.
+### 6.3 Field resolution rules
 
-**Reset:** Like `before`, `after` runs within the iteration's adapter state before that state is discarded.
+Inside a contract, bare identifiers resolve as follows:
 
-### Contract
+| Form | Resolves to |
+|------|-------------|
+| `<name>` | Contract input field (declared or inherited) |
+| `output.<name>` | Field of the return type |
+| `config.<name>` | Spec-level config value |
+| `<EnumName>.<variant>` | Named enum variant |
+| `error` | Adapter action error, *when* `error` is not declared as an output field (see [§8](#8-assertions-in-then-blocks)) |
 
-Defines typed input and output for the scope, and the action to execute:
+### 6.4 The `action` block
+
+The action block has no signature — it sees the contract's input fields implicitly as named values. Its body is a sequence of steps (`let`, adapter/action calls, `return`):
 
 ```
-contract {
-  input {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-  }
-  output {
-    from: Account
-    to: Account
-    error: string?
-  }
-  action: transfer
+action {
+  let result = http.post("/api/v1/accounts/transfer", {
+    from: from, to: to, amount: amount
+  })
+  return result.body
 }
 ```
 
-The `action:` field is required when the scope contains invariants. It references the action the runtime calls with generated inputs.
+The action block's `return` value becomes `output` in assertions. A contract whose assertions reference `output.*` must therefore return a value from its action block.
 
-### Invariant
+### 6.5 Placement
 
-A universal law that must hold for ALL valid inputs. The runtime generates inputs from the full contract input space and checks each one.
+Contracts may be declared at the top level *or* inside a `scope`. A scoped contract inherits the scope's `before`/`after` hooks; a top-level contract has no lifecycle hooks.
+
+## 7. Verification members
+
+All three forms live inside a contract body.
+
+### 7.1 `invariant`
+
+A universal law that must hold across *all* generated inputs satisfying the contract's constraints.
 
 ```
 invariant conservation {
-  when error == null:
-    output.from.balance + output.to.balance
-      == input.from.balance + input.to.balance
+  output.error == null implies
+    output.from.balance + output.to.balance == from.balance + to.balance
 }
 
 invariant non_negative {
@@ -549,15 +305,21 @@ invariant non_negative {
 }
 ```
 
-The `when` guard is optional. Without it, the invariant applies to all inputs unconditionally. Multiple assertions can appear in an invariant body -- all must hold.
+Multiple expressions in the body are implicitly ANDed — every assertion must hold.
 
-### Scenario
+An optional `when <guard>:` prefix limits the invariant to inputs/outputs matching the guard:
 
-Three types of scenario, in ascending verification strength:
+```
+invariant no_mutation_on_error {
+  when output.error != null:
+    output.from.balance == from.balance
+    output.to.balance == to.balance
+}
+```
 
-#### `scenario` with `given` -- Concrete Smoke Test
+### 7.2 `scenario` with `given`
 
-Fixed input values. Runs once. Documents expected behavior.
+A concrete smoke test. Fixed inputs, runs once:
 
 ```
 scenario success {
@@ -567,377 +329,342 @@ scenario success {
     amount: 30
   }
   then {
-    from.balance == from.balance - amount
-    to.balance == to.balance + amount
-    error == null
+    output.from.balance == from.balance - amount
+    output.to.balance == to.balance + amount
+    output.error == null
   }
 }
 ```
 
-Prefer **relational assertions** (`from.balance - amount`) over hardcoded values (`70`). The expected value is computed from the input, making the assertion resistant to memorization.
+Prefer relational assertions (`from.balance - amount`) over hardcoded results (`70`) so the scenario resists memorization.
 
-#### `scenario` with `when` -- Generative Predicate
-
-Defines a predicate over the input space. The runtime generates many matching inputs.
-
-```
-scenario overdraft {
-  when {
-    amount > from.balance
-  }
-  then {
-    error == "insufficient_funds"
-  }
-}
-```
-
-#### Mixed `given` Blocks
-
-`given` blocks can interleave data assignments, action calls, and `let` bindings. Steps execute in order:
-
-```
-given {
-  amount: 1000
-  let page = playwright.goto("/transfer")
-  playwright.fill('[data-testid="amount"]', amount)
-  playwright.click('[data-testid="submit"]')
-}
-```
-
-Named actions can also be called:
+`given` blocks may also contain `let` bindings and adapter/action calls — they execute in order alongside the assignments:
 
 ```
 given {
   let session = login("alice", "secret")
-  user: "alice"
+  amount: 1000
+  playwright.fill('[data-testid="amount"]', amount)
 }
 ```
 
-Array literals work in `given` blocks:
+### 7.3 `scenario` with `when`
+
+A generative test. The runtime produces many inputs matching the predicate and checks the `then` block against each:
 
 ```
-given {
-  ids: [1, 2, 3]
-  names: ["alice", "bob"]
+scenario overdraft {
+  when { amount > from.balance }
+  then { output.error == TransferError.insufficient_funds }
 }
 ```
 
-## Assertions
+Multiple predicates in a `when` block are implicitly ANDed.
 
-Assertions appear in `then` blocks and invariant bodies. Every assertion uses an explicit comparison operator. Lines within a block are implicitly ANDed -- all must hold. There is no OR between assertion lines; use separate scenarios for disjunctive cases.
+## 8. Assertions in `then` blocks
 
-### Field Assertions
+Assertions are expressions. The supported operators are `==`, `!=`, `<`, `<=`, `>`, `>=`. Lines in a `then` block are implicitly ANDed — all must hold.
 
-Assert output field values with explicit operators:
+### 8.1 The `output.` prefix rule
+
+Inputs resolve as bare names; the return value of the action is named `output`. **Always prefix return-type fields with `output.`**:
 
 ```
 then {
-  status == 200
-  from.balance == from.balance - amount
-  error == null
-  score != 0
-  count >= 1
+  output.from.balance == from.balance - amount   # output. on the LHS, bare input on the RHS
+  output.error == null
 }
 ```
 
-Supported operators: `==`, `!=`, `>`, `>=`, `<`, `<=`.
-
-### Adapter Assertions
-
-Adapter methods that return values can be used as expressions in assertions:
+Adapter call results used as expressions need no prefix:
 
 ```
 then {
   playwright.visible('[data-testid="welcome"]') == true
   playwright.text('[data-testid="welcome"]') == "Hello, alice"
   playwright.count('[data-testid="items"]') >= 1
-  playwright.disabled('[data-testid="submit"]') == false
 }
 ```
 
-The adapter call returns a value, and the comparison operator checks it against the expected value.
+### 8.2 The `error` pseudo-field
 
-### Error Pseudo-Field
-
-`error` is a special pseudo-field that asserts against adapter action errors. It activates only when `error` is NOT declared in the scope's contract output fields.
+When `error` is *not* declared as a field of the return type, the bare identifier `error` in a `then` block refers to the adapter action's error:
 
 ```
 scenario click_missing {
-  given {
-    playwright.click('[data-testid="nonexistent"]')
-  }
-  then {
-    error == "element not found"
-  }
-}
-
-scenario no_error {
-  given {
-    playwright.click('[data-testid="submit"]')
-  }
-  then {
-    error == null
-  }
+  given { playwright.click('[data-testid="nonexistent"]') }
+  then { error == "element not found" }
 }
 ```
 
-When `error` IS declared as a contract output field (e.g., `output { error: string? }`), it behaves as a normal field assertion, not the pseudo-field.
+When `error` *is* declared on the return type, `output.error` behaves as a normal field reference and the pseudo-field is inactive for that contract.
 
-### Dot-Path Array Index Access
+### 8.3 Array index access
 
-Numeric segments in dot-paths index into arrays:
+Numeric dot-path segments index into arrays (zero-based). Out-of-range access produces an assertion failure:
 
 ```
 then {
-  result.items.0.name == "first"
-  result.items.1.name == "second"
+  output.items.0.name == "first"
+  output.items.1.name == "second"
 }
 ```
 
-This works in both assertions and field references in expressions. Out-of-range indices produce an assertion failure.
-
-## Mixed Adapters
-
-A single scope can use multiple adapters. Adapters are named inline per call, so there is no restriction on which adapters appear in a given scope.
+## 9. Lifecycle (`before` / `after`)
 
 ```
-scope login_flow {
-  action authenticate(username: string, password: string) {
-    let result = http.post("/api/auth/login", { username: username, password: password })
-    http.header("Authorization", "Bearer " + result.body.access_token)
-    playwright.goto("/dashboard")
-    return result.body
+scope orders {
+  before {
+    let session = login("admin", "test")
+  }
+  after {
+    http.delete("/api/session")
   }
 
-  contract {
-    input { username: string, password: string }
-    output { authenticated: bool, error: string? }
-    action: authenticate
-  }
+  contract CreateOrder -> OrderResult { ... }
+  contract UpdateOrder -> OrderResult { ... }
+}
+```
 
-  invariant dashboard_on_success {
-    when error == null:
-      playwright.visible('[data-testid="dashboard"]') == true
-  }
+- `before` runs before each scenario's `given` steps and each invariant iteration. Adapter state is reset first — a fresh HTTP client, empty headers, cleared cookies/localStorage.
+- `after` runs after each iteration, **even if that iteration failed**. Errors in `after` steps are logged but do not affect the verdict.
+- Scenes established in `before` (headers, cookies, let-bound values) carry into the contract's action block.
+- A failing `before` aborts the remaining contracts in the scope.
 
-  scenario alice_logs_in {
-    given {
-      username: "alice"
-      password: "secret"
+Top-level contracts (outside any scope) have no `before`/`after`.
+
+## 10. Actions (reusable)
+
+See [§5.4](#54-action-reusable) for the declaration form. Body steps:
+
+| Step | Form |
+|------|------|
+| Variable binding | `let <name> = <expr>` |
+| Adapter call | `<adapter>.<method>(<args>)` |
+| Local call | `<action>(<args>)` |
+| Return | `return <expr>` |
+
+`let` bindings are immutable and visible only within the block in which they are defined. The right-hand side can be any expression, including an adapter or action call (the result becomes the bound value).
+
+## 11. State-dependent fields
+
+A field's presence can be made conditional on another field's value using a trailing `when <expr>`:
+
+```
+model Shipment {
+  status: string
+  tracking: string when status == "shipped"
+}
+
+contract Update -> ShipmentResult {
+  status: string
+  tracking: string when status == "shipped"
+  action { ... }
+}
+```
+
+- The field is generated/required only when the condition holds.
+- The condition may reference *sibling* fields of the same model or contract.
+- References to unknown fields are rejected at validation time.
+- Circular `when` dependencies (A depends on B, B depends on A) are rejected.
+
+## 12. Adapter calls
+
+All adapter interaction uses the `<adapter>.<method>(<args>...)` form. Adapters are named inline per call; there is no ambient adapter context.
+
+```
+http.get("/api/items/123")
+http.post("/api/items", { name: "widget" })
+http.header("Authorization", "Bearer abc123")
+playwright.goto("/dashboard")
+playwright.fill('[data-testid="email"]', "alice@example.com")
+playwright.click('[data-testid="submit"]')
+process.run("echo", ["hello", "world"])
+```
+
+Adapter calls appear in action bodies, `before`/`after` blocks, `given` blocks, and (as value expressions) in `then` assertions. Every adapter used in a spec needs its config block at the top level (e.g. `http { base_url: ... }`).
+
+Built-in adapters:
+
+- [`http`](adapters/http.md) — REST APIs
+- [`process`](adapters/process.md) — CLI tools, subprocesses
+- [`playwright`](adapters/playwright.md) — browser UI
+
+## 13. Services
+
+The `services { }` block declares Docker containers as test infrastructure. `specrun verify` manages their lifecycle: pre-flight cleanup of stale containers, build or pull, start, health check, run verification, stop and remove.
+
+### 13.1 Syntax
+
+```
+services {
+  app {
+    build: "./server"          # Dockerfile directory (relative to the spec file)
+    port: 8080                 # container port to expose
+    health: "/healthz"         # HTTP GET path for health check (optional)
+    env { PORT: "8080" }       # optional environment variables
+    volumes {                  # optional volume mounts (host: container)
+      "./fixtures": "/data"
     }
-    then {
-      authenticated == true
-      playwright.text('[data-testid="welcome"]') == "Hello, alice"
-    }
   }
-}
-```
 
-## Validation
-
-Specs are validated after parsing, before generation and verification. Validation checks:
-
-- Model resolution: all model references exist
-- Type checking: literal values match declared types
-- Array element types: all elements match the array's element type
-- Object field validation: object literals contain only declared fields with matching types
-- Given completeness: all required contract input fields are assigned
-- Then field validation: all fields in `then` blocks are valid model fields or adapter assertions
-- Contract action signature: action parameters match contract input field names and types
-
-Validation failures cause `specrun` to exit with code 1 and print detailed messages:
-
-```
-error validating spec:
-  scope transfer / scenario success:
-    given: required field "to" not assigned
-    error: type mismatch: expected int, got string "pending"
-  scope transfer / contract:
-    action: parameter "amount" type mismatch: expected float, got int
-```
-
-## Keywords
-
-### Contextual keywords
-
-Most keywords are **contextual** -- they are reserved at statement-start positions but can be used as identifiers in name positions (action parameters, field names, model/action/scope/scenario/invariant names, and object literal keys).
-
-Contextual keywords: `before`, `after`, `given`, `when`, `then`, `input`, `output`, `model`, `action`, `target`, `locators`, `scope`, `config`, `let`, `return`.
-
-Example -- cursor-based pagination uses `before` and `after` as parameter names, which is valid:
-
-```
-action list(before: string?, after: string?) {
-  let result = http.get("/api/items", { before: before, after: after })
-  return result.body
-}
-
-scope items {
-  contract {
-    input {
-      before: string?
-      after: string?
-    }
-    output {
-      items: []Item
-      next_cursor: string?
-    }
-    action: list
+  db {
+    image: "postgres:16"       # pre-built image, alternative to build
+    port: 5432
+    env { POSTGRES_PASSWORD: "test" }
   }
-}
-```
 
-### Reserved keywords
-
-The following keywords are reserved everywhere and **cannot** be used as identifiers: `spec`, `contract`, `invariant`, `scenario`, `include`, `import`, `if`, `else`, `service`, `env`, `null`, `true`, `false`.
-
-`contract`, `invariant`, and `scenario` are intentionally excluded from contextual use -- they declare scope-level blocks, and treating them as identifiers in expression position would silently accept malformed specs rather than producing a parse error.
-
-## Plugin Definition
-
-Plugins are defined in `.plugin` files. Built-in plugins (http, process, playwright) are compiled into specrun. External plugins communicate via JSON over stdin/stdout.
-
-```
-plugin <name> {
-  adapter: "<binary-name>"
-
-  methods {
-    <name>(<param>: <type>, ...): <return-type>
-    <name>(<param>: <type>, ...)
-  }
-}
-```
-
-Methods with return types can be used in assertions. Methods without return types are action-only.
-
-Example:
-
-```
-plugin playwright {
-  methods {
-    goto(url: string)
-    fill(selector: string, value: string)
-    click(selector: string)
-    visible(selector: string): bool
-    text(selector: string): string
-    count(selector: string): int
-    value(selector: string): string
-    disabled(selector: string): bool
+  stack {
+    compose: "docker-compose.yml"   # multi-service compose file
+    port: 8080
+    health: "/healthz"
   }
 }
 ```
 
-## Adapter Protocol
+### 13.2 Source selection
 
-External adapters communicate via JSON over stdin/stdout. v3 uses a unified `call` message type:
+Each service needs exactly one of:
 
-**Call request/response:**
-```json
-{"type": "call", "method": "post", "args": ["/api/items", {"name": "widget"}]}
-{"ok": true, "value": {"status": 201, "body": {"id": "123"}}}
-```
+- `build: "<path>"` — a directory containing a `Dockerfile`
+- `image: "<ref>"` — a pre-built image reference
+- `compose: "<path>"` — a `docker-compose.yml` describing the full stack (mutually exclusive with `build`/`image`)
 
-**Call with return value (assertion context):**
-```json
-{"type": "call", "method": "visible", "args": ["[data-testid=\"welcome\"]"]}
-{"ok": true, "value": true}
-```
+### 13.3 `service(name)` reference
 
-**Error response:**
-```json
-{"ok": false, "error": "element not found"}
-```
-
-## Complete Example
-
-A full spec demonstrating v3 features:
+The `service(name)` expression resolves at runtime to `http://localhost:<port>` for the named container (using the actual mapped host port):
 
 ```
-spec TransferService {
-  description: "Bank account transfer API"
+http { base_url: service(app) }
+```
 
-  services {
-    app {
-      build: "./server"
-      port: 8080
-      health: "/healthz"
-    }
-  }
+The name must match a service declared in `services { }`; unknown names fail validation.
 
-  http {
-    base_url: service(app)
-  }
+### 13.4 Health checks
 
-  model Account {
-    id: string
-    balance: int { balance >= 0 }
-  }
+- If `health:` is set, HTTP GET is polled at `http://localhost:<port><health>` until 200.
+- If `health:` is absent, a TCP connection check against the mapped port is used.
+- Timeout failures abort verification.
 
-  action login(username: string, password: string) {
-    let result = http.post("/api/auth/login", { username: username, password: password })
-    http.header("Authorization", "Bearer " + result.body.access_token)
-    return result.body
-  }
+### 13.5 `--keep-services`
 
-  scope transfer {
-    action transfer(from: Account, to: Account, amount: int) {
-      let result = http.post("/api/v1/accounts/transfer", {
-        from: from, to: to, amount: amount
-      })
-      return result.body
-    }
+Pass `--keep-services` to `specrun verify` to leave containers running after verification for debugging.
 
-    before {
-      let session = login("admin", "test")
-    }
+## 14. Imports
 
-    contract {
-      input {
-        from: Account
-        to: Account
-        amount: int { 0 < amount <= from.balance }
-      }
-      output {
-        from: Account
-        to: Account
-        error: string?
-      }
-      action: transfer
-    }
+```
+import openapi("./schema.yaml")
+import proto("./service.proto")
+```
 
-    # Money is neither created nor destroyed.
-    invariant conservation {
-      when error == null:
-        output.from.balance + output.to.balance
-          == input.from.balance + input.to.balance
-    }
+Imports generate models and contracts from an external schema file. Paths are relative to the spec file's directory. Imported contracts have fields and return types populated but no invariants or scenarios — add those in the importing spec.
 
-    invariant non_negative {
-      output.from.balance >= 0
-      output.to.balance >= 0
-    }
+Duplicate names between imported and hand-written declarations are errors.
 
-    scenario success {
-      given {
-        from: { id: "alice", balance: 100 }
-        to: { id: "bob", balance: 50 }
-        amount: 30
-      }
-      then {
-        from.balance == from.balance - amount
-        to.balance == to.balance + amount
-        error == null
-      }
-    }
+See [OpenAPI import](imports/openapi.md) and [Protobuf import](imports/protobuf.md) for format-specific detail.
 
-    scenario overdraft {
-      when {
-        amount > from.balance
-      }
-      then {
-        error == "insufficient_funds"
-      }
-    }
-  }
+## 15. Includes
+
+```
+include "shared/infra.spec"
+include "shared/models.spec"
+```
+
+- `include` is a top-level directive; always write it at the top level of a file. (Mechanically, the directive is resolved by token-splicing the included file's contents in its place, so technically the parser doesn't enforce placement — but anything else invites confusing parse errors downstream.)
+- Paths are relative to the *including* file's directory (not the root).
+- Transitive includes resolve recursively.
+- Duplicate model, enum, action, scope, contract, or service names across the fully resolved token stream are errors.
+- Circular includes are detected and rejected.
+- Included files are themselves valid spec files — they can be run standalone if they declare contracts.
+
+### Includes vs. glob execution
+
+`include` and `specrun verify <glob>` are two different tools for two different jobs:
+
+| Tool | Purpose |
+|------|---------|
+| `include "path"` | Import shared, non-runnable fragments — models, actions, adapter config, service definitions — into the current spec's declaration namespace. |
+| `specrun verify <glob>` | Batch-run independent, self-contained specs. Each matched file is a separate verification unit with its own result. |
+
+**Do not use `include` to compose runnable specs into a super-spec.** Every declaration in the include graph must be unique; if two specs both define `model Account`, including them both from a root file is an error. The right model for multiple independent specs that both need the same models is:
+
+1. Factor the shared declarations into a library file:
+
+```
+# shared/models.spec
+model Account {
+  id: string
+  balance: int
 }
 ```
+
+2. Each spec that needs them includes the library:
+
+```
+# specs/transfer.spec
+include "shared/models.spec"
+
+scope transfer {
+  contract Transfer -> TransferResult { ... }
+}
+```
+
+```
+# specs/audit.spec
+include "shared/models.spec"
+
+scope audit {
+  contract Audit -> AuditLog { ... }
+}
+```
+
+3. Run both specs with a glob — each is verified independently:
+
+```bash
+specrun verify specs/*.spec
+```
+
+The library file (`shared/models.spec`) has no contracts, so it is skipped with a "no contracts" notice if matched by the glob. That is expected and harmless.
+
+## 16. CLI
+
+```bash
+specrun verify <spec-file|glob> [<spec-file|glob>...]
+                                             # each matched file is verified independently
+                                             # flags: --seed N --iterations N --json --keep-services
+
+specrun parse    <spec-file>                 # print AST as JSON
+specrun generate <spec-file> --scope <name>  # generate one input (flags: --seed N)
+                                             # --scope matches either a scope name or a
+                                             # top-level contract's identifier
+
+specrun migrate --to v4 <spec-file> [<spec-file>...]
+                                             # rewrite a v3 spec to v4
+                                             # flags: -w/--write (rewrite in place); --to v3|v4
+
+specrun install playwright                   # install Playwright Chromium browser
+```
+
+Glob patterns (`*`, `**`) expand to every matching file. Files with no contracts are logged and skipped, not errored:
+
+```
+mymodels.spec: no contracts, skipping
+```
+
+## 17. Error messages
+
+Common parse and validation errors and their causes:
+
+| Message | Cause |
+|---------|-------|
+| `'spec Name { }' wrapper is removed in v4; top-level declarations appear directly in the file` | Legacy v2/v3 spec — run `specrun migrate --to v4` |
+| `'use' directive is not valid; adapters are named inline per call` | Legacy v2 spec — migrate to v4 |
+| `unexpected character '!' (use 'not' for logical negation)` | Lone `!` — use `not` |
+| `include requires a string path` | `include` not followed by a string literal |
+| `circular include detected` | Include cycle between files |
+| `duplicate declaration: model "..."` / `duplicate declaration: scope "..."` / etc. | Same name declared in multiple included files; see [Includes vs. glob execution](#includes-vs-glob-execution) |
+| `references unknown field "..."` | A `when` condition or assertion names a non-existent field |
+| `circular when dependency involving field "..."` | Two or more fields' `when` expressions reference each other |
+| `inherits unknown model "..."` | `contract Foo: Bar` with no `model Bar` in scope |
+| `enum variants must be string literals` | Inline `enum()` with identifier variants |
+| `enum type requires at least one variant` | Empty inline `enum()` |

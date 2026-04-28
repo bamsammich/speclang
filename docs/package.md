@@ -12,7 +12,7 @@ All implementation details (parser, generator, runner, validator, adapters) live
 ## Installation
 
 ```bash
-go get github.com/bamsammich/speclang/v2
+go get github.com/bamsammich/speclang/v4
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/bamsammich/speclang/v2/pkg/specrun"
+	"github.com/bamsammich/speclang/v4/pkg/specrun"
 )
 
 func main() {
@@ -329,7 +329,7 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/bamsammich/speclang/v2/pkg/spec"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // CalcAdapter implements spec.Adapter for a calculator HTTP API.
@@ -415,8 +415,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bamsammich/speclang/v2/pkg/spec"
-	"github.com/bamsammich/speclang/v2/pkg/specrun"
+	"github.com/bamsammich/speclang/v4/pkg/spec"
+	"github.com/bamsammich/speclang/v4/pkg/specrun"
 )
 
 func main() {
