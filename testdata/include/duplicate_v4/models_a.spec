@@ -1,0 +1,3 @@
+model Account {
+  id: string
+}

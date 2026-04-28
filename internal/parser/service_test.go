@@ -4,10 +4,9 @@ import "testing"
 
 func TestParseServiceRef(t *testing.T) {
 	t.Parallel()
-	src := `spec Test {
-  target {
-    base_url: service(app)
-  }
+	src := `
+target {
+  base_url: service(app)
 }`
 	spec, err := Parse(src)
 	if err != nil {
@@ -24,27 +23,26 @@ func TestParseServiceRef(t *testing.T) {
 
 func TestParseTargetServices(t *testing.T) {
 	t.Parallel()
-	src := `spec Test {
-  target {
-    services {
-      app {
-        build: "./examples/server"
-        port: 8080
-        health: "/health"
+	src := `
+target {
+  services {
+    app {
+      build: "./examples/server"
+      port: 8080
+      health: "/health"
+    }
+    db {
+      image: "postgres:15"
+      port: 5432
+      env {
+        POSTGRES_PASSWORD: "test"
       }
-      db {
-        image: "postgres:15"
-        port: 5432
-        env {
-          POSTGRES_PASSWORD: "test"
-        }
-        volumes {
-          "./schema.sql": "/docker-entrypoint-initdb.d/schema.sql"
-        }
+      volumes {
+        "./schema.sql": "/docker-entrypoint-initdb.d/schema.sql"
       }
     }
-    base_url: service(app)
   }
+  base_url: service(app)
 }`
 	spec, err := Parse(src)
 	if err != nil {
@@ -72,13 +70,12 @@ func TestParseTargetServices(t *testing.T) {
 
 func TestParseTargetCompose(t *testing.T) {
 	t.Parallel()
-	src := `spec Test {
-  target {
-    services {
-      compose: "./docker-compose.test.yml"
-    }
-    base_url: service(api)
+	src := `
+target {
+  services {
+    compose: "./docker-compose.test.yml"
   }
+  base_url: service(api)
 }`
 	spec, err := Parse(src)
 	if err != nil {

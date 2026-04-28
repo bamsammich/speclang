@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -124,15 +125,12 @@ func TestResolveIncludes_Circular(t *testing.T) {
 
 func TestParseFile_WithIncludes(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "v3basic", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "basic_v4", "root.spec")
 	spec, err := ParseFile(root)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
 
-	if spec.Name != "TestAPI" {
-		t.Errorf("expected spec name TestAPI, got %q", spec.Name)
-	}
 	if len(spec.Models) != 1 || spec.Models[0].Name != "Account" {
 		t.Errorf("expected 1 model Account, got %v", spec.Models)
 	}
@@ -143,7 +141,7 @@ func TestParseFile_WithIncludes(t *testing.T) {
 
 func TestParseFile_NestedIncludes(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "nested", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "nested_v4", "root.spec")
 	spec, err := ParseFile(root)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -172,31 +170,126 @@ func TestParseFile_CircularIncludeError(t *testing.T) {
 
 func TestParseFile_DuplicateModelError(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "duplicate", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "duplicate_v4", "root.spec")
 	_, err := ParseFile(root)
 	if err == nil {
 		t.Fatal("expected error for duplicate model")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("expected error to mention 'duplicate', got: %v", err)
+	msg := err.Error()
+	// Machine-readable first line
+	if !strings.HasPrefix(msg, `duplicate declaration: model "Account"`) {
+		t.Fatalf("expected error to start with machine-readable shape, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Account") {
-		t.Fatalf("expected error to mention 'Account', got: %v", err)
+	// Must name both files
+	if !strings.Contains(msg, "models_a.spec") || !strings.Contains(msg, "models_b.spec") {
+		t.Fatalf("expected error to cite both include files, got: %v", err)
+	}
+	// Must include actionable hint
+	if !strings.Contains(msg, "specrun verify") {
+		t.Fatalf("expected error to include glob hint, got: %v", err)
 	}
 }
 
 func TestParseFile_DuplicateScopeError(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "testdata", "include", "v3duplicate_scope", "root.spec")
+	root := filepath.Join("..", "..", "testdata", "include", "duplicate_scope_v4", "root.spec")
 	_, err := ParseFile(root)
 	if err == nil {
 		t.Fatal("expected error for duplicate scope")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("expected error to mention 'duplicate', got: %v", err)
+	msg := err.Error()
+	// Machine-readable first line
+	if !strings.HasPrefix(msg, `duplicate declaration: scope "transfer"`) {
+		t.Fatalf("expected error to start with machine-readable shape, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "transfer") {
-		t.Fatalf("expected error to mention 'transfer', got: %v", err)
+	// Must name both files
+	if !strings.Contains(msg, "scope_a.spec") || !strings.Contains(msg, "scope_b.spec") {
+		t.Fatalf("expected error to cite both include files, got: %v", err)
+	}
+	// Must include actionable hint
+	if !strings.Contains(msg, "specrun verify") {
+		t.Fatalf("expected error to include glob hint, got: %v", err)
+	}
+}
+
+// TestParseFile_DuplicateEnumError verifies that duplicate named enum declarations
+// produce the rich error message.
+func TestParseFile_DuplicateEnumError(t *testing.T) {
+	t.Parallel()
+	// Inline spec with duplicate enum declarations (no include fixture needed).
+	src := `
+enum Status { active, inactive }
+enum Status { pending }
+`
+	_, err := Parse(src)
+	if err != nil {
+		t.Fatalf("Parse should succeed (validateNoDuplicates runs in ParseFile, not Parse): %v", err)
+	}
+
+	// Use ParseFile path to exercise validateNoDuplicates.
+	dir := t.TempDir()
+	specFile := filepath.Join(dir, "dup_enum.spec")
+	if writeErr := os.WriteFile(specFile, []byte(src), 0o600); writeErr != nil {
+		t.Fatalf("writing temp spec: %v", writeErr)
+	}
+	_, err = ParseFile(specFile)
+	if err == nil {
+		t.Fatal("expected error for duplicate enum")
+	}
+	msg := err.Error()
+	if !strings.HasPrefix(msg, `duplicate declaration: enum "Status"`) {
+		t.Fatalf("expected machine-readable shape, got: %v", err)
+	}
+	if !strings.Contains(msg, "specrun verify") {
+		t.Fatalf("expected hint, got: %v", err)
+	}
+}
+
+// TestParseFile_DuplicateActionError verifies that duplicate top-level action
+// declarations produce the rich error message.
+func TestParseFile_DuplicateActionError(t *testing.T) {
+	t.Parallel()
+	src := `
+action setup() { }
+action setup() { }
+`
+	dir := t.TempDir()
+	specFile := filepath.Join(dir, "dup_action.spec")
+	if writeErr := os.WriteFile(specFile, []byte(src), 0o600); writeErr != nil {
+		t.Fatalf("writing temp spec: %v", writeErr)
+	}
+	_, err := ParseFile(specFile)
+	if err == nil {
+		t.Fatal("expected error for duplicate action")
+	}
+	msg := err.Error()
+	if !strings.HasPrefix(msg, `duplicate declaration: action "setup"`) {
+		t.Fatalf("expected machine-readable shape, got: %v", err)
+	}
+	if !strings.Contains(msg, "specrun verify") {
+		t.Fatalf("expected hint, got: %v", err)
+	}
+}
+
+// TestParseFile_DiamondInclude verifies that a file reached via multiple
+// include chains (A→B→X, A→C→X, A→X directly) is spliced exactly once.
+// Before the include-once fix this produced: duplicate declaration: model "Shared".
+func TestParseFile_DiamondInclude(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..", "testdata", "include", "diamond", "root.spec")
+	spec, err := ParseFile(root)
+	if err != nil {
+		t.Fatalf("ParseFile diamond: unexpected error: %v", err)
+	}
+	// shared.spec declares Shared and Result — each must appear exactly once.
+	counts := make(map[string]int)
+	for _, m := range spec.Models {
+		counts[m.Name]++
+	}
+	for _, name := range []string{"Shared", "Result"} {
+		if counts[name] != 1 {
+			t.Errorf("expected model %q exactly once, got %d", name, counts[name])
+		}
 	}
 }
 
@@ -230,3 +323,52 @@ func TestResolveIncludes_NonStringAfterInclude(t *testing.T) {
 		t.Fatalf("expected error about string path, got: %v", err)
 	}
 }
+
+// TestInclude_SameDir verifies that a same-directory include works.
+func TestInclude_SameDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Write a shared fragment.
+	shared := filepath.Join(dir, "shared.spec")
+	if err := os.WriteFile(shared, []byte("model Shared { id: string }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Write root spec that includes it.
+	root := filepath.Join(dir, "root.spec")
+	if err := os.WriteFile(root, []byte(`include "shared.spec"`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseFile(root)
+	if err != nil {
+		t.Fatalf("expected same-dir include to succeed: %v", err)
+	}
+	if len(spec.Models) != 1 || spec.Models[0].Name != "Shared" {
+		t.Errorf("expected model Shared, got %v", spec.Models)
+	}
+}
+
+// TestInclude_Subdir verifies that an include of a file in a subdirectory works.
+func TestInclude_Subdir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "models")
+	if err := os.MkdirAll(sub, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(sub, "account.spec")
+	if err := os.WriteFile(shared, []byte("model Account { id: string }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "root.spec")
+	if err := os.WriteFile(root, []byte(`include "models/account.spec"`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseFile(root)
+	if err != nil {
+		t.Fatalf("expected sub-dir include to succeed: %v", err)
+	}
+	if len(spec.Models) != 1 || spec.Models[0].Name != "Account" {
+		t.Errorf("expected model Account, got %v", spec.Models)
+	}
+}
+

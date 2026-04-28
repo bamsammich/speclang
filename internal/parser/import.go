@@ -59,7 +59,8 @@ func (p *parser) parseImport() (*importResult, error) {
 		return nil, p.errAt(adapterTok, fmt.Sprintf("unknown import adapter %q", adapterTok.Value))
 	}
 
-	// Resolve path relative to spec file directory
+	// Resolve path relative to spec file directory.
+	// Note: not sandboxed; see the security note on ParseFileWithImports.
 	relPath := pathTok.Value
 	absPath := relPath
 	if p.fileDir != "" {

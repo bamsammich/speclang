@@ -5,12 +5,9 @@ import "testing"
 func TestParseGivenBlock_Assignments(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope test {
+  contract GivenAssign -> int {
+    x: int
     scenario smoke {
       given {
         x: 42
@@ -25,7 +22,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := spec.Scopes[0].Scenarios[0]
+	sc := spec.Scopes[0].Contracts[0].Scenarios[0]
 	if len(sc.Given.Steps) != 1 {
 		t.Fatalf("expected 1 given step, got %d", len(sc.Given.Steps))
 	}
@@ -41,12 +38,9 @@ spec Test {
 func TestParseGivenBlock_ActionCalls(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { x: int }
-      output { ok: bool }
-    }
+scope test {
+  contract GivenCalls -> bool {
+    x: int
     scenario ui_flow {
       given {
         playwright.fill("username", "alice")
@@ -63,7 +57,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := spec.Scopes[0].Scenarios[0]
+	sc := spec.Scopes[0].Contracts[0].Scenarios[0]
 	if len(sc.Given.Steps) != 3 {
 		t.Fatalf("expected 3 given steps, got %d", len(sc.Given.Steps))
 	}

@@ -5,12 +5,9 @@ import "testing"
 func TestParseThenBlock_V3ExprAssertions(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { x: int }
-      output { ok: bool }
-    }
+scope test {
+  contract UiCheck -> bool {
+    x: int
     scenario check_ui {
       given { x: 1 }
       then {
@@ -24,7 +21,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+	assertions := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions
 
 	if len(assertions) != 2 {
 		t.Fatalf("expected 2 assertions, got %d", len(assertions))
@@ -65,12 +62,9 @@ spec Test {
 func TestParseThenBlock_SimpleFieldAssertion(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope test {
+  contract SimpleAssert -> int {
+    x: int
     scenario smoke {
       given { x: 1 }
       then { y == 2 }
@@ -81,7 +75,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := spec.Scopes[0].Scenarios[0].Then.Assertions[0]
+	a := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions[0]
 	binOp, ok := a.Expr.(BinaryOp)
 	if !ok {
 		t.Fatalf("expected BinaryOp, got %T", a.Expr)
@@ -101,12 +95,9 @@ spec Test {
 func TestParseThenBlock_ComparisonOperators(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { x: int }
-      output { score: int }
-    }
+scope test {
+  contract ComparisonOps -> int {
+    x: int
     scenario ops {
       given { x: 1 }
       then {
@@ -124,7 +115,7 @@ spec Test {
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
-	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+	assertions := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions
 
 	if len(assertions) != 6 {
 		t.Fatalf("expected 6 assertions, got %d", len(assertions))

@@ -6,16 +6,9 @@ import (
 
 func TestParseEnumType(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        status: enum("active", "inactive", "pending")
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract EnumTest -> bool {
+    status: enum("active", "inactive", "pending")
   }
 }
 `)
@@ -23,7 +16,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	field := spec.Scopes[0].Contract.Input[0]
+	field := spec.Scopes[0].Contracts[0].Fields[0]
 	if field.Type.Name != "enum" {
 		t.Errorf("type name = %q, want 'enum'", field.Type.Name)
 	}
@@ -40,16 +33,9 @@ spec Test {
 
 func TestParseEnumType_SingleVariant(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        mode: enum("default")
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract SingleEnum -> bool {
+    mode: enum("default")
   }
 }
 `)
@@ -57,7 +43,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	field := spec.Scopes[0].Contract.Input[0]
+	field := spec.Scopes[0].Contracts[0].Fields[0]
 	if field.Type.Name != "enum" {
 		t.Errorf("type name = %q, want 'enum'", field.Type.Name)
 	}
@@ -71,16 +57,9 @@ spec Test {
 
 func TestParseEnumType_Optional(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        role: enum("admin", "user")?
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract OptionalEnum -> bool {
+    role: enum("admin", "user")?
   }
 }
 `)
@@ -88,7 +67,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	field := spec.Scopes[0].Contract.Input[0]
+	field := spec.Scopes[0].Contracts[0].Fields[0]
 	if field.Type.Name != "enum" {
 		t.Errorf("type name = %q, want 'enum'", field.Type.Name)
 	}
@@ -102,16 +81,9 @@ spec Test {
 
 func TestParseEnumType_TrailingComma(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        color: enum("red", "green", "blue",)
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract TrailingCommaEnum -> bool {
+    color: enum("red", "green", "blue",)
   }
 }
 `)
@@ -119,7 +91,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	field := spec.Scopes[0].Contract.Input[0]
+	field := spec.Scopes[0].Contracts[0].Fields[0]
 	if len(field.Type.Variants) != 3 {
 		t.Fatalf("variants count = %d, want 3 (trailing comma)", len(field.Type.Variants))
 	}
@@ -127,16 +99,9 @@ spec Test {
 
 func TestParseEnumType_Empty(t *testing.T) {
 	_, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        status: enum()
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract EmptyEnum -> bool {
+    status: enum()
   }
 }
 `)
@@ -147,16 +112,9 @@ spec Test {
 
 func TestParseEnumType_NonStringVariant(t *testing.T) {
 	_, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        status: enum(1, 2, 3)
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract NonStringEnum -> bool {
+    status: enum(1, 2, 3)
   }
 }
 `)
@@ -167,16 +125,9 @@ spec Test {
 
 func TestParseEnumType_InGiven(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        status: enum("active", "inactive")
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract EnumInGiven -> bool {
+    status: enum("active", "inactive")
     scenario smoke {
       given {
         status: "active"
@@ -191,7 +142,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := spec.Scopes[0].Scenarios[0]
+	sc := spec.Scopes[0].Contracts[0].Scenarios[0]
 	a, ok := sc.Given.Steps[0].(*Assignment)
 	if !ok {
 		t.Fatalf("expected *Assignment, got %T", sc.Given.Steps[0])

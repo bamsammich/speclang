@@ -47,9 +47,7 @@ func TestParseImport_Basic(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  import test("schema.yaml")
-}
+import test("schema.yaml")
 `)
 
 	resolver := &mockResolver{
@@ -62,11 +60,6 @@ spec Test {
 		scopes: []*Scope{
 			{
 				Name: "list_pets",
-				Use:  "http",
-				Config: map[string]Expr{
-					"path":   LiteralString{Value: "/pets"},
-					"method": LiteralString{Value: "GET"},
-				},
 			},
 		},
 	}
@@ -100,16 +93,13 @@ func TestParseImport_MergesWithHandWritten(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  model Local {
-    id: int
-  }
-  import test("schema.yaml")
-  scope local_scope {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+model Local {
+  id: int
+}
+import test("schema.yaml")
+scope local_scope {
+  contract LocalContract -> int {
+    x: int
   }
 }
 `)
@@ -158,9 +148,7 @@ func TestParseImport_UnknownAdapter(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  import unknown("schema.yaml")
-}
+import unknown("schema.yaml")
 `)
 
 	registry := ImportRegistry{"openapi": &mockResolver{}}
@@ -178,9 +166,7 @@ func TestParseImport_NilRegistry(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  import openapi("schema.yaml")
-}
+import openapi("schema.yaml")
 `)
 
 	_, err := ParseFileWithImports(specFile, nil)
@@ -197,9 +183,7 @@ func TestParseImport_ResolverError(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  import test("bad.yaml")
-}
+import test("bad.yaml")
 `)
 
 	resolver := &mockResolver{err: fmt.Errorf("file not found")}
@@ -218,12 +202,10 @@ func TestParseImport_DuplicateModelName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  model Pet {
-    id: int
-  }
-  import test("schema.yaml")
+model Pet {
+  id: int
 }
+import test("schema.yaml")
 `)
 
 	resolver := &mockResolver{
@@ -247,15 +229,12 @@ func TestParseImport_DuplicateScopeName(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  scope my_scope {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope my_scope {
+  contract MyContract -> int {
+    x: int
   }
-  import test("schema.yaml")
 }
+import test("schema.yaml")
 `)
 
 	resolver := &mockResolver{
@@ -279,9 +258,7 @@ func TestParseImport_EmptyResult(t *testing.T) {
 	dir := t.TempDir()
 	specFile := filepath.Join(dir, "test.spec")
 	writeSpecFile(t, specFile, `
-spec Test {
-  import test("empty.yaml")
-}
+import test("empty.yaml")
 `)
 
 	resolver := &mockResolver{models: nil, scopes: nil}
@@ -301,9 +278,7 @@ spec Test {
 func TestParseImport_SyntaxError_MissingParen(t *testing.T) {
 	t.Parallel()
 	src := `
-spec Test {
-  import openapi "schema.yaml"
-}
+import openapi "schema.yaml"
 `
 	_, err := Parse(src)
 	if err == nil {
@@ -314,12 +289,11 @@ spec Test {
 func TestParseImport_SyntaxError_MissingPath(t *testing.T) {
 	t.Parallel()
 	src := `
-spec Test {
-  import openapi()
-}
+import openapi()
 `
 	_, err := Parse(src)
 	if err == nil {
 		t.Fatal("expected parse error for missing path")
 	}
 }
+

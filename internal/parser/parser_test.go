@@ -7,19 +7,17 @@ import (
 	"github.com/bamsammich/speclang/v4/internal/parser"
 )
 
-// --- v3 spec-level structure ---
+// --- v4 spec-level structure ---
 
-func TestParseV3_AdapterConfigBlocks(t *testing.T) {
+func TestParseV4_AdapterConfigBlocks(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  http {
-    base_url: env(APP_URL, "http://localhost:8080")
-  }
-  playwright {
-    base_url: env(APP_URL, "http://localhost:8080")
-    headless: true
-  }
+http {
+  base_url: env(APP_URL, "http://localhost:8080")
+}
+playwright {
+  base_url: env(APP_URL, "http://localhost:8080")
+  headless: true
 }`)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
@@ -53,15 +51,13 @@ spec App {
 	}
 }
 
-func TestParseV3_SpecLevelServices(t *testing.T) {
+func TestParseV4_SpecLevelServices(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  services {
-    app {
-      build: "./server"
-      port: 8080
-    }
+services {
+  app {
+    build: "./server"
+    port: 8080
   }
 }`)
 	if err != nil {
@@ -82,18 +78,16 @@ spec App {
 	}
 }
 
-func TestParseV3_ActionDef(t *testing.T) {
+func TestParseV4_ActionDef(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  http {
-    base_url: "http://localhost:8080"
-  }
-  action login(username: string, password: string) {
-    let result = http.post("/api/auth/login", { username: username, password: password })
-    http.header("Authorization", "Bearer " + result.body.access_token)
-    return result.body
-  }
+http {
+  base_url: "http://localhost:8080"
+}
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.access_token)
+  return result.body
 }`)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
@@ -143,64 +137,35 @@ spec App {
 	}
 }
 
-func TestParseV3_ScopeLevelAction(t *testing.T) {
+func TestParseV4_ContractWithActionBlock(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope transfer {
-    action transfer(from: string, to: string, amount: int) {
-      let result = http.post("/api/transfer", { from: from, to: to, amount: amount })
-      return result.body
-    }
-    contract {
-      input { from: string, to: string, amount: int }
-      output { error: string? }
-      action: transfer
+scope test {
+  contract DoSomething -> int {
+    x: int
+    action {
+      return http.post("/do", { x: x })
     }
   }
 }`)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	scope := spec.Scopes[0]
-	if len(scope.Actions) != 1 {
-		t.Fatalf("expected 1 scope action, got %d", len(scope.Actions))
+	c := spec.Scopes[0].Contracts[0]
+	if c.Action == nil {
+		t.Fatal("expected contract action block")
 	}
-	if scope.Actions[0].Name != "transfer" {
-		t.Errorf("expected action name transfer, got %q", scope.Actions[0].Name)
-	}
-}
-
-func TestParseV3_ContractAction(t *testing.T) {
-	t.Parallel()
-	spec, err := parser.Parse(`
-spec App {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int }
-      action: do_something
-    }
-  }
-}`)
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	c := spec.Scopes[0].Contract
-	if c.Action != "do_something" {
-		t.Errorf("expected contract action do_something, got %q", c.Action)
+	if len(c.Action.Body) != 1 {
+		t.Fatalf("expected 1 action step, got %d", len(c.Action.Body))
 	}
 }
 
-func TestParseV3_AssertionSyntax(t *testing.T) {
+func TestParseV4_AssertionSyntax(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int, error: string? }
-    }
+scope test {
+  contract AssertTest -> int {
+    x: int
     scenario smoke {
       given { x: 1 }
       then {
@@ -218,7 +183,7 @@ spec App {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+	assertions := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions
 	if len(assertions) != 6 {
 		t.Fatalf("expected 6 assertions, got %d", len(assertions))
 	}
@@ -240,18 +205,15 @@ spec App {
 	}
 }
 
-func TestParseV3_AdapterCallInAssertion(t *testing.T) {
+func TestParseV4_AdapterCallInAssertion(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  playwright {
-    base_url: "http://localhost:8080"
-  }
-  scope test {
-    contract {
-      input { x: int }
-      output { ok: bool }
-    }
+playwright {
+  base_url: "http://localhost:8080"
+}
+scope test {
+  contract UiCheck -> bool {
+    x: int
     scenario check_ui {
       given { x: 1 }
       then {
@@ -264,7 +226,7 @@ spec App {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+	assertions := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions
 	if len(assertions) != 2 {
 		t.Fatalf("expected 2 assertions, got %d", len(assertions))
 	}
@@ -287,19 +249,16 @@ spec App {
 	}
 }
 
-func TestParseV3_LetInBefore(t *testing.T) {
+func TestParseV4_LetInBefore(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope test {
-    before {
-      let session = login("admin", "test")
-      http.header("X-Session", session.token)
-    }
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope test {
+  before {
+    let session = login("admin", "test")
+    http.header("X-Session", session.token)
+  }
+  contract SomeContract -> int {
+    x: int
   }
 }`)
 	if err != nil {
@@ -321,15 +280,12 @@ spec App {
 	}
 }
 
-func TestParseV3_LetInGiven(t *testing.T) {
+func TestParseV4_LetInGiven(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope test {
+  contract LetGiven -> int {
+    x: int
     scenario smoke {
       given {
         let setup = http.post("/setup", {})
@@ -344,7 +300,7 @@ spec App {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	given := spec.Scopes[0].Scenarios[0].Given
+	given := spec.Scopes[0].Contracts[0].Scenarios[0].Given
 	if len(given.Steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(given.Steps))
 	}
@@ -358,15 +314,12 @@ spec App {
 	}
 }
 
-func TestParseV3_SingleQuotedStrings(t *testing.T) {
+func TestParseV4_SingleQuotedStrings(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope test {
-    contract {
-      input { x: int }
-      output { ok: bool }
-    }
+scope test {
+  contract SingleQuote -> bool {
+    x: int
     scenario check {
       given { x: 1 }
       then {
@@ -378,73 +331,54 @@ spec App {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	assertions := spec.Scopes[0].Scenarios[0].Then.Assertions
+	assertions := spec.Scopes[0].Contracts[0].Scenarios[0].Then.Assertions
 	if len(assertions) != 1 {
 		t.Fatalf("expected 1 assertion, got %d", len(assertions))
 	}
 }
 
-func TestParseV3_CompleteSpec(t *testing.T) {
+func TestParseV4_CompleteSpec(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec AccountAPI {
-  description: "Account transfer API"
+http {
+  base_url: env(APP_URL, "http://localhost:8080")
+}
 
-  http {
-    base_url: env(APP_URL, "http://localhost:8080")
+services {
+  app {
+    build: "./server"
+    port: 8080
+  }
+}
+
+model Account { id: string, balance: int }
+
+action login(username: string, password: string) {
+  let result = http.post("/api/auth/login", { username: username, password: password })
+  http.header("Authorization", "Bearer " + result.body.token)
+  return result.body
+}
+
+scope transfer {
+  before {
+    let session = login("admin", "test")
   }
 
-  services {
-    app {
-      build: "./server"
-      port: 8080
+  contract Transfer -> Account {
+    from: Account
+    to: Account
+    amount: int { 0 < amount <= from.balance }
+    action {
+      return http.post("/api/v1/accounts/transfer", { from: from, to: to, amount: amount })
     }
-  }
-
-  model Account { id: string, balance: int }
-
-  action login(username: string, password: string) {
-    let result = http.post("/api/auth/login", { username: username, password: password })
-    http.header("Authorization", "Bearer " + result.body.token)
-    return result.body
-  }
-
-  scope transfer {
-    action transfer(from: Account, to: Account, amount: int) {
-      let result = http.post("/api/v1/accounts/transfer", {
-        from: from, to: to, amount: amount
-      })
-      return result.body
-    }
-
-    before {
-      let session = login("admin", "test")
-    }
-
-    contract {
-      input {
-        from: Account
-        to: Account
-        amount: int { 0 < amount <= from.balance }
-      }
-      output {
-        from: Account
-        to: Account
-        error: string?
-      }
-      action: transfer
-    }
-
     invariant conservation {
       when error == null:
         output.from.balance + output.to.balance == input.from.balance + input.to.balance
     }
-
     invariant non_negative {
       output.from.balance >= 0
       output.to.balance >= 0
     }
-
     scenario success {
       given {
         from: { id: "alice", balance: 100 }
@@ -457,7 +391,6 @@ spec AccountAPI {
         error == null
       }
     }
-
     scenario overdraft {
       when {
         amount > from.balance
@@ -470,13 +403,6 @@ spec AccountAPI {
 }`)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
-	}
-
-	if spec.Name != "AccountAPI" {
-		t.Errorf("expected Name=AccountAPI, got %q", spec.Name)
-	}
-	if spec.Description != "Account transfer API" {
-		t.Errorf("expected description, got %q", spec.Description)
 	}
 
 	// Adapter configs
@@ -513,36 +439,31 @@ spec AccountAPI {
 	if scope.Name != "transfer" {
 		t.Errorf("expected scope name transfer, got %q", scope.Name)
 	}
-	if len(scope.Actions) != 1 {
-		t.Fatalf("expected 1 scope action, got %d", len(scope.Actions))
-	}
 	if scope.Before == nil {
 		t.Fatal("expected before block")
 	}
-	if scope.Contract == nil {
-		t.Fatal("expected contract")
+	if len(scope.Contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(scope.Contracts))
 	}
-	if scope.Contract.Action != "transfer" {
-		t.Errorf("expected contract action transfer, got %q", scope.Contract.Action)
+	c := scope.Contracts[0]
+	if c.Action == nil {
+		t.Fatal("expected contract action block")
 	}
-	if len(scope.Invariants) != 2 {
-		t.Fatalf("expected 2 invariants, got %d", len(scope.Invariants))
+	if len(c.Invariants) != 2 {
+		t.Fatalf("expected 2 invariants, got %d", len(c.Invariants))
 	}
-	if len(scope.Scenarios) != 2 {
-		t.Fatalf("expected 2 scenarios, got %d", len(scope.Scenarios))
+	if len(c.Scenarios) != 2 {
+		t.Fatalf("expected 2 scenarios, got %d", len(c.Scenarios))
 	}
 }
 
-func TestParseV3_NoUseRequired(t *testing.T) {
+func TestParseV4_NoUseRequired(t *testing.T) {
 	t.Parallel()
 	// Scopes no longer require 'use' directive
 	_, err := parser.Parse(`
-spec App {
-  scope test {
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope test {
+  contract SomeContract -> int {
+    x: int
   }
 }`)
 	if err != nil {
@@ -550,7 +471,7 @@ spec App {
 	}
 }
 
-// --- Expression precedence tests (unchanged from v2, but without 'use') ---
+// --- Expression precedence tests ---
 
 func TestParseExprPrecedence(t *testing.T) {
 	t.Parallel()
@@ -562,7 +483,7 @@ func TestParseExprPrecedence(t *testing.T) {
 	}{
 		{
 			name:  "addition before equality",
-			input: "spec T { scope s { invariant i { a + b == c } } }",
+			input: `scope s { contract C -> int { invariant i { a + b == c } } }`,
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				eq, ok := expr.(parser.BinaryOp)
@@ -577,7 +498,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "and before or",
-			input: "spec T { scope s { invariant i { a or b and c } } }",
+			input: `scope s { contract C -> bool { invariant i { a or b and c } } }`,
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				or, ok := expr.(parser.BinaryOp)
@@ -592,7 +513,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "division at multiplicative precedence",
-			input: "spec T { scope s { invariant i { a + b / c } } }",
+			input: `scope s { contract C -> int { invariant i { a + b / c } } }`,
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				plus, ok := expr.(parser.BinaryOp)
@@ -607,7 +528,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "modulo at multiplicative precedence",
-			input: "spec T { scope s { invariant i { a + b % c } } }",
+			input: `scope s { contract C -> int { invariant i { a + b % c } } }`,
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				plus, ok := expr.(parser.BinaryOp)
@@ -622,7 +543,7 @@ func TestParseExprPrecedence(t *testing.T) {
 		},
 		{
 			name:  "unary negation",
-			input: "spec T { scope s { invariant i { not a } } }",
+			input: `scope s { contract C -> bool { invariant i { not a } } }`,
 			checkFn: func(t *testing.T, expr parser.Expr) {
 				t.Helper()
 				unary, ok := expr.(parser.UnaryOp)
@@ -641,38 +562,13 @@ func TestParseExprPrecedence(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 			if len(spec.Scopes) != 1 ||
-				len(spec.Scopes[0].Invariants) != 1 ||
-				len(spec.Scopes[0].Invariants[0].Assertions) != 1 {
-				t.Fatal("expected 1 scope with 1 invariant with 1 assertion")
+				len(spec.Scopes[0].Contracts) != 1 ||
+				len(spec.Scopes[0].Contracts[0].Invariants) != 1 ||
+				len(spec.Scopes[0].Contracts[0].Invariants[0].Assertions) != 1 {
+				t.Fatal("expected 1 scope with 1 contract with 1 invariant with 1 assertion")
 			}
-			tc.checkFn(t, spec.Scopes[0].Invariants[0].Assertions[0].Expr)
+			tc.checkFn(t, spec.Scopes[0].Contracts[0].Invariants[0].Assertions[0].Expr)
 		})
-	}
-}
-
-func TestParse_Description(t *testing.T) {
-	t.Parallel()
-
-	spec, err := parser.Parse(`spec Foo {
-  description: "A test specification"
-}`)
-	if err != nil {
-		t.Fatalf("parse failed: %v", err)
-	}
-	if spec.Description != "A test specification" {
-		t.Errorf("expected description %q, got %q", "A test specification", spec.Description)
-	}
-}
-
-func TestParse_DescriptionOptional(t *testing.T) {
-	t.Parallel()
-
-	spec, err := parser.Parse(`spec Foo {}`)
-	if err != nil {
-		t.Fatalf("parse failed: %v", err)
-	}
-	if spec.Description != "" {
-		t.Errorf("expected empty description, got %q", spec.Description)
 	}
 }
 
@@ -683,10 +579,9 @@ func TestParseErrorCases(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"missing spec name", "spec {"},
-		{"missing opening brace", "spec T model {}"},
-		{"unexpected token in spec body", "spec T { 123 }"},
-		{"unterminated spec", "spec T {"},
+		{"unexpected token at top level", "123"},
+		{"unterminated scope", "scope T {"},
+		{"scope missing name", "scope {"},
 	}
 
 	for _, tc := range tests {
@@ -700,21 +595,18 @@ func TestParseErrorCases(t *testing.T) {
 	}
 }
 
-func TestParseV3_DuplicateBeforeRejected(t *testing.T) {
+func TestParseV4_DuplicateBeforeRejected(t *testing.T) {
 	t.Parallel()
 	_, err := parser.Parse(`
-spec Test {
-  scope api {
-    before {
-      http.post("/setup", {})
-    }
-    before {
-      http.post("/setup2", {})
-    }
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope api {
+  before {
+    http.post("/setup", {})
+  }
+  before {
+    http.post("/setup2", {})
+  }
+  contract SomeContract -> int {
+    x: int
   }
 }`)
 	if err == nil {
@@ -725,24 +617,22 @@ spec Test {
 	}
 }
 
-func TestParseV3_UnknownTokenInScope(t *testing.T) {
+func TestParseV4_UnknownTokenInScope(t *testing.T) {
 	t.Parallel()
 	_, err := parser.Parse(`
-spec Test {
-  scope api {
-    use http
-  }
+scope api {
+  use http
 }`)
 	if err == nil {
-		t.Fatal("expected error for 'use' in v3 scope")
+		t.Fatal("expected error for 'use' in v4 scope")
 	}
 }
 
-func TestParseV3_AdapterCallAsExpr(t *testing.T) {
+func TestParseV4_AdapterCallAsExpr(t *testing.T) {
 	t.Parallel()
 	spec, err := parser.Parse(`
-spec App {
-  scope test {
+scope test {
+  contract StatusCheck -> int {
     invariant visible_check {
       http.status() == 200
     }
@@ -751,7 +641,7 @@ spec App {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	if len(inv.Assertions) != 1 {
 		t.Fatalf("expected 1 assertion, got %d", len(inv.Assertions))
 	}
@@ -765,5 +655,376 @@ spec App {
 	}
 	if call.Adapter != "http" || call.Method != "status" {
 		t.Errorf("expected http.status, got %s.%s", call.Adapter, call.Method)
+	}
+}
+
+func TestParseV4_SpecWrapperRejected(t *testing.T) {
+	t.Parallel()
+	_, err := parser.Parse(`spec App { }`)
+	if err == nil {
+		t.Fatal("expected error for v3 spec wrapper in v4")
+	}
+	if !strings.Contains(err.Error(), "spec Name { }") && !strings.Contains(err.Error(), "wrapper") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// --- GAP A: Top-level config block ---
+
+// TestParseV4_ConfigBlock verifies that a top-level config { } block parses
+// correctly into Spec.Config. "config" lexes as TokenConfig (a keyword), which
+// previously caused "unexpected token Config at top level".
+func TestParseV4_ConfigBlock(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+config {
+  max_transfer: 1000000
+  api_version: "v2"
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Config) != 2 {
+		t.Fatalf("expected 2 config keys, got %d: %v", len(spec.Config), spec.Config)
+	}
+	if _, ok := spec.Config["max_transfer"]; !ok {
+		t.Error("expected config key max_transfer")
+	}
+	if _, ok := spec.Config["api_version"]; !ok {
+		t.Error("expected config key api_version")
+	}
+	// Verify the values are the correct expression types.
+	if mt, ok := spec.Config["max_transfer"]; ok {
+		if li, ok := mt.(parser.LiteralInt); !ok || li.Value != 1000000 {
+			t.Errorf("max_transfer: expected LiteralInt(1000000), got %T(%v)", mt, mt)
+		}
+	}
+	if av, ok := spec.Config["api_version"]; ok {
+		if ls, ok := av.(parser.LiteralString); !ok || ls.Value != "v2" {
+			t.Errorf("api_version: expected LiteralString(v2), got %T(%v)", av, av)
+		}
+	}
+}
+
+// TestParseV4_ConfigBlockWithOtherDecls verifies config block coexists with
+// models and contracts at the top level.
+func TestParseV4_ConfigBlockWithOtherDecls(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+config {
+  limit: 500
+}
+
+model Item {
+  name: string
+}
+
+contract GetItem -> Item {
+  id: string
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Config) != 1 {
+		t.Fatalf("expected 1 config key, got %d", len(spec.Config))
+	}
+	if len(spec.Models) != 1 {
+		t.Fatalf("expected 1 model, got %d", len(spec.Models))
+	}
+	if len(spec.Contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(spec.Contracts))
+	}
+}
+
+// TestParseV4_ConfigRefInConstraint verifies config.key references parse inside
+// constraint expressions.
+func TestParseV4_ConfigRefInConstraint(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+config {
+  max_transfer: 1000000
+}
+
+contract Transfer -> string {
+  amount: int { amount <= config.max_transfer }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(spec.Contracts))
+	}
+	c := spec.Contracts[0]
+	if len(c.Fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(c.Fields))
+	}
+	f := c.Fields[0]
+	if f.Constraint == nil {
+		t.Fatal("expected constraint on amount field")
+	}
+	// constraint should be a BinaryOp
+	_, ok := f.Constraint.(parser.BinaryOp)
+	if !ok {
+		t.Fatalf("expected BinaryOp constraint, got %T", f.Constraint)
+	}
+}
+
+// --- GAP B: State-dependent field presence ---
+
+// TestParseV4_FieldWhen verifies that "field: type when expr" parses the When
+// expression onto Field.When, which was previously not consumed by parseField.
+func TestParseV4_FieldWhen(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+model Shipment {
+  status: string
+  tracking: string when status == "shipped"
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Models) != 1 {
+		t.Fatalf("expected 1 model, got %d", len(spec.Models))
+	}
+	m := spec.Models[0]
+	if len(m.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(m.Fields))
+	}
+	statusField := m.Fields[0]
+	if statusField.Name != "status" {
+		t.Errorf("expected field 0 to be status, got %q", statusField.Name)
+	}
+	if statusField.When != nil {
+		t.Errorf("status field should not have When, got %v", statusField.When)
+	}
+	trackingField := m.Fields[1]
+	if trackingField.Name != "tracking" {
+		t.Errorf("expected field 1 to be tracking, got %q", trackingField.Name)
+	}
+	if trackingField.When == nil {
+		t.Fatal("tracking field should have a When expression")
+	}
+	// The When expression should be a BinaryOp (status == "shipped")
+	binOp, ok := trackingField.When.(parser.BinaryOp)
+	if !ok {
+		t.Fatalf("expected BinaryOp When expression, got %T", trackingField.When)
+	}
+	if binOp.Op != "==" {
+		t.Errorf("expected == operator in When, got %q", binOp.Op)
+	}
+}
+
+// TestParseV4_FieldWhenInContract verifies that state-dependent fields work
+// inside contract input field declarations.
+func TestParseV4_FieldWhenInContract(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+contract Order -> string {
+  status: string
+  tracking: string when status == "shipped"
+  notes: string when status == "cancelled"
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(spec.Contracts))
+	}
+	c := spec.Contracts[0]
+	if len(c.Fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(c.Fields))
+	}
+	// status: no When
+	if c.Fields[0].When != nil {
+		t.Errorf("status should not have When")
+	}
+	// tracking: has When
+	if c.Fields[1].When == nil {
+		t.Errorf("tracking should have When")
+	}
+	// notes: has When
+	if c.Fields[2].When == nil {
+		t.Errorf("notes should have When")
+	}
+}
+
+// TestParseV4_FieldWhenWithConstraint verifies that a field can have both a
+// constraint block and a when expression.
+func TestParseV4_FieldWhenWithConstraint(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+model Account {
+  balance: int { balance >= 0 }
+  bonus: int { bonus > 0 } when balance > 1000
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	m := spec.Models[0]
+	bonus := m.Fields[1]
+	if bonus.Name != "bonus" {
+		t.Fatalf("expected bonus field, got %q", bonus.Name)
+	}
+	if bonus.Constraint == nil {
+		t.Error("bonus should have Constraint")
+	}
+	if bonus.When == nil {
+		t.Error("bonus should have When expression")
+	}
+}
+
+// --- in-operator RHS forms ---
+
+// inOperatorInvariant is a helper that parses a spec with a single invariant
+// whose body is `field in <rhs>` and returns the parsed BinaryOp.
+func inOperatorInvariant(t *testing.T, rhs string) parser.BinaryOp {
+	t.Helper()
+	src := `scope s { contract C -> int { invariant i { status in ` + rhs + ` } } }`
+	spec, err := parser.Parse(src)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
+	if len(inv.Assertions) != 1 {
+		t.Fatalf("expected 1 assertion, got %d", len(inv.Assertions))
+	}
+	op, ok := inv.Assertions[0].Expr.(parser.BinaryOp)
+	if !ok {
+		t.Fatalf("expected BinaryOp, got %T", inv.Assertions[0].Expr)
+	}
+	if op.Op != "in" {
+		t.Fatalf("expected op 'in', got %q", op.Op)
+	}
+	return op
+}
+
+// TestParseIn_BracketForm verifies the existing bracket form `x in [a, b, c]`.
+func TestParseIn_BracketForm(t *testing.T) {
+	t.Parallel()
+	op := inOperatorInvariant(t, `["pending", "active"]`)
+	arr, ok := op.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral RHS, got %T", op.Right)
+	}
+	if len(arr.Elements) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr.Elements))
+	}
+}
+
+// TestParseIn_ParenForm verifies the new paren form `x in (a, b, c)`.
+func TestParseIn_ParenForm(t *testing.T) {
+	t.Parallel()
+	op := inOperatorInvariant(t, `("pending", "active")`)
+	arr, ok := op.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral RHS from paren form, got %T", op.Right)
+	}
+	if len(arr.Elements) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr.Elements))
+	}
+	// Verify element values
+	for i, want := range []string{"pending", "active"} {
+		lit, ok := arr.Elements[i].(parser.LiteralString)
+		if !ok {
+			t.Fatalf("element %d: expected LiteralString, got %T", i, arr.Elements[i])
+		}
+		if lit.Value != want {
+			t.Errorf("element %d: expected %q, got %q", i, want, lit.Value)
+		}
+	}
+}
+
+// TestParseIn_ParenFormSingleElement verifies `x in ("only")` — single element.
+func TestParseIn_ParenFormSingleElement(t *testing.T) {
+	t.Parallel()
+	op := inOperatorInvariant(t, `("only")`)
+	arr, ok := op.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral RHS, got %T", op.Right)
+	}
+	if len(arr.Elements) != 1 {
+		t.Fatalf("expected 1 element, got %d", len(arr.Elements))
+	}
+}
+
+// TestParseIn_ParenFormTrailingComma verifies `x in (a, b,)` trailing comma is accepted.
+func TestParseIn_ParenFormTrailingComma(t *testing.T) {
+	t.Parallel()
+	op := inOperatorInvariant(t, `("a", "b",)`)
+	arr, ok := op.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral RHS, got %T", op.Right)
+	}
+	if len(arr.Elements) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr.Elements))
+	}
+}
+
+// TestParseIn_ParenFormIntegers verifies `x in (1, 2, 3)` with int literals.
+func TestParseIn_ParenFormIntegers(t *testing.T) {
+	t.Parallel()
+	op := inOperatorInvariant(t, `(1, 2, 3)`)
+	arr, ok := op.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("expected ArrayLiteral RHS, got %T", op.Right)
+	}
+	if len(arr.Elements) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(arr.Elements))
+	}
+	for i, want := range []int{1, 2, 3} {
+		lit, ok := arr.Elements[i].(parser.LiteralInt)
+		if !ok {
+			t.Fatalf("element %d: expected LiteralInt, got %T", i, arr.Elements[i])
+		}
+		if lit.Value != want {
+			t.Errorf("element %d: expected %d, got %d", i, want, lit.Value)
+		}
+	}
+}
+
+// TestParseIn_EmptyParenFormErrors verifies `x in ()` produces a parse error.
+func TestParseIn_EmptyParenFormErrors(t *testing.T) {
+	t.Parallel()
+	src := `scope s { contract C -> int { invariant i { status in () } } }`
+	_, err := parser.Parse(src)
+	if err == nil {
+		t.Fatal("expected parse error for empty in () list")
+	}
+	if !strings.Contains(err.Error(), "at least one element") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+// TestParseIn_BracketAndParenEquivalent verifies that bracket and paren forms
+// produce structurally identical ArrayLiteral RHS nodes.
+func TestParseIn_BracketAndParenEquivalent(t *testing.T) {
+	t.Parallel()
+	bracket := inOperatorInvariant(t, `[1, 2, 3]`)
+	paren := inOperatorInvariant(t, `(1, 2, 3)`)
+
+	bArr, ok := bracket.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("bracket: expected ArrayLiteral, got %T", bracket.Right)
+	}
+	pArr, ok := paren.Right.(parser.ArrayLiteral)
+	if !ok {
+		t.Fatalf("paren: expected ArrayLiteral, got %T", paren.Right)
+	}
+
+	if len(bArr.Elements) != len(pArr.Elements) {
+		t.Fatalf("element count mismatch: bracket=%d paren=%d",
+			len(bArr.Elements), len(pArr.Elements))
+	}
+	for i := range bArr.Elements {
+		bLit, bOk := bArr.Elements[i].(parser.LiteralInt)
+		pLit, pOk := pArr.Elements[i].(parser.LiteralInt)
+		if !bOk || !pOk {
+			t.Fatalf("element %d: types differ — bracket=%T paren=%T",
+				i, bArr.Elements[i], pArr.Elements[i])
+		}
+		if bLit.Value != pLit.Value {
+			t.Errorf("element %d: values differ — bracket=%d paren=%d",
+				i, bLit.Value, pLit.Value)
+		}
 	}
 }

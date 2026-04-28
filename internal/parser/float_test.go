@@ -86,16 +86,9 @@ func TestLexFloat(t *testing.T) {
 func TestParseFloatLiteral(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        price: float { price > 0.5 }
-      }
-      output {
-        total: float
-      }
-    }
+scope test {
+  contract FloatTest -> float {
+    price: float { price > 0.5 }
     scenario smoke {
       given {
         price: 9.99
@@ -115,17 +108,17 @@ spec Test {
 		t.Fatalf("expected 1 scope, got %d", len(spec.Scopes))
 	}
 
-	scope := spec.Scopes[0]
+	c := spec.Scopes[0].Contracts[0]
 
 	// Check input field type
-	if scope.Contract.Input[0].Type.Name != "float" {
-		t.Errorf("input type = %q, want 'float'", scope.Contract.Input[0].Type.Name)
+	if c.Fields[0].Type.Name != "float" {
+		t.Errorf("input type = %q, want 'float'", c.Fields[0].Type.Name)
 	}
 
 	// Check constraint uses LiteralFloat
-	constraint, ok := scope.Contract.Input[0].Constraint.(BinaryOp)
+	constraint, ok := c.Fields[0].Constraint.(BinaryOp)
 	if !ok {
-		t.Fatalf("constraint type = %T, want BinaryOp", scope.Contract.Input[0].Constraint)
+		t.Fatalf("constraint type = %T, want BinaryOp", c.Fields[0].Constraint)
 	}
 	litFloat, ok := constraint.Right.(LiteralFloat)
 	if !ok {
@@ -136,7 +129,7 @@ spec Test {
 	}
 
 	// Check given value is LiteralFloat
-	given := scope.Scenarios[0].Given.Steps[0].(*Assignment)
+	given := c.Scenarios[0].Given.Steps[0].(*Assignment)
 	gv, ok := given.Value.(LiteralFloat)
 	if !ok {
 		t.Fatalf("given value type = %T, want LiteralFloat", given.Value)

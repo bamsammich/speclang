@@ -6,12 +6,9 @@ import (
 
 func TestParseExistsExpr(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { name: string }
-      output { status: string }
-    }
+scope test {
+  contract ExistsTest -> string {
+    name: string
     invariant field_exists {
       exists(output.status)
     }
@@ -22,7 +19,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	if inv.Name != "field_exists" {
 		t.Fatalf("name = %q, want field_exists", inv.Name)
 	}
@@ -41,12 +38,9 @@ spec Test {
 
 func TestParseHasKeyExpr(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { name: string }
-      output { status: string }
-    }
+scope test {
+  contract HasKeyTest -> string {
+    name: string
     invariant key_check {
       has_key(output, "status")
     }
@@ -57,7 +51,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	expr, ok := inv.Assertions[0].Expr.(HasKeyExpr)
 	if !ok {
 		t.Fatalf("expected HasKeyExpr, got %T", inv.Assertions[0].Expr)
@@ -81,12 +75,9 @@ spec Test {
 func TestParseExistsInThen(t *testing.T) {
 	// exists() can be used as an expected value in then blocks
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { file: string }
-      output { exit_code: int }
-    }
+scope test {
+  contract ExistsInThen -> int {
+    file: string
     scenario check_field {
       given {
         file: "test.spec"

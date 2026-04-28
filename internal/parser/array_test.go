@@ -6,20 +6,13 @@ import (
 
 func TestParseArrayType(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  model Item { name: string }
-  scope test {
-    contract {
-      input {
-        tags: []string
-        items: []Item
-        nested: [][]int
-        optional_arr: []int?
-      }
-      output {
-        count: int
-      }
-    }
+model Item { name: string }
+scope test {
+  contract ArrayTypes -> int {
+    tags: []string
+    items: []Item
+    nested: [][]int
+    optional_arr: []int?
   }
 }
 `)
@@ -28,7 +21,7 @@ spec Test {
 	}
 
 	scope := spec.Scopes[0]
-	fields := scope.Contract.Input
+	fields := scope.Contracts[0].Fields
 
 	// tags: []string
 	if fields[0].Type.Name != "array" {
@@ -67,17 +60,10 @@ spec Test {
 
 func TestParseMapType(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        metadata: map[string, int]
-        labels: map[string, string]?
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract MapTypes -> bool {
+    metadata: map[string, int]
+    labels: map[string, string]?
   }
 }
 `)
@@ -85,7 +71,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	fields := spec.Scopes[0].Contract.Input
+	fields := spec.Scopes[0].Contracts[0].Fields
 
 	// metadata: map[string, int]
 	if fields[0].Type.Name != "map" {
@@ -109,12 +95,9 @@ spec Test {
 
 func TestParseArrayLiteral(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { items: []int }
-      output { ok: bool }
-    }
+scope test {
+  contract ArrayLiteral -> bool {
+    items: []int
     scenario smoke {
       given {
         items: [1, 2, 3]
@@ -129,7 +112,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := spec.Scopes[0].Scenarios[0]
+	sc := spec.Scopes[0].Contracts[0].Scenarios[0]
 	a, ok := sc.Given.Steps[0].(*Assignment)
 	if !ok {
 		t.Fatalf("expected *Assignment, got %T", sc.Given.Steps[0])
@@ -154,16 +137,9 @@ spec Test {
 
 func TestParseLenExpr(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        items: []int { len(items) > 0 }
-      }
-      output {
-        count: int
-      }
-    }
+scope test {
+  contract LenContract -> int {
+    items: []int { len(items) > 0 }
   }
 }
 `)
@@ -171,7 +147,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	constraint := spec.Scopes[0].Contract.Input[0].Constraint
+	constraint := spec.Scopes[0].Contracts[0].Fields[0].Constraint
 	binOp, ok := constraint.(BinaryOp)
 	if !ok {
 		t.Fatalf("constraint type = %T, want BinaryOp", constraint)
@@ -191,12 +167,9 @@ spec Test {
 
 func TestParseArrayLiteral_Empty(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { items: []int }
-      output { ok: bool }
-    }
+scope test {
+  contract EmptyArray -> bool {
+    items: []int
     scenario smoke {
       given { items: [] }
       then { ok == true }
@@ -207,7 +180,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	a := spec.Scopes[0].Contracts[0].Scenarios[0].Given.Steps[0].(*Assignment)
 	arr, ok := a.Value.(ArrayLiteral)
 	if !ok {
 		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
@@ -219,12 +192,9 @@ spec Test {
 
 func TestParseArrayLiteral_Nested(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { matrix: [][]int }
-      output { ok: bool }
-    }
+scope test {
+  contract NestedArray -> bool {
+    matrix: [][]int
     scenario smoke {
       given { matrix: [[1, 2], [3, 4]] }
       then { ok == true }
@@ -235,7 +205,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	a := spec.Scopes[0].Contracts[0].Scenarios[0].Given.Steps[0].(*Assignment)
 	arr, ok := a.Value.(ArrayLiteral)
 	if !ok {
 		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
@@ -254,16 +224,13 @@ spec Test {
 
 func TestParseArrayLiteral_Objects(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  model Item {
-    name: string
-    price: int
-  }
-  scope test {
-    contract {
-      input { items: []Item }
-      output { total: int }
-    }
+model Item {
+  name: string
+  price: int
+}
+scope test {
+  contract ObjectArray -> int {
+    items: []Item
     scenario smoke {
       given {
         items: [
@@ -279,7 +246,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	a := spec.Scopes[0].Contracts[0].Scenarios[0].Given.Steps[0].(*Assignment)
 	arr, ok := a.Value.(ArrayLiteral)
 	if !ok {
 		t.Fatalf("expected ArrayLiteral, got %T", a.Value)
@@ -298,12 +265,9 @@ spec Test {
 
 func TestParseArrayLiteral_TrailingComma(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { items: []int }
-      output { ok: bool }
-    }
+scope test {
+  contract TrailingComma -> bool {
+    items: []int
     scenario smoke {
       given { items: [1, 2, 3,] }
       then { ok == true }
@@ -314,7 +278,7 @@ spec Test {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := spec.Scopes[0].Scenarios[0].Given.Steps[0].(*Assignment)
+	a := spec.Scopes[0].Contracts[0].Scenarios[0].Given.Steps[0].(*Assignment)
 	arr := a.Value.(ArrayLiteral)
 	if len(arr.Elements) != 3 {
 		t.Errorf("expected 3 elements (trailing comma), got %d", len(arr.Elements))
@@ -323,16 +287,9 @@ spec Test {
 
 func TestParseContainsExpr(t *testing.T) {
 	spec, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input {
-        msg: string
-      }
-      output {
-        ok: bool
-      }
-    }
+scope test {
+  contract ContainsTest -> bool {
+    msg: string
     invariant has_error {
       contains(msg, "error")
     }
@@ -343,7 +300,7 @@ spec Test {
 		t.Fatal(err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	if len(inv.Assertions) != 1 {
 		t.Fatalf("expected 1 assertion, got %d", len(inv.Assertions))
 	}
@@ -369,12 +326,9 @@ spec Test {
 
 func TestParseContainsExpr_MissingComma(t *testing.T) {
 	_, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { msg: string }
-      output { ok: bool }
-    }
+scope test {
+  contract BadContains -> bool {
+    msg: string
     invariant bad {
       contains(msg "error")
     }
@@ -388,12 +342,9 @@ spec Test {
 
 func TestParseArrayLiteral_Unterminated(t *testing.T) {
 	_, err := Parse(`
-spec Test {
-  scope test {
-    contract {
-      input { items: []int }
-      output { ok: bool }
-    }
+scope test {
+  contract UnterminatedArray -> bool {
+    items: []int
     scenario smoke {
       given { items: [1, 2 }
       then { ok == true }

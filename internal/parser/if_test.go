@@ -9,18 +9,19 @@ import (
 func TestParseIfExpr_Simple(t *testing.T) {
 	t.Parallel()
 
-	spec, err := parser.Parse(`spec T {
-		scope s {
-			invariant i {
-				if x > 0 then x else 0
-			}
-		}
-	}`)
+	spec, err := parser.Parse(`
+scope s {
+  contract C -> int {
+    invariant i {
+      if x > 0 then x else 0
+    }
+  }
+}`)
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	if len(inv.Assertions) != 1 {
 		t.Fatalf("expected 1 assertion, got %d", len(inv.Assertions))
 	}
@@ -61,18 +62,19 @@ func TestParseIfExpr_Simple(t *testing.T) {
 func TestParseIfExpr_Nested(t *testing.T) {
 	t.Parallel()
 
-	spec, err := parser.Parse(`spec T {
-		scope s {
-			invariant i {
-				if a then (if b then x else y) else z
-			}
-		}
-	}`)
+	spec, err := parser.Parse(`
+scope s {
+  contract C -> int {
+    invariant i {
+      if a then (if b then x else y) else z
+    }
+  }
+}`)
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	ifExpr, ok := inv.Assertions[0].Expr.(parser.IfExpr)
 	if !ok {
 		t.Fatalf("expected IfExpr, got %T", inv.Assertions[0].Expr)
@@ -116,18 +118,19 @@ func TestParseIfExpr_WithOperators(t *testing.T) {
 	t.Parallel()
 
 	// if/then/else with boolean operators in condition and arithmetic in branches
-	spec, err := parser.Parse(`spec T {
-		scope s {
-			invariant i {
-				if error == null then output.balance - input.amount else input.balance
-			}
-		}
-	}`)
+	spec, err := parser.Parse(`
+scope s {
+  contract C -> int {
+    invariant i {
+      if error == null then output.balance - input.amount else input.balance
+    }
+  }
+}`)
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	ifExpr, ok := inv.Assertions[0].Expr.(parser.IfExpr)
 	if !ok {
 		t.Fatalf("expected IfExpr, got %T", inv.Assertions[0].Expr)
@@ -155,13 +158,14 @@ func TestParseIfExpr_WithOperators(t *testing.T) {
 func TestParseIfExpr_MissingElse(t *testing.T) {
 	t.Parallel()
 
-	_, err := parser.Parse(`spec T {
-		scope s {
-			invariant i {
-				if x > 0 then x
-			}
-		}
-	}`)
+	_, err := parser.Parse(`
+scope s {
+  contract C -> int {
+    invariant i {
+      if x > 0 then x
+    }
+  }
+}`)
 	if err == nil {
 		t.Fatal("expected parse error for if without else, got nil")
 	}
@@ -170,13 +174,14 @@ func TestParseIfExpr_MissingElse(t *testing.T) {
 func TestParseIfExpr_MissingThen(t *testing.T) {
 	t.Parallel()
 
-	_, err := parser.Parse(`spec T {
-		scope s {
-			invariant i {
-				if x > 0 x else 0
-			}
-		}
-	}`)
+	_, err := parser.Parse(`
+scope s {
+  contract C -> int {
+    invariant i {
+      if x > 0 x else 0
+    }
+  }
+}`)
 	if err == nil {
 		t.Fatal("expected parse error for if without then keyword, got nil")
 	}

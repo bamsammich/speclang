@@ -9,12 +9,10 @@ import (
 func TestParseAllExpr(t *testing.T) {
 	t.Parallel()
 
-	src := `spec T {
-  scope s {
-    contract {
-      input { items: []int }
-      output { ok: bool }
-    }
+	src := `
+scope s {
+  contract AllPositive -> bool {
+    items: []int
     invariant all_positive {
       all(input.items, x => x > 0)
     }
@@ -25,7 +23,7 @@ func TestParseAllExpr(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	if inv.Name != "all_positive" {
 		t.Fatalf("expected invariant name 'all_positive', got %q", inv.Name)
 	}
@@ -59,12 +57,10 @@ func TestParseAllExpr(t *testing.T) {
 func TestParseAnyExpr(t *testing.T) {
 	t.Parallel()
 
-	src := `spec T {
-  scope s {
-    contract {
-      input { items: []string }
-      output { ok: bool }
-    }
+	src := `
+scope s {
+  contract HasNonempty -> bool {
+    items: []string
     invariant has_nonempty {
       any(input.items, s => len(s) > 0)
     }
@@ -75,7 +71,7 @@ func TestParseAnyExpr(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	anyExpr, ok := inv.Assertions[0].Expr.(parser.AnyExpr)
 	if !ok {
 		t.Fatalf("expected AnyExpr, got %T", inv.Assertions[0].Expr)
@@ -88,12 +84,10 @@ func TestParseAnyExpr(t *testing.T) {
 func TestParseNestedQuantifiers(t *testing.T) {
 	t.Parallel()
 
-	src := `spec T {
-  scope s {
-    contract {
-      input { matrix: []any }
-      output { ok: bool }
-    }
+	src := `
+scope s {
+  contract NestedQuantifiers -> bool {
+    matrix: []any
     invariant all_rows_have_positive {
       all(input.matrix, row => any(row, x => x > 0))
     }
@@ -104,7 +98,7 @@ func TestParseNestedQuantifiers(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	allExpr, ok := inv.Assertions[0].Expr.(parser.AllExpr)
 	if !ok {
 		t.Fatalf("expected AllExpr, got %T", inv.Assertions[0].Expr)
@@ -126,12 +120,10 @@ func TestParseNestedQuantifiers(t *testing.T) {
 func TestParseQuantifierWithComplexPredicate(t *testing.T) {
 	t.Parallel()
 
-	src := `spec T {
-  scope s {
-    contract {
-      input { nums: []int }
-      output { ok: bool }
-    }
+	src := `
+scope s {
+  contract Bounded -> bool {
+    nums: []int
     invariant bounded {
       all(input.nums, n => n >= 0 and n <= 100)
     }
@@ -142,7 +134,7 @@ func TestParseQuantifierWithComplexPredicate(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	inv := spec.Scopes[0].Invariants[0]
+	inv := spec.Scopes[0].Contracts[0].Invariants[0]
 	allExpr, ok := inv.Assertions[0].Expr.(parser.AllExpr)
 	if !ok {
 		t.Fatalf("expected AllExpr, got %T", inv.Assertions[0].Expr)

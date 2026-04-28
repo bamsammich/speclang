@@ -11,24 +11,15 @@ import (
 func TestParseAction_BeforeAsParamName(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope session_history {
-    action session_history(limit: int?, before: string?) {
-      let result = http.get("/api/v1/sessions/history")
-      return result
-    }
+action session_history(limit: int?, before: string?) {
+  let result = http.get("/api/v1/sessions/history")
+  return result
+}
 
-    contract {
-      input {
-        limit: int?
-        before: string?
-      }
-      output {
-        sessions: string?
-        error: string?
-      }
-      action: session_history
-    }
+scope session_history {
+  contract SessionHistory -> string? {
+    limit: int?
+    before: string?
   }
 }
 `)
@@ -38,10 +29,10 @@ spec Test {
 	if len(spec.Scopes) != 1 {
 		t.Fatalf("expected 1 scope, got %d", len(spec.Scopes))
 	}
-	if len(spec.Scopes[0].Actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(spec.Scopes[0].Actions))
+	if len(spec.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(spec.Actions))
 	}
-	action := spec.Scopes[0].Actions[0]
+	action := spec.Actions[0]
 	if len(action.Params) != 2 {
 		t.Fatalf("expected 2 params, got %d", len(action.Params))
 	}
@@ -70,20 +61,14 @@ func TestParseAction_MoreKeywordsAsParamNames(t *testing.T) {
 		kw := kw
 		t.Run(kw, func(t *testing.T) {
 			t.Parallel()
-			src := `
-spec Test {
-  scope s {
-    action foo(` + kw + `: string) {
-      return ` + kw + `
-    }
-  }
-}
-`
+			src := `action foo(` + kw + `: string) {
+  return ` + kw + `
+}`
 			spec, err := Parse(src)
 			if err != nil {
 				t.Fatalf("expected parse to succeed for param name %q, got: %v", kw, err)
 			}
-			got := spec.Scopes[0].Actions[0].Params[0].Name
+			got := spec.Actions[0].Params[0].Name
 			if got != kw {
 				t.Errorf("expected param name %q, got %q", kw, got)
 			}
@@ -98,7 +83,7 @@ func TestKeywordsInNamePositions(t *testing.T) {
 
 	t.Run("model name", func(t *testing.T) {
 		t.Parallel()
-		_, err := Parse(`spec T { model before { x: int } }`)
+		_, err := Parse(`model before { x: int }`)
 		if err != nil {
 			t.Fatalf("model named 'before' should parse: %v", err)
 		}
@@ -107,9 +92,9 @@ func TestKeywordsInNamePositions(t *testing.T) {
 	t.Run("scenario name", func(t *testing.T) {
 		t.Parallel()
 		_, err := Parse(`
-spec T {
-  scope s {
-    contract { input { x: int } output { y: int } }
+scope s {
+  contract C -> int {
+    x: int
     scenario before {
       given { x: 1 }
       then { y == 1 }
@@ -125,10 +110,10 @@ spec T {
 	t.Run("invariant name", func(t *testing.T) {
 		t.Parallel()
 		_, err := Parse(`
-spec T {
-  scope s {
-    contract { input { x: int } output { y: int } action: foo }
-    action foo(x: int) { return x }
+action foo(x: int) { return x }
+scope s {
+  contract C -> int {
+    x: int
     invariant before {
       y == x
     }
@@ -143,8 +128,8 @@ spec T {
 	t.Run("object literal key", func(t *testing.T) {
 		t.Parallel()
 		_, err := Parse(`
-spec T {
-  scope s {
+scope s {
+  contract C -> bool {
     scenario smoke {
       given {
         http.post("/x", { before: "2026-01-01", after: "2026-12-31" })
@@ -171,9 +156,12 @@ func TestStructuralKeywordsRejectedAsIdentifiers(t *testing.T) {
 		keyword string
 		src     string
 	}{
-		{"scenario", `spec T { scope s { contract { input { x: int } output { y: int } } scenario smoke { given { x: 1 } then { scenario == 1 } } } }`},
-		{"contract", `spec T { scope s { scenario smoke { then { contract == 1 } } } }`},
-		{"invariant", `spec T { scope s { scenario smoke { then { invariant == 1 } } } }`},
+		// scenario in expression position inside a then block
+		{"scenario", `scope s { contract C -> int { x: int scenario smoke { given { x: 1 } then { scenario == 1 } } } }`},
+		// contract in expression position inside a then block
+		{"contract", `scope s { contract C -> int { x: int scenario smoke { given { x: 1 } then { contract == 1 } } } }`},
+		// invariant in expression position inside a then block
+		{"invariant", `scope s { contract C -> int { x: int scenario smoke { given { x: 1 } then { invariant == 1 } } } }`},
 	}
 	for _, tc := range cases {
 		tc := tc

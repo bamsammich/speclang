@@ -8,20 +8,13 @@ import (
 func TestParseBeforeBlock(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope api {
-    before {
-      http.post("/setup", {})
-      http.header("X-Test", "true")
-    }
-    contract {
-      input { x: int }
-      output { y: int }
-    }
-    scenario smoke {
-      given { x: 1 }
-      then { y == 2 }
-    }
+scope api {
+  before {
+    http.post("/setup", {})
+    http.header("X-Test", "true")
+  }
+  contract SomeContract -> Result {
+    x: int
   }
 }
 `)
@@ -40,18 +33,15 @@ spec Test {
 func TestParseBeforeBlock_DuplicateRejected(t *testing.T) {
 	t.Parallel()
 	_, err := Parse(`
-spec Test {
-  scope api {
-    before {
-      http.post("/setup", {})
-    }
-    before {
-      http.post("/setup2", {})
-    }
-    contract {
-      input { x: int }
-      output { y: int }
-    }
+scope api {
+  before {
+    http.post("/setup", {})
+  }
+  before {
+    http.post("/setup2", {})
+  }
+  contract SomeContract -> Result {
+    x: int
   }
 }
 `)
@@ -66,31 +56,24 @@ spec Test {
 func TestParseBeforeBlock_AsFieldName(t *testing.T) {
 	t.Parallel()
 	spec, err := Parse(`
-spec Test {
-  scope api {
-    contract {
-      input { x: int }
-      output { before: string }
-    }
-    scenario smoke {
-      given { x: 1 }
-      then { before == "ok" }
-    }
+scope api {
+  contract SomeContract -> Result {
+    before: string
   }
 }
 `)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := spec.Scopes[0].Contract.Output
+	fields := spec.Scopes[0].Contracts[0].Fields
 	found := false
-	for _, f := range out {
+	for _, f := range fields {
 		if f.Name == "before" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected 'before' as an output field name")
+		t.Fatal("expected 'before' as a field name")
 	}
 }
