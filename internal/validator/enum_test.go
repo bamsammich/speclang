@@ -12,26 +12,28 @@ func TestValidate_EnumValidVariant(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{
-							Name: "status",
-							Type: parser.TypeExpr{
-								Name:     "enum",
-								Variants: []string{"active", "inactive"},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{
+								Name: "status",
+								Type: parser.TypeExpr{
+									Name:     "enum",
+									Variants: []string{"active", "inactive"},
+								},
 							},
 						},
-					},
-				},
-				Scenarios: []*parser.Scenario{
-					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "status",
-									Value: parser.LiteralString{Value: "active"},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "status",
+											Value: parser.LiteralString{Value: "active"},
+										},
+									},
 								},
 							},
 						},
@@ -53,26 +55,28 @@ func TestValidate_EnumInvalidVariant(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{
-							Name: "status",
-							Type: parser.TypeExpr{
-								Name:     "enum",
-								Variants: []string{"active", "inactive"},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{
+								Name: "status",
+								Type: parser.TypeExpr{
+									Name:     "enum",
+									Variants: []string{"active", "inactive"},
+								},
 							},
 						},
-					},
-				},
-				Scenarios: []*parser.Scenario{
-					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "status",
-									Value: parser.LiteralString{Value: "deleted"},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "status",
+											Value: parser.LiteralString{Value: "deleted"},
+										},
+									},
 								},
 							},
 						},
@@ -97,26 +101,28 @@ func TestValidate_EnumWrongLiteralType(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{
-							Name: "status",
-							Type: parser.TypeExpr{
-								Name:     "enum",
-								Variants: []string{"active", "inactive"},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{
+								Name: "status",
+								Type: parser.TypeExpr{
+									Name:     "enum",
+									Variants: []string{"active", "inactive"},
+								},
 							},
 						},
-					},
-				},
-				Scenarios: []*parser.Scenario{
-					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "status",
-									Value: parser.LiteralInt{Value: 42},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "status",
+											Value: parser.LiteralInt{Value: 42},
+										},
+									},
 								},
 							},
 						},
@@ -138,12 +144,14 @@ func TestValidate_EnumInContractPasses(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{
-							Name: "status",
-							Type: parser.TypeExpr{Name: "enum", Variants: []string{"a", "b"}},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{
+								Name: "status",
+								Type: parser.TypeExpr{Name: "enum", Variants: []string{"a", "b"}},
+							},
 						},
 					},
 				},
@@ -163,25 +171,27 @@ func TestValidate_EnumNullForOptional(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{
-							Name: "role",
-							Type: parser.TypeExpr{
-								Name:     "enum",
-								Variants: []string{"admin", "user"},
-								Optional: true,
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{
+								Name: "role",
+								Type: parser.TypeExpr{
+									Name:     "enum",
+									Variants: []string{"admin", "user"},
+									Optional: true,
+								},
 							},
 						},
-					},
-				},
-				Scenarios: []*parser.Scenario{
-					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "role", Value: parser.LiteralNull{}},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{Path: "role", Value: parser.LiteralNull{}},
+									},
+								},
 							},
 						},
 					},

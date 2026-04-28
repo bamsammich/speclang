@@ -21,15 +21,25 @@ var primitives = map[string]bool{
 func Validate(s *parser.Spec, registry *spec.Registry) []error {
 	v := &validator{
 		models:   buildModelRegistry(s.Models),
+		enums:    buildEnumRegistry(s.Enums),
+		config:   s.Config,
 		registry: registry,
 	}
 
 	v.validateServiceRefs(s)
+	v.validateModels(s.Models)
 
+	// Validate top-level contracts
+	for _, c := range s.Contracts {
+		v.validateContractV4(c)
+	}
+
+	// Validate scoped contracts
 	for _, scope := range s.Scopes {
-		v.scope = scope.Name
-		v.validateContract(scope)
-		v.validateScenarios(scope)
+		for _, c := range scope.Contracts {
+			v.scope = scope.Name
+			v.validateContractV4(c)
+		}
 	}
 
 	return v.errs
@@ -37,9 +47,19 @@ func Validate(s *parser.Spec, registry *spec.Registry) []error {
 
 type validator struct {
 	models   map[string]*parser.Model
+	enums    map[string]*parser.NamedEnum
+	config   map[string]parser.Expr
 	registry *spec.Registry
 	scope    string
 	errs     []error
+}
+
+func buildEnumRegistry(enums []*parser.NamedEnum) map[string]*parser.NamedEnum {
+	reg := make(map[string]*parser.NamedEnum, len(enums))
+	for _, e := range enums {
+		reg[e.Name] = e
+	}
+	return reg
 }
 
 func buildModelRegistry(models []*parser.Model) map[string]*parser.Model {
@@ -63,113 +83,340 @@ func (v *validator) posErr(pos spec.Pos, format string, args ...any) {
 	}
 }
 
-func (v *validator) validateContract(scope *parser.Scope) {
-	if scope.Contract == nil {
-		return
-	}
-	for _, f := range scope.Contract.Input {
-		v.validateTypeExpr(f.Type, fmt.Sprintf("scope %q, contract input %q", v.scope, f.Name))
-	}
-	for _, f := range scope.Contract.Output {
-		v.validateTypeExpr(f.Type, fmt.Sprintf("scope %q, contract output %q", v.scope, f.Name))
-	}
-
-	// v3: validate contract action reference
-	if scope.Contract.Action != "" {
-		v.validateContractAction(scope)
+// validateModels validates model field When expressions.
+func (v *validator) validateModels(models []*parser.Model) {
+	for _, m := range models {
+		siblings := buildFieldMap(m.Fields)
+		for _, f := range m.Fields {
+			if f.When != nil {
+				v.validateWhenExpr(f.When, siblings, fmt.Sprintf("model %q, field %q", m.Name, f.Name))
+			}
+		}
+		v.checkCircularWhen(m)
 	}
 }
 
-// validateContractAction checks that a contract's action: field references
-// a defined action in the scope or spec.
-func (v *validator) validateContractAction(scope *parser.Scope) {
-	actionName := scope.Contract.Action
+// checkCircularWhen detects circular when dependencies among fields in a model.
+// Field A depends on Field B if A's When expression references B, and B also has
+// a When expression that references A (directly or transitively).
+func (v *validator) checkCircularWhen(m *parser.Model) {
+	// Build dependency graph: field name -> set of field names referenced in When expr
+	deps := make(map[string]map[string]bool)
+	for _, f := range m.Fields {
+		if f.When == nil {
+			continue
+		}
+		refs := collectFieldRefs(f.When)
+		deps[f.Name] = refs
+	}
 
-	// Check scope-level actions
-	for _, a := range scope.Actions {
-		if a.Name == actionName {
+	// Detect cycles via DFS
+	visited := make(map[string]bool)
+	inStack := make(map[string]bool)
+
+	var visit func(name string) bool
+	visit = func(name string) bool {
+		if inStack[name] {
+			return true // cycle
+		}
+		if visited[name] {
+			return false
+		}
+		visited[name] = true
+		inStack[name] = true
+		for dep := range deps[name] {
+			if deps[dep] != nil && visit(dep) {
+				return true
+			}
+		}
+		inStack[name] = false
+		return false
+	}
+
+	for name := range deps {
+		if visit(name) {
+			v.posErr(spec.Pos{}, "model %q: circular when dependency involving field %q", m.Name, name)
+			return // report once per model
+		}
+		// Reset for next root
+		visited = make(map[string]bool)
+		inStack = make(map[string]bool)
+	}
+}
+
+// checkCircularWhenContract detects circular when dependencies among contract input fields.
+// It mirrors checkCircularWhen for models, applied to contract.Fields.
+func (v *validator) checkCircularWhenContract(c *parser.Contract, contractCtx string) {
+	deps := make(map[string]map[string]bool)
+	for _, f := range c.Fields {
+		if f.When == nil {
+			continue
+		}
+		refs := collectFieldRefs(f.When)
+		deps[f.Name] = refs
+	}
+
+	visited := make(map[string]bool)
+	inStack := make(map[string]bool)
+
+	var visit func(name string) bool
+	visit = func(name string) bool {
+		if inStack[name] {
+			return true
+		}
+		if visited[name] {
+			return false
+		}
+		visited[name] = true
+		inStack[name] = true
+		for dep := range deps[name] {
+			if deps[dep] != nil && visit(dep) {
+				return true
+			}
+		}
+		inStack[name] = false
+		return false
+	}
+
+	for name := range deps {
+		if visit(name) {
+			v.posErr(c.Pos, "%s: circular when dependency involving field %q", contractCtx, name)
+			return // report once per contract
+		}
+		visited = make(map[string]bool)
+		inStack = make(map[string]bool)
+	}
+}
+
+// collectFieldRefs extracts bare field names (top-level segment) from an expression.
+func collectFieldRefs(expr parser.Expr) map[string]bool {
+	refs := make(map[string]bool)
+	var walk func(e parser.Expr)
+	walk = func(e parser.Expr) {
+		if e == nil {
 			return
+		}
+		switch v := e.(type) {
+		case parser.FieldRef:
+			refs[topLevelField(v.Path)] = true
+		case parser.BinaryOp:
+			walk(v.Left)
+			walk(v.Right)
+		case parser.UnaryOp:
+			walk(v.Operand)
+		case parser.LenExpr:
+			walk(v.Arg)
+		case parser.ContainsExpr:
+			walk(v.Haystack)
+			walk(v.Needle)
+		case parser.ExistsExpr:
+			walk(v.Arg)
+		case parser.HasKeyExpr:
+			walk(v.Arg)
+			walk(v.Key)
+		case parser.AllExpr:
+			walk(v.Array)
+			walk(v.Predicate)
+		case parser.AnyExpr:
+			walk(v.Array)
+			walk(v.Predicate)
+		case parser.IfExpr:
+			walk(v.Condition)
+			walk(v.Then)
+			walk(v.Else)
+		}
+	}
+	walk(expr)
+	return refs
+}
+
+// validateWhenExpr validates that a field's When expression only references sibling fields.
+func (v *validator) validateWhenExpr(expr parser.Expr, siblings map[string]*parser.Field, context string) {
+	refs := collectFieldRefs(expr)
+	for name := range refs {
+		if _, ok := siblings[name]; !ok {
+			v.posErr(exprPos(expr), "%s: when expression references unknown field %q", context, name)
+		}
+	}
+}
+
+// validateContractV4 validates a v4 contract: its fields, return type, scenarios, and invariants.
+func (v *validator) validateContractV4(c *parser.Contract) {
+	contractCtx := fmt.Sprintf("contract %q", c.Name)
+	if v.scope != "" {
+		contractCtx = fmt.Sprintf("scope %q, contract %q", v.scope, c.Name)
+	}
+
+	// Validate inheritance
+	if c.Inherits != "" {
+		inheritedModel, ok := v.models[c.Inherits]
+		if !ok {
+			v.posErr(c.Pos, "%s: inherits unknown model %q", contractCtx, c.Inherits)
+		} else {
+			// Validate constraint expressions reference inherited model fields
+			inheritedFields := buildFieldMap(inheritedModel.Fields)
+			for _, expr := range c.Constraints {
+				v.validateExprFieldRefs(expr, inheritedFields, fmt.Sprintf("%s, constrain block", contractCtx))
+			}
 		}
 	}
 
-	// Check spec-level actions (validator doesn't have direct spec ref,
-	// but action validation at spec level is handled separately)
-	// For now, scope-level is sufficient — spec-level will be caught at runtime.
-}
-
-func (v *validator) validateScenarios(scope *parser.Scope) {
-	if scope.Contract == nil {
-		return
+	// Validate input fields
+	for _, f := range c.Fields {
+		v.validateTypeExpr(f.Type, fmt.Sprintf("%s, field %q", contractCtx, f.Name))
+		if f.When != nil {
+			siblings := buildFieldMap(c.Fields)
+			v.validateWhenExpr(f.When, siblings, fmt.Sprintf("%s, field %q", contractCtx, f.Name))
+		}
 	}
-	inputFields := buildFieldMap(scope.Contract.Input)
+	// Detect circular when dependencies among contract input fields.
+	v.checkCircularWhenContract(c, contractCtx)
 
-	for _, sc := range scope.Scenarios {
+
+	// Validate return type (if named)
+	if c.ReturnType.Name != "" && c.ReturnType.Name != "any" {
+		v.validateTypeExpr(c.ReturnType, fmt.Sprintf("%s, return type", contractCtx))
+	}
+
+	// Validate constraint expressions for enum/config refs
+	for _, expr := range c.Constraints {
+		v.validateExprRefs(expr, fmt.Sprintf("%s, constrain block", contractCtx))
+	}
+
+	// Build input and return-model field maps for field-resolution validation.
+	inputFields := buildFieldMap(c.Fields)
+	var returnFields map[string]*parser.Field
+	if c.ReturnType.Name != "" && !primitives[c.ReturnType.Name] {
+		if model, ok := v.models[c.ReturnType.Name]; ok {
+			returnFields = buildFieldMap(model.Fields)
+		}
+	}
+
+	// Validate invariants
+	for _, inv := range c.Invariants {
+		invCtx := fmt.Sprintf("%s, invariant %q", contractCtx, inv.Name)
+		if inv.When != nil {
+			v.validateExprRefs(inv.When, invCtx)
+			v.validateBareOutputRefs(inv.When, inputFields, returnFields, invCtx)
+		}
+		for _, a := range inv.Assertions {
+			if a.Expr != nil {
+				v.validateExprRefs(a.Expr, invCtx)
+				v.validateBareOutputRefs(a.Expr, inputFields, returnFields, invCtx)
+			}
+		}
+	}
+
+	// Validate scenarios
+	for _, sc := range c.Scenarios {
 		v.validateGivenBlock(sc, inputFields)
-		v.validateThenBlock(sc, scope)
+		v.validateScenarioThenBlock(sc, c)
+
+		// Validate expression refs in when/then blocks
+		scCtx := fmt.Sprintf("%s, scenario %q", contractCtx, sc.Name)
+		if sc.When != nil {
+			for _, pred := range sc.When.Predicates {
+				v.validateExprRefs(pred, scCtx)
+				v.validateBareOutputRefs(pred, inputFields, returnFields, scCtx)
+			}
+		}
+		if sc.Then != nil {
+			for _, a := range sc.Then.Assertions {
+				if a.Expr != nil {
+					v.validateExprRefs(a.Expr, scCtx)
+					v.validateBareOutputRefs(a.Expr, inputFields, returnFields, scCtx)
+				}
+			}
+		}
 	}
 }
 
-func (v *validator) validateThenBlock(sc *parser.Scenario, scope *parser.Scope) {
-	if sc.Then == nil || scope.Contract == nil {
+// validateExprFieldRefs validates that FieldRef nodes in an expression reference
+// known fields from the given field map (ignoring prefixed refs like output., input., config.).
+func (v *validator) validateExprFieldRefs(expr parser.Expr, fields map[string]*parser.Field, context string) {
+	if expr == nil {
+		return
+	}
+	switch e := expr.(type) {
+	case parser.FieldRef:
+		top := topLevelField(e.Path)
+		// Skip prefixed refs and enum refs
+		if top == "output" || top == "input" || top == "config" || top == "error" {
+			return
+		}
+		if _, ok := v.enums[top]; ok {
+			return
+		}
+		if _, ok := fields[top]; !ok {
+			v.posErr(e.Pos, "%s: references unknown field %q", context, top)
+		}
+	case parser.BinaryOp:
+		v.validateExprFieldRefs(e.Left, fields, context)
+		v.validateExprFieldRefs(e.Right, fields, context)
+	case parser.UnaryOp:
+		v.validateExprFieldRefs(e.Operand, fields, context)
+	case parser.LenExpr:
+		v.validateExprFieldRefs(e.Arg, fields, context)
+	case parser.ContainsExpr:
+		v.validateExprFieldRefs(e.Haystack, fields, context)
+		v.validateExprFieldRefs(e.Needle, fields, context)
+	case parser.AllExpr:
+		v.validateExprFieldRefs(e.Array, fields, context)
+		v.validateExprFieldRefs(e.Predicate, fields, context)
+	case parser.AnyExpr:
+		v.validateExprFieldRefs(e.Array, fields, context)
+		v.validateExprFieldRefs(e.Predicate, fields, context)
+	case parser.IfExpr:
+		v.validateExprFieldRefs(e.Condition, fields, context)
+		v.validateExprFieldRefs(e.Then, fields, context)
+		v.validateExprFieldRefs(e.Else, fields, context)
+	case parser.ExistsExpr:
+		v.validateExprFieldRefs(e.Arg, fields, context)
+	case parser.HasKeyExpr:
+		v.validateExprFieldRefs(e.Arg, fields, context)
+		v.validateExprFieldRefs(e.Key, fields, context)
+	}
+}
+
+func (v *validator) validateScenarioThenBlock(sc *parser.Scenario, c *parser.Contract) {
+	if sc.Then == nil {
 		return
 	}
 
-	outputFields := buildFieldMap(scope.Contract.Output)
-
-	// Build set of plugin assertion targets (e.g., "status", "body", "header" for http).
-	pluginAssertions := v.pluginAssertionTargets(scope.Use)
+	// Build output field map from return type model (if the return type is a named model).
+	var outputFields map[string]*parser.Field
+	if c.ReturnType.Name != "" && !primitives[c.ReturnType.Name] {
+		if model, ok := v.models[c.ReturnType.Name]; ok {
+			outputFields = buildFieldMap(model.Fields)
+		}
+	}
 
 	for _, a := range sc.Then.Assertions {
-		// v3 expression assertions (Expr is set, Target is empty) — skip
-		// target-based validation since they use full expressions.
+		// Expression assertions (Expr is set, Target is empty) — validated by expression
 		if a.Expr != nil && a.Target == "" {
 			continue
 		}
-
-		// Skip plugin assertions (e.g., welcome@playwright.visible)
+		// Skip plugin assertions
 		if a.Plugin != "" {
 			continue
 		}
-		// Skip expression assertions (invariant-style, no Target)
+		// Skip expression assertions (no Target)
 		if a.Target == "" {
 			continue
 		}
-
-		// "error" is a pseudo-field for asserting on action errors, not a contract output.
-		if a.Target == "error" {
+		// Skip error pseudo-field when not declared as an output field
+		if a.Target == "error" && (outputFields == nil || outputFields["error"] == nil) {
 			continue
 		}
-
-		fieldName := topLevelField(a.Target)
-
-		// Check plugin-specific built-in targets (e.g., "status" for http).
-		if pluginAssertions[fieldName] {
-			continue
-		}
-
-		if _, ok := outputFields[fieldName]; !ok {
-			v.posErr(a.Pos, "scope %q, scenario %q: then target %q does not match any output field",
-				v.scope, sc.Name, a.Target)
+		// Validate target against return model fields (if available)
+		if outputFields != nil {
+			topField := topLevelField(a.Target)
+			if _, ok := outputFields[topField]; !ok {
+				v.posErr(spec.Pos{}, "scope %q, scenario %q: then target %q does not match any output field",
+					v.scope, sc.Name, a.Target)
+			}
 		}
 	}
-}
-
-// pluginAssertionTargets returns the set of built-in assertion target names
-// for the given plugin (from the registry). Returns nil if the plugin is
-// not found or has no assertions.
-func (v *validator) pluginAssertionTargets(pluginName string) map[string]bool {
-	if v.registry == nil || pluginName == "" {
-		return nil
-	}
-	def, ok := v.registry.Plugin(pluginName)
-	if !ok {
-		return nil
-	}
-	targets := make(map[string]bool, len(def.Assertions))
-	for name := range def.Assertions {
-		targets[name] = true
-	}
-	return targets
 }
 
 func buildFieldMap(fields []*parser.Field) map[string]*parser.Field {
@@ -232,7 +479,9 @@ func (v *validator) checkGivenCompleteness(
 		}
 	}
 	for name, f := range inputFields {
-		if !f.Type.Optional && !assigned[name] {
+		// Fields with a When condition are conditionally present — they are never
+		// required in a given block regardless of their type's optional flag.
+		if !f.Type.Optional && f.When == nil && !assigned[name] {
 			v.posErr(sc.Given.Pos, "scope %q, scenario %q: missing required field %q",
 				v.scope, sc.Name, name)
 		}
@@ -423,28 +672,52 @@ func isNonLiteral(expr parser.Expr) bool {
 	return false
 }
 
-// validateServiceRefs checks that every service() reference in target fields
-// refers to a declared service or that a compose file is set (compose services
-// are external and not declared inline).
+// validateServiceRefs validates service declarations and service() references.
+// For v4: checks compose/build exclusion and validates service() refs in adapter configs.
+// For v2 compat: also checks spec.Target fields.
 func (v *validator) validateServiceRefs(spec *parser.Spec) {
+	// Build set of declared v4 service names; validate compose/build exclusion.
+	declared := make(map[string]bool, len(spec.Services))
+	hasCompose := false
+	for _, svc := range spec.Services {
+		declared[svc.Name] = true
+		if svc.Compose != "" && (svc.Build != "" || svc.Image != "") {
+			v.errorf("service %q: compose is mutually exclusive with build/image", svc.Name)
+		}
+		if svc.Compose != "" {
+			hasCompose = true
+		}
+	}
+
+	// Validate service() refs in v4 adapter config values.
+	for adapterName, fields := range spec.AdapterConfigs {
+		for fieldName, expr := range fields {
+			ref, ok := expr.(parser.ServiceRef)
+			if !ok {
+				continue
+			}
+			if hasCompose || declared[ref.Name] {
+				continue
+			}
+			v.errorf("adapter %q field %q: service(%s) references undeclared service", adapterName, fieldName, ref.Name)
+		}
+	}
+
+	// v2 compat: validate service() refs in spec.Target fields.
 	if spec.Target == nil {
 		return
 	}
-
-	// Build set of declared service names.
-	declared := make(map[string]bool, len(spec.Target.Services))
+	declaredTarget := make(map[string]bool, len(spec.Target.Services))
 	for _, svc := range spec.Target.Services {
-		declared[svc.Name] = true
+		declaredTarget[svc.Name] = true
 	}
-
-	hasCompose := spec.Target.Compose != ""
-
+	hasComposeTarget := spec.Target.Compose != ""
 	for key, expr := range spec.Target.Fields {
 		ref, ok := expr.(parser.ServiceRef)
 		if !ok {
 			continue
 		}
-		if hasCompose || declared[ref.Name] {
+		if hasComposeTarget || declaredTarget[ref.Name] {
 			continue
 		}
 		v.posErr(ref.Pos, "target field %q: service(%s) references undeclared service", key, ref.Name)
@@ -616,6 +889,168 @@ func extractScenario(msg string) (scenario, rest string, ok bool) {
 	return scenario, rest, true
 }
 
+// validateEnumRef checks that a FieldRef like "EnumName.variant" references a valid
+// named enum and a valid variant within that enum.
+func (v *validator) validateEnumRef(ref parser.FieldRef, context string) {
+	dotIdx := strings.Index(ref.Path, ".")
+	if dotIdx < 0 {
+		return
+	}
+	enumName := ref.Path[:dotIdx]
+	ne, ok := v.enums[enumName]
+	if !ok {
+		return // not an enum ref
+	}
+	variant := ref.Path[dotIdx+1:]
+	for _, ev := range ne.Variants {
+		if ev == variant {
+			return
+		}
+	}
+	v.posErr(ref.Pos, "%s: %q is not a variant of enum %s (valid: %v)", context, variant, enumName, ne.Variants)
+}
+
+// validateConfigRef checks that a FieldRef like "config.key" references a known config key.
+func (v *validator) validateConfigRef(ref parser.FieldRef, context string) {
+	dotIdx := strings.Index(ref.Path, ".")
+	if dotIdx < 0 {
+		return
+	}
+	prefix := ref.Path[:dotIdx]
+	if prefix != "config" {
+		return
+	}
+	key := ref.Path[dotIdx+1:]
+	if v.config == nil {
+		v.posErr(ref.Pos, "%s: config.%s references config but no config block is declared", context, key)
+		return
+	}
+	if _, ok := v.config[key]; !ok {
+		v.posErr(ref.Pos, "%s: config.%s references unknown config key %q", context, key, key)
+	}
+}
+
+// validateBareOutputRefs walks expr and emits an error for any bare FieldRef
+// whose first path segment matches a return-model field but NOT an input field.
+//
+// v4 field resolution rule (plan §3): bare names resolve to contract input fields;
+// return-model fields must be prefixed with "output.".  When a name exists in both,
+// input wins silently (no error) — this is documented in the error message path.
+func (v *validator) validateBareOutputRefs(
+	expr parser.Expr,
+	inputFields map[string]*parser.Field,
+	returnFields map[string]*parser.Field,
+	context string,
+) {
+	if expr == nil || returnFields == nil {
+		return
+	}
+	var walk func(e parser.Expr)
+	walk = func(e parser.Expr) {
+		if e == nil {
+			return
+		}
+		switch node := e.(type) {
+		case parser.FieldRef:
+			top := topLevelField(node.Path)
+			// Skip already-prefixed refs and reserved names.
+			if top == "output" || top == "input" || top == "config" || top == "error" {
+				return
+			}
+			// Skip enum names.
+			if _, isEnum := v.enums[top]; isEnum {
+				return
+			}
+			// Error only when the name is exclusively in the return model.
+			_, inInput := inputFields[top]
+			_, inReturn := returnFields[top]
+			if inReturn && !inInput {
+				v.posErr(node.Pos, "%s: bare reference %q refers to an output field; use \"output.%s\"",
+					context, top, top)
+			}
+		case parser.BinaryOp:
+			walk(node.Left)
+			walk(node.Right)
+		case parser.UnaryOp:
+			walk(node.Operand)
+		case parser.LenExpr:
+			walk(node.Arg)
+		case parser.ContainsExpr:
+			walk(node.Haystack)
+			walk(node.Needle)
+		case parser.AllExpr:
+			walk(node.Array)
+			walk(node.Predicate)
+		case parser.AnyExpr:
+			walk(node.Array)
+			walk(node.Predicate)
+		case parser.IfExpr:
+			walk(node.Condition)
+			walk(node.Then)
+			walk(node.Else)
+		case parser.ExistsExpr:
+			walk(node.Arg)
+		case parser.HasKeyExpr:
+			walk(node.Arg)
+			walk(node.Key)
+		case parser.ArrayLiteral:
+			for _, elem := range node.Elements {
+				walk(elem)
+			}
+		case parser.ObjectLiteral:
+			for _, f := range node.Fields {
+				walk(f.Value)
+			}
+		}
+	}
+	walk(expr)
+}
+
+// validateExprRefs validates enum and config references in an expression tree.
+func (v *validator) validateExprRefs(expr parser.Expr, context string) {
+	if expr == nil {
+		return
+	}
+	switch e := expr.(type) {
+	case parser.FieldRef:
+		v.validateEnumRef(e, context)
+		v.validateConfigRef(e, context)
+	case parser.BinaryOp:
+		v.validateExprRefs(e.Left, context)
+		v.validateExprRefs(e.Right, context)
+	case parser.UnaryOp:
+		v.validateExprRefs(e.Operand, context)
+	case parser.LenExpr:
+		v.validateExprRefs(e.Arg, context)
+	case parser.ContainsExpr:
+		v.validateExprRefs(e.Haystack, context)
+		v.validateExprRefs(e.Needle, context)
+	case parser.AllExpr:
+		v.validateExprRefs(e.Array, context)
+		v.validateExprRefs(e.Predicate, context)
+	case parser.AnyExpr:
+		v.validateExprRefs(e.Array, context)
+		v.validateExprRefs(e.Predicate, context)
+	case parser.IfExpr:
+		v.validateExprRefs(e.Condition, context)
+		v.validateExprRefs(e.Then, context)
+		v.validateExprRefs(e.Else, context)
+	case parser.ExistsExpr:
+		v.validateExprRefs(e.Arg, context)
+	case parser.HasKeyExpr:
+		v.validateExprRefs(e.Arg, context)
+		v.validateExprRefs(e.Key, context)
+	case parser.ArrayLiteral:
+		for _, elem := range e.Elements {
+			v.validateExprRefs(elem, context)
+		}
+	case parser.ObjectLiteral:
+		for _, f := range e.Fields {
+			v.validateExprRefs(f.Value, context)
+		}
+	}
+}
+
 func (v *validator) validateTypeExpr(te parser.TypeExpr, context string) {
 	switch {
 	case primitives[te.Name]:
@@ -630,7 +1065,9 @@ func (v *validator) validateTypeExpr(te parser.TypeExpr, context string) {
 		}
 	default:
 		if _, ok := v.models[te.Name]; !ok {
-			v.posErr(te.Pos, "%s: unknown type %q", context, te.Name)
+			if _, ok := v.enums[te.Name]; !ok {
+				v.posErr(te.Pos, "%s: unknown type %q", context, te.Name)
+			}
 		}
 	}
 }

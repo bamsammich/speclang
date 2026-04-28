@@ -43,10 +43,12 @@ func TestValidate_UnknownTypeInContract(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "item", Type: parser.TypeExpr{Name: "Widget"}},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "item", Type: parser.TypeExpr{Name: "Widget"}},
+						},
 					},
 				},
 			},
@@ -79,10 +81,12 @@ func TestValidate_KnownModelPasses(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "item", Type: parser.TypeExpr{Name: "Widget"}},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "item", Type: parser.TypeExpr{Name: "Widget"}},
+						},
 					},
 				},
 			},
@@ -101,13 +105,15 @@ func TestValidate_UnknownArrayElementType(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "items", Type: parser.TypeExpr{
-							Name:     "array",
-							ElemType: &parser.TypeExpr{Name: "Widget"},
-						}},
+				Contracts: []*parser.Contract{
+					{
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "items", Type: parser.TypeExpr{
+								Name:     "array",
+								ElemType: &parser.TypeExpr{Name: "Widget"},
+							}},
+						},
 					},
 				},
 			},
@@ -126,20 +132,22 @@ func TestValidate_GivenLiteralTypeMismatch(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "count", Type: parser.TypeExpr{Name: "int"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "count",
-									Value: parser.LiteralString{Value: "not_an_int"},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "count", Type: parser.TypeExpr{Name: "int"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "count",
+											Value: parser.LiteralString{Value: "not_an_int"},
+										},
+									},
 								},
 							},
 						},
@@ -161,30 +169,32 @@ func TestValidate_GivenLiteralCorrectType(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "count", Type: parser.TypeExpr{Name: "int"}},
-						{Name: "name", Type: parser.TypeExpr{Name: "string"}},
-						{Name: "active", Type: parser.TypeExpr{Name: "bool"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "count",
-									Value: parser.LiteralInt{Value: 42},
-								},
-								&parser.Assignment{
-									Path:  "name",
-									Value: parser.LiteralString{Value: "foo"},
-								},
-								&parser.Assignment{
-									Path:  "active",
-									Value: parser.LiteralBool{Value: true},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "count", Type: parser.TypeExpr{Name: "int"}},
+							{Name: "name", Type: parser.TypeExpr{Name: "string"}},
+							{Name: "active", Type: parser.TypeExpr{Name: "bool"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "count",
+											Value: parser.LiteralInt{Value: 42},
+										},
+										&parser.Assignment{
+											Path:  "name",
+											Value: parser.LiteralString{Value: "foo"},
+										},
+										&parser.Assignment{
+											Path:  "active",
+											Value: parser.LiteralBool{Value: true},
+										},
+									},
 								},
 							},
 						},
@@ -206,28 +216,30 @@ func TestValidate_NullOnlyForOptional(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "required_field", Type: parser.TypeExpr{Name: "string"}},
-						{
-							Name: "optional_field",
-							Type: parser.TypeExpr{Name: "string", Optional: true},
-						},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "required_field",
-									Value: parser.LiteralNull{},
-								},
-								&parser.Assignment{
-									Path:  "optional_field",
-									Value: parser.LiteralNull{},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "required_field", Type: parser.TypeExpr{Name: "string"}},
+							{
+								Name: "optional_field",
+								Type: parser.TypeExpr{Name: "string", Optional: true},
+							},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "required_field",
+											Value: parser.LiteralNull{},
+										},
+										&parser.Assignment{
+											Path:  "optional_field",
+											Value: parser.LiteralNull{},
+										},
+									},
 								},
 							},
 						},
@@ -249,27 +261,29 @@ func TestValidate_ArrayElementTypeMismatch(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "tags", Type: parser.TypeExpr{
-							Name:     "array",
-							ElemType: &parser.TypeExpr{Name: "int"},
-						}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "tags",
-									Value: parser.ArrayLiteral{
-										Elements: []parser.Expr{
-											parser.LiteralInt{Value: 1},
-											parser.LiteralString{Value: "oops"},
-											parser.LiteralInt{Value: 3},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "tags", Type: parser.TypeExpr{
+								Name:     "array",
+								ElemType: &parser.TypeExpr{Name: "int"},
+							}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "tags",
+											Value: parser.ArrayLiteral{
+												Elements: []parser.Expr{
+													parser.LiteralInt{Value: 1},
+													parser.LiteralString{Value: "oops"},
+													parser.LiteralInt{Value: 3},
+												},
+											},
 										},
 									},
 								},
@@ -299,44 +313,46 @@ func TestValidate_ArrayOfObjectsFieldCheck(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "items", Type: parser.TypeExpr{
-							Name:     "array",
-							ElemType: &parser.TypeExpr{Name: "Item"},
-						}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "items",
-									Value: parser.ArrayLiteral{
-										Elements: []parser.Expr{
-											parser.ObjectLiteral{Fields: []*parser.ObjField{
-												{
-													Key:   "name",
-													Value: parser.LiteralString{Value: "widget"},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "items", Type: parser.TypeExpr{
+								Name:     "array",
+								ElemType: &parser.TypeExpr{Name: "Item"},
+							}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "items",
+											Value: parser.ArrayLiteral{
+												Elements: []parser.Expr{
+													parser.ObjectLiteral{Fields: []*parser.ObjField{
+														{
+															Key:   "name",
+															Value: parser.LiteralString{Value: "widget"},
+														},
+														{
+															Key:   "price",
+															Value: parser.LiteralInt{Value: 100},
+														},
+													}},
+													parser.ObjectLiteral{Fields: []*parser.ObjField{
+														{
+															Key:   "name",
+															Value: parser.LiteralString{Value: "gadget"},
+														},
+														{
+															Key:   "colour",
+															Value: parser.LiteralString{Value: "red"},
+														},
+													}},
 												},
-												{
-													Key:   "price",
-													Value: parser.LiteralInt{Value: 100},
-												},
-											}},
-											parser.ObjectLiteral{Fields: []*parser.ObjField{
-												{
-													Key:   "name",
-													Value: parser.LiteralString{Value: "gadget"},
-												},
-												{
-													Key:   "colour",
-													Value: parser.LiteralString{Value: "red"},
-												},
-											}},
+											},
 										},
 									},
 								},
@@ -369,33 +385,35 @@ func TestValidate_NestedArrays(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "matrix", Type: parser.TypeExpr{
-							Name: "array",
-							ElemType: &parser.TypeExpr{
-								Name:     "array",
-								ElemType: &parser.TypeExpr{Name: "int"},
-							},
-						}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "matrix",
-									Value: parser.ArrayLiteral{
-										Elements: []parser.Expr{
-											parser.ArrayLiteral{Elements: []parser.Expr{
-												parser.LiteralInt{Value: 1},
-											}},
-											parser.ArrayLiteral{Elements: []parser.Expr{
-												parser.LiteralString{Value: "bad"},
-											}},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "matrix", Type: parser.TypeExpr{
+								Name: "array",
+								ElemType: &parser.TypeExpr{
+									Name:     "array",
+									ElemType: &parser.TypeExpr{Name: "int"},
+								},
+							}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "matrix",
+											Value: parser.ArrayLiteral{
+												Elements: []parser.Expr{
+													parser.ArrayLiteral{Elements: []parser.Expr{
+														parser.LiteralInt{Value: 1},
+													}},
+													parser.ArrayLiteral{Elements: []parser.Expr{
+														parser.LiteralString{Value: "bad"},
+													}},
+												},
+											},
 										},
 									},
 								},
@@ -425,27 +443,29 @@ func TestValidate_ObjectLiteralUnknownField(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "from",
-									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
-										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
-										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
-										{
-											Key:   "email",
-											Value: parser.LiteralString{Value: "alice@test.com"},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "from",
+											Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+												{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+												{
+													Key:   "email",
+													Value: parser.LiteralString{Value: "alice@test.com"},
+												},
+											}},
 										},
-									}},
+									},
 								},
 							},
 						},
@@ -476,26 +496,28 @@ func TestValidate_ObjectLiteralFieldTypeMismatch(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "from",
-									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
-										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
-										{
-											Key:   "balance",
-											Value: parser.LiteralString{Value: "not_an_int"},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "from",
+											Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+												{
+													Key:   "balance",
+													Value: parser.LiteralString{Value: "not_an_int"},
+												},
+											}},
 										},
-									}},
+									},
 								},
 							},
 						},
@@ -523,23 +545,25 @@ func TestValidate_ObjectLiteralValidPasses(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "from",
-									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
-										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
-										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
-									}},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "from",
+											Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+												{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+											}},
+										},
+									},
 								},
 							},
 						},
@@ -561,25 +585,27 @@ func TestValidate_GivenMissingRequiredField(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "string"}},
-						{Name: "to", Type: parser.TypeExpr{Name: "string"}},
-						{Name: "note", Type: parser.TypeExpr{Name: "string", Optional: true}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "from",
-									Value: parser.LiteralString{Value: "alice"},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "from", Type: parser.TypeExpr{Name: "string"}},
+							{Name: "to", Type: parser.TypeExpr{Name: "string"}},
+							{Name: "note", Type: parser.TypeExpr{Name: "string", Optional: true}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "from",
+											Value: parser.LiteralString{Value: "alice"},
+										},
+										// "to" is missing and required
+										// "note" is missing but optional — should not error
+									},
 								},
-								// "to" is missing and required
-								// "note" is missing but optional — should not error
 							},
 						},
 					},
@@ -603,18 +629,20 @@ func TestValidate_GivenWithCallsSkipsCompleteness(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "playwright",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "username", Type: parser.TypeExpr{Name: "string"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "ui_flow",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Call{Namespace: "playwright", Method: "fill"},
+						Name: "ui_check",
+						Fields: []*parser.Field{
+							{Name: "username", Type: parser.TypeExpr{Name: "string"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "ui_flow",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Call{Namespace: "playwright", Method: "fill"},
+									},
+								},
 							},
 						},
 					},
@@ -635,21 +663,23 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "generative",
-						When: &parser.Block{
-							Predicates: []parser.Expr{
-								parser.BinaryOp{
-									Left:  parser.FieldRef{Path: "amount"},
-									Op:    ">",
-									Right: parser.LiteralInt{Value: 0},
+						Name: "check",
+						Fields: []*parser.Field{
+							{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+						},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "generative",
+								When: &parser.Block{
+									Predicates: []parser.Expr{
+										parser.BinaryOp{
+											Left:  parser.FieldRef{Path: "amount"},
+											Op:    ">",
+											Right: parser.LiteralInt{Value: 0},
+										},
+									},
 								},
 							},
 						},
@@ -665,34 +695,42 @@ func TestValidate_WhenScenarioSkipsCompleteness(t *testing.T) {
 	}
 }
 
+// TestValidate_ThenUnknownField verifies that a then-block assertion target that
+// does not match any field in the contract's return model produces a validation error.
 func TestValidate_ThenUnknownField(t *testing.T) {
 	t.Parallel()
+	// ReturnModel has "result" and "error" fields; "typo_field" is not in it.
 	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "ReturnModel", Fields: []*parser.Field{
+				{Name: "result", Type: parser.TypeExpr{Name: "int"}},
+				{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+			}},
+		},
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "x", Type: parser.TypeExpr{Name: "int"}},
-					},
-					Output: []*parser.Field{
-						{Name: "result", Type: parser.TypeExpr{Name: "int"}},
-						{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
-							},
+						Name:       "check",
+						ReturnType: parser.TypeExpr{Name: "ReturnModel"},
+						Fields: []*parser.Field{
+							{Name: "x", Type: parser.TypeExpr{Name: "int"}},
 						},
-						Then: &parser.Block{
-							Assertions: []*parser.Assertion{
-								{Target: "result", Expected: parser.LiteralInt{Value: 42}},
-								{Target: "typo_field", Expected: parser.LiteralInt{Value: 0}},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+									},
+								},
+								Then: &parser.Block{
+									Assertions: []*parser.Assertion{
+										{Target: "result", Expected: parser.LiteralInt{Value: 42}},
+										{Target: "typo_field", Expected: parser.LiteralInt{Value: 0}},
+									},
+								},
 							},
 						},
 					},
@@ -710,6 +748,8 @@ func TestValidate_ThenUnknownField(t *testing.T) {
 	}
 }
 
+// TestValidate_ThenDotPathValid verifies that dot-path assertion targets (e.g., "from.balance")
+// are accepted when the top-level field exists in the return model.
 func TestValidate_ThenDotPathValid(t *testing.T) {
 	t.Parallel()
 	spec := &parser.Spec{
@@ -718,38 +758,41 @@ func TestValidate_ThenDotPathValid(t *testing.T) {
 				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
 				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
 			}},
+			{Name: "TransferResult", Fields: []*parser.Field{
+				{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+				{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+			}},
 		},
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
-					},
-					Output: []*parser.Field{
-						{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
-						{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "smoke",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path: "from",
-									Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
-										{Key: "id", Value: parser.LiteralString{Value: "alice"}},
-										{Key: "balance", Value: parser.LiteralInt{Value: 100}},
-									}},
-								},
-							},
+						Name:       "check",
+						ReturnType: parser.TypeExpr{Name: "TransferResult"},
+						Fields: []*parser.Field{
+							{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
 						},
-						Then: &parser.Block{
-							Assertions: []*parser.Assertion{
-								{Target: "from.balance", Expected: parser.LiteralInt{Value: 70}},
-								{Target: "error", Expected: parser.LiteralNull{}},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "smoke",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path: "from",
+											Value: parser.ObjectLiteral{Fields: []*parser.ObjField{
+												{Key: "id", Value: parser.LiteralString{Value: "alice"}},
+												{Key: "balance", Value: parser.LiteralInt{Value: 100}},
+											}},
+										},
+									},
+								},
+								Then: &parser.Block{
+									Assertions: []*parser.Assertion{
+										{Target: "from.balance", Expected: parser.LiteralInt{Value: 70}},
+										{Target: "error", Expected: parser.LiteralNull{}},
+									},
+								},
 							},
 						},
 					},
@@ -770,27 +813,29 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "playwright",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "x", Type: parser.TypeExpr{Name: "int"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
 						Name: "ui",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
-							},
+						Fields: []*parser.Field{
+							{Name: "x", Type: parser.TypeExpr{Name: "int"}},
 						},
-						Then: &parser.Block{
-							Assertions: []*parser.Assertion{
-								{
-									Target:   "welcome",
-									Plugin:   "playwright",
-									Property: "visible",
-									Expected: parser.LiteralBool{Value: true},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "ui",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+									},
+								},
+								Then: &parser.Block{
+									Assertions: []*parser.Assertion{
+										{
+											Target:   "welcome",
+											Plugin:   "playwright",
+											Property: "visible",
+											Expected: parser.LiteralBool{Value: true},
+										},
+									},
 								},
 							},
 						},
@@ -808,35 +853,41 @@ func TestValidate_ThenPluginAssertionSkipped(t *testing.T) {
 
 func TestValidate_MultipleErrors(t *testing.T) {
 	t.Parallel()
+	// ReturnModel has "result"; "typo" is not in it.
 	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "ResultModel", Fields: []*parser.Field{
+				{Name: "result", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
 		Scopes: []*parser.Scope{
 			{
 				Name: "test",
-				Use:  "http",
-				Contract: &parser.Contract{
-					Input: []*parser.Field{
-						{Name: "count", Type: parser.TypeExpr{Name: "int"}},
-						{Name: "name", Type: parser.TypeExpr{Name: "string"}},
-					},
-					Output: []*parser.Field{
-						{Name: "result", Type: parser.TypeExpr{Name: "int"}},
-					},
-				},
-				Scenarios: []*parser.Scenario{
+				Contracts: []*parser.Contract{
 					{
-						Name: "bad",
-						Given: &parser.Block{
-							Steps: []parser.GivenStep{
-								&parser.Assignment{
-									Path:  "count",
-									Value: parser.LiteralString{Value: "wrong"},
-								},
-								// name is missing
-							},
+						Name:       "check",
+						ReturnType: parser.TypeExpr{Name: "ResultModel"},
+						Fields: []*parser.Field{
+							{Name: "count", Type: parser.TypeExpr{Name: "int"}},
+							{Name: "name", Type: parser.TypeExpr{Name: "string"}},
 						},
-						Then: &parser.Block{
-							Assertions: []*parser.Assertion{
-								{Target: "typo", Expected: parser.LiteralInt{Value: 0}},
+						Scenarios: []*parser.Scenario{
+							{
+								Name: "bad",
+								Given: &parser.Block{
+									Steps: []parser.GivenStep{
+										&parser.Assignment{
+											Path:  "count",
+											Value: parser.LiteralString{Value: "wrong"},
+										},
+										// name is missing
+									},
+								},
+								Then: &parser.Block{
+									Assertions: []*parser.Assertion{
+										{Target: "typo", Expected: parser.LiteralInt{Value: 0}},
+									},
+								},
 							},
 						},
 					},
@@ -942,34 +993,651 @@ func TestValidate_ServiceRefWithCompose(t *testing.T) {
 	}
 }
 
+// --- Named enum tests ---
+
+func TestValidate_NamedEnumValidVariant(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Enums: []*parser.NamedEnum{
+			{Name: "Role", Variants: []string{"admin", "user", "guest"}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "role", Type: parser.TypeExpr{Name: "string"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "valid_role",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "output.role"},
+								Op:    "==",
+								Right: parser.FieldRef{Path: "Role.admin"},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid enum variant, got: %v", errs)
+	}
+}
+
+func TestValidate_NamedEnumInvalidVariant(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Enums: []*parser.NamedEnum{
+			{Name: "Role", Variants: []string{"admin", "user", "guest"}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "role", Type: parser.TypeExpr{Name: "string"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "bad_role",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "output.role"},
+								Op:    "==",
+								Right: parser.FieldRef{Path: "Role.superadmin"},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for invalid enum variant, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "superadmin") || !contains(errs[0].Error(), "Role") {
+		t.Errorf("expected error about invalid variant 'superadmin' of enum 'Role', got: %v", errs[0])
+	}
+}
+
+func TestValidate_NamedEnumAsType(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Enums: []*parser.NamedEnum{
+			{Name: "Status", Variants: []string{"active", "inactive"}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "status", Type: parser.TypeExpr{Name: "Status"}},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for named enum as type, got: %v", errs)
+	}
+}
+
+// --- Config ref tests ---
+
+func TestValidate_ConfigRefValid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Config: map[string]parser.Expr{
+			"base_url": parser.LiteralString{Value: "http://localhost:8080"},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "uses_config",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "config.base_url"},
+								Op:    "!=",
+								Right: parser.LiteralString{Value: ""},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid config ref, got: %v", errs)
+	}
+}
+
+func TestValidate_ConfigRefUnknownKey(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Config: map[string]parser.Expr{
+			"base_url": parser.LiteralString{Value: "http://localhost"},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "bad_config",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.FieldRef{Path: "config.missing_key"}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown config key, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "missing_key") {
+		t.Errorf("expected error about 'missing_key', got: %v", errs[0])
+	}
+}
+
+func TestValidate_ConfigRefNoConfigBlock(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "bad",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.FieldRef{Path: "config.anything"}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for config ref with no config block, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "config") {
+		t.Errorf("expected error about config, got: %v", errs[0])
+	}
+}
+
+// --- Contract inheritance tests ---
+
+func TestValidate_ContractInheritsValid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "InputModel", Fields: []*parser.Field{
+				{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+				{Name: "name", Type: parser.TypeExpr{Name: "string"}},
+			}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name:     "check",
+				Inherits: "InputModel",
+				Constraints: []parser.Expr{
+					parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "amount"},
+						Op:    ">",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid inheritance, got: %v", errs)
+	}
+}
+
+func TestValidate_ContractInheritsUnknownModel(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name:     "check",
+				Inherits: "NonExistent",
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown inherited model, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "NonExistent") {
+		t.Errorf("expected error about 'NonExistent', got: %v", errs[0])
+	}
+}
+
+func TestValidate_ContractConstraintUnknownField(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "InputModel", Fields: []*parser.Field{
+				{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name:     "check",
+				Inherits: "InputModel",
+				Constraints: []parser.Expr{
+					parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "nonexistent"},
+						Op:    ">",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown field in constraint, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "nonexistent") {
+		t.Errorf("expected error about 'nonexistent', got: %v", errs[0])
+	}
+}
+
+// --- Field When tests ---
+
+func TestValidate_FieldWhenValid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Order", Fields: []*parser.Field{
+				{Name: "status", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "tracking_id", Type: parser.TypeExpr{Name: "string", Optional: true},
+					When: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "status"},
+						Op:    "==",
+						Right: parser.LiteralString{Value: "shipped"},
+					}},
+			}},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid when expression, got: %v", errs)
+	}
+}
+
+func TestValidate_FieldWhenUnknownSibling(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Order", Fields: []*parser.Field{
+				{Name: "status", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "tracking_id", Type: parser.TypeExpr{Name: "string", Optional: true},
+					When: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "nonexistent_field"},
+						Op:    "==",
+						Right: parser.LiteralString{Value: "shipped"},
+					}},
+			}},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for unknown sibling in when, got %d: %v", len(errs), errs)
+	}
+	if !contains(errs[0].Error(), "nonexistent_field") {
+		t.Errorf("expected error about 'nonexistent_field', got: %v", errs[0])
+	}
+}
+
+func TestValidate_FieldWhenCircularDependency(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Circular", Fields: []*parser.Field{
+				{Name: "a", Type: parser.TypeExpr{Name: "string", Optional: true},
+					When: parser.FieldRef{Path: "b"}},
+				{Name: "b", Type: parser.TypeExpr{Name: "string", Optional: true},
+					When: parser.FieldRef{Path: "a"}},
+			}},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) == 0 {
+		t.Fatal("expected error for circular when dependency")
+	}
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "circular") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about circular dependency, got: %v", errs)
+	}
+}
+
+// TestValidate_ContractFieldWhenCircularDependency verifies that circular when
+// dependencies among contract input fields (not model fields) are detected.
+// e.g., a: int when b > 0 and b: int when a > 0 creates an unresolvable cycle.
+func TestValidate_ContractFieldWhenCircularDependency(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name: "circular_contract",
+				Fields: []*parser.Field{
+					{
+						Name: "a",
+						Type: parser.TypeExpr{Name: "int", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "b"},
+							Op:    ">",
+							Right: parser.LiteralInt{Value: 0},
+						},
+					},
+					{
+						Name: "b",
+						Type: parser.TypeExpr{Name: "int", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "a"},
+							Op:    ">",
+							Right: parser.LiteralInt{Value: 0},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) == 0 {
+		t.Fatal("expected error for circular when dependency in contract fields")
+	}
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "circular") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about circular dependency involving field names, got: %v", errs)
+	}
+	// Error message must name at least one of the involved fields.
+	foundFieldName := false
+	for _, e := range errs {
+		if contains(e.Error(), "a") || contains(e.Error(), "b") {
+			foundFieldName = true
+		}
+	}
+	if !foundFieldName {
+		t.Errorf("expected error to name involved field(s), got: %v", errs)
+	}
+}
+
+// TestValidate_ContractFieldWhenNonCircular verifies that a valid when expression
+// (referencing only a non-when-gated peer field) does not produce an error.
+func TestValidate_ContractFieldWhenNonCircular(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name: "valid_contract",
+				Fields: []*parser.Field{
+					{
+						Name: "status",
+						Type: parser.TypeExpr{Name: "string"},
+						// No When — this is the base field.
+					},
+					{
+						Name: "tracking",
+						Type: parser.TypeExpr{Name: "string", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "status"},
+							Op:    "==",
+							Right: parser.LiteralString{Value: "shipped"},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	for _, e := range errs {
+		if contains(e.Error(), "circular") {
+			t.Errorf("unexpected circular when error for valid dependency chain: %v", e)
+		}
+	}
+}
+
+// TestValidate_ContractFieldWhenLongerCycle verifies that a 3-field circular when
+// chain (a→b, b→c, c→a) is detected and names at least two of the involved fields.
+func TestValidate_ContractFieldWhenLongerCycle(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name: "three_cycle",
+				Fields: []*parser.Field{
+					{
+						Name: "a",
+						Type: parser.TypeExpr{Name: "int", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "b"},
+							Op:    ">",
+							Right: parser.LiteralInt{Value: 0},
+						},
+					},
+					{
+						Name: "b",
+						Type: parser.TypeExpr{Name: "int", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "c"},
+							Op:    ">",
+							Right: parser.LiteralInt{Value: 0},
+						},
+					},
+					{
+						Name: "c",
+						Type: parser.TypeExpr{Name: "int", Optional: true},
+						When: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "a"},
+							Op:    ">",
+							Right: parser.LiteralInt{Value: 0},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) == 0 {
+		t.Fatal("expected error for 3-field circular when dependency in contract fields")
+	}
+	foundCircular := false
+	for _, e := range errs {
+		if contains(e.Error(), "circular") {
+			foundCircular = true
+		}
+	}
+	if !foundCircular {
+		t.Errorf("expected error about circular dependency, got: %v", errs)
+	}
+	// Error must name at least two of the involved fields.
+	involvedCount := 0
+	for _, e := range errs {
+		msg := e.Error()
+		for _, name := range []string{"a", "b", "c"} {
+			if contains(msg, name) {
+				involvedCount++
+				break
+			}
+		}
+	}
+	if involvedCount < 1 {
+		t.Errorf("expected error to name at least one involved field from {a,b,c}, got: %v", errs)
+	}
+}
+
+// --- Invariant validation tests ---
+
+func TestValidate_InvariantExprRefsValidated(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Enums: []*parser.NamedEnum{
+			{Name: "Status", Variants: []string{"active", "inactive"}},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Invariants: []*parser.Invariant{
+					{
+						Name: "enum_check",
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "Status.active"},
+								Op:    "==",
+								Right: parser.FieldRef{Path: "Status.active"},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got: %v", errs)
+	}
+}
+
+func TestValidate_ScenarioWhenExprRefsValidated(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Config: map[string]parser.Expr{
+			"limit": parser.LiteralInt{Value: 100},
+		},
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "with_config",
+						When: &parser.Block{
+							Predicates: []parser.Expr{
+								parser.BinaryOp{
+									Left:  parser.FieldRef{Path: "amount"},
+									Op:    "<",
+									Right: parser.FieldRef{Path: "config.limit"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got: %v", errs)
+	}
+}
+
+func TestValidate_ScenarioThenExprRefsValidated(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Contracts: []*parser.Contract{
+			{
+				Name: "check",
+				Fields: []*parser.Field{
+					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Scenarios: []*parser.Scenario{
+					{
+						Name: "bad_config",
+						When: &parser.Block{
+							Predicates: []parser.Expr{
+								parser.BinaryOp{
+									Left:  parser.FieldRef{Path: "x"},
+									Op:    ">",
+									Right: parser.LiteralInt{Value: 0},
+								},
+							},
+						},
+						Then: &parser.Block{
+							Assertions: []*parser.Assertion{
+								{Expr: parser.FieldRef{Path: "config.missing"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	errs := Validate(s, testRegistry())
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for config ref in then block with no config, got %d: %v", len(errs), errs)
+	}
+}
+
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+// TestValidate_ErrorPseudoFieldAllowed verifies that "error" in a then block is allowed
+// as an error pseudo-field when it is not declared in the return model.
 func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
 	t.Parallel()
-	// "error" in then block should not trigger validation error when it's not
-	// a contract output field (it's the error pseudo-field).
+	// ReturnModel has "result" but not "error"; "error" should be accepted as pseudo-field.
 	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "ResultModel", Fields: []*parser.Field{
+				{Name: "result", Type: parser.TypeExpr{Name: "string"}},
+			}},
+		},
 		Scopes: []*parser.Scope{{
 			Name: "test",
-			Use:  "http",
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "expect_error",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:       "check",
+				ReturnType: parser.TypeExpr{Name: "ResultModel"},
+				Fields:     []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Scenarios: []*parser.Scenario{{
+					Name: "expect_error",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "something"}},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralString{Value: "something"}},
+						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -982,30 +1650,37 @@ func TestValidate_ErrorPseudoFieldAllowed(t *testing.T) {
 	}
 }
 
+// TestValidate_ErrorContractFieldStillValidated verifies that when "error" IS a field
+// in the return model, unknown assertion targets still produce errors.
 func TestValidate_ErrorContractFieldStillValidated(t *testing.T) {
 	t.Parallel()
-	// When "error" IS a contract output field, "nonexistent" should still fail validation.
+	// ReturnModel explicitly includes "error"; "nonexistent" should still fail.
 	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "ErrorResultModel", Fields: []*parser.Field{
+				{Name: "error", Type: parser.TypeExpr{Name: "string"}},
+			}},
+		},
 		Scopes: []*parser.Scope{{
 			Name: "test",
-			Use:  "http",
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "error", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "check_fields",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:       "check",
+				ReturnType: parser.TypeExpr{Name: "ErrorResultModel"},
+				Fields:     []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Scenarios: []*parser.Scenario{{
+					Name: "check_fields",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "ok"}},
-						{Target: "nonexistent", Expected: parser.LiteralString{Value: "bad"}},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralString{Value: "ok"}},
+							{Target: "nonexistent", Expected: parser.LiteralString{Value: "bad"}},
+						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -1047,19 +1722,18 @@ func TestValidate_PluginAssertionTargetsAllowed(t *testing.T) {
 			spec := &parser.Spec{
 				Scopes: []*parser.Scope{{
 					Name: "test",
-					Use:  tt.plugin,
-					Contract: &parser.Contract{
-						Input:  []*parser.Field{},
-						Output: []*parser.Field{{Name: "data", Type: parser.TypeExpr{Name: "string"}}},
-					},
-					Scenarios: []*parser.Scenario{{
-						Name:  "check",
-						Given: &parser.Block{},
-						Then: &parser.Block{
-							Assertions: []*parser.Assertion{
-								{Target: tt.target, Expected: parser.LiteralInt{Value: 200}, Operator: "=="},
+					Contracts: []*parser.Contract{{
+						Name:   "check",
+						Fields: []*parser.Field{},
+						Scenarios: []*parser.Scenario{{
+							Name:  "check",
+							Given: &parser.Block{},
+							Then: &parser.Block{
+								Assertions: []*parser.Assertion{
+									{Target: tt.target, Expected: parser.LiteralInt{Value: 200}, Operator: "=="},
+								},
 							},
-						},
+						}},
 					}},
 				}},
 			}
@@ -1075,24 +1749,31 @@ func TestValidate_PluginAssertionTargetsAllowed(t *testing.T) {
 	}
 }
 
+// TestValidate_UnknownTargetStillRejected verifies that an assertion target not in
+// the return model produces a validation error.
 func TestValidate_UnknownTargetStillRejected(t *testing.T) {
 	t.Parallel()
 	spec := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "DataResult", Fields: []*parser.Field{
+				{Name: "data", Type: parser.TypeExpr{Name: "string"}},
+			}},
+		},
 		Scopes: []*parser.Scope{{
 			Name: "test",
-			Use:  "http",
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{},
-				Output: []*parser.Field{{Name: "data", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name:  "check",
-				Given: &parser.Block{},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "nonexistent", Expected: parser.LiteralInt{Value: 42}, Operator: "=="},
+			Contracts: []*parser.Contract{{
+				Name:       "check",
+				ReturnType: parser.TypeExpr{Name: "DataResult"},
+				Fields:     []*parser.Field{},
+				Scenarios: []*parser.Scenario{{
+					Name:  "check",
+					Given: &parser.Block{},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "nonexistent", Expected: parser.LiteralInt{Value: 42}, Operator: "=="},
+						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -1106,5 +1787,258 @@ func TestValidate_UnknownTargetStillRejected(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected validation error for unknown target 'nonexistent'")
+	}
+}
+
+// --- Bare output ref validation (v4 field-resolution rule) ---
+
+// TestValidate_BareInputRefInInvariant_Valid verifies that a bare ref to an input
+// field in an invariant assertion is accepted (v4 rule: bare names → input).
+func TestValidate_BareInputRefInInvariant_Valid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Res", Fields: []*parser.Field{
+				{Name: "total", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name: "add",
+			Fields: []*parser.Field{
+				{Name: "a", Type: parser.TypeExpr{Name: "int"}},
+				{Name: "b", Type: parser.TypeExpr{Name: "int"}},
+			},
+			ReturnType: parser.TypeExpr{Name: "Res"},
+			Invariants: []*parser.Invariant{{
+				Name: "sum_positive",
+				Assertions: []*parser.Assertion{{
+					// "a" and "b" are input fields — bare refs are legal.
+					Expr: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "a"},
+						Op:    ">=",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				}},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	for _, e := range errs {
+		if contains(e.Error(), "output field") {
+			t.Errorf("bare input ref should be accepted, got: %v", e)
+		}
+	}
+}
+
+// TestValidate_PrefixedOutputRefInInvariant_Valid verifies that output.<field> refs
+// in invariant assertions are accepted (v4 rule: output.X → return model fields).
+func TestValidate_PrefixedOutputRefInInvariant_Valid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Res", Fields: []*parser.Field{
+				{Name: "total", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name:       "add",
+			Fields:     []*parser.Field{{Name: "a", Type: parser.TypeExpr{Name: "int"}}},
+			ReturnType: parser.TypeExpr{Name: "Res"},
+			Invariants: []*parser.Invariant{{
+				Name: "total_positive",
+				Assertions: []*parser.Assertion{{
+					// "output.total" — correctly prefixed return-model field.
+					Expr: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "output.total"},
+						Op:    ">=",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				}},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	for _, e := range errs {
+		if contains(e.Error(), "output field") || contains(e.Error(), "total") {
+			t.Errorf("prefixed output ref should be accepted, got: %v", e)
+		}
+	}
+}
+
+// TestValidate_BareOutputOnlyRefInInvariant_Error verifies that a bare ref to a
+// name that exists only in the return model (not in contract input) produces an
+// error with the "output." prefix hint.
+func TestValidate_BareOutputOnlyRefInInvariant_Error(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Res", Fields: []*parser.Field{
+				{Name: "total", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name:       "add",
+			Fields:     []*parser.Field{{Name: "a", Type: parser.TypeExpr{Name: "int"}}},
+			ReturnType: parser.TypeExpr{Name: "Res"},
+			Invariants: []*parser.Invariant{{
+				Name: "bare_output",
+				Assertions: []*parser.Assertion{{
+					// "total" is only in the return model — must be "output.total".
+					Expr: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "total"},
+						Op:    ">=",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				}},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "total") && contains(e.Error(), "output field") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about bare output ref 'total', got: %v", errs)
+	}
+}
+
+// TestValidate_BareOutputOnlyRefInScenarioThen_Error verifies the same rule
+// applies in scenario then-block expression assertions.
+func TestValidate_BareOutputOnlyRefInScenarioThen_Error(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Res", Fields: []*parser.Field{
+				{Name: "sum", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name:       "add",
+			Fields:     []*parser.Field{{Name: "a", Type: parser.TypeExpr{Name: "int"}}},
+			ReturnType: parser.TypeExpr{Name: "Res"},
+			Scenarios: []*parser.Scenario{{
+				Name: "smoke",
+				Given: &parser.Block{
+					Steps: []parser.GivenStep{
+						&parser.Assignment{Path: "a", Value: parser.LiteralInt{Value: 1}},
+					},
+				},
+				Then: &parser.Block{
+					Assertions: []*parser.Assertion{{
+						// "sum" is only in return model — must use "output.sum".
+						Expr: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "sum"},
+							Op:    "==",
+							Right: parser.LiteralInt{Value: 1},
+						},
+					}},
+				},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	found := false
+	for _, e := range errs {
+		if contains(e.Error(), "sum") && contains(e.Error(), "output field") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected error about bare output ref 'sum' in then block, got: %v", errs)
+	}
+}
+
+// TestValidate_BothInputAndOutputSameName_InputWins verifies that when a field name
+// appears in both contract input and return model, the bare ref resolves to input
+// silently (no error) — as documented in the v4 plan.
+func TestValidate_BothInputAndOutputSameName_InputWins(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Res", Fields: []*parser.Field{
+				{Name: "value", Type: parser.TypeExpr{Name: "int"}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name: "echo",
+			// "value" is in both input and return model — input wins, no error.
+			Fields:     []*parser.Field{{Name: "value", Type: parser.TypeExpr{Name: "int"}}},
+			ReturnType: parser.TypeExpr{Name: "Res"},
+			Invariants: []*parser.Invariant{{
+				Name: "echo_identity",
+				Assertions: []*parser.Assertion{{
+					// bare "value" resolves to input silently.
+					Expr: parser.BinaryOp{
+						Left:  parser.FieldRef{Path: "value"},
+						Op:    ">=",
+						Right: parser.LiteralInt{Value: 0},
+					},
+				}},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	for _, e := range errs {
+		if contains(e.Error(), "output field") {
+			t.Errorf("should not error when name exists in both input and return model, got: %v", e)
+		}
+	}
+}
+
+// TestValidate_TransferConservationInvariant_Valid verifies that the canonical
+// transfer conservation invariant validates cleanly:
+//   output.from.balance + output.to.balance == from.balance + to.balance
+//
+// where from/to are input fields and output.from/output.to are return model refs.
+func TestValidate_TransferConservationInvariant_Valid(t *testing.T) {
+	t.Parallel()
+	s := &parser.Spec{
+		Models: []*parser.Model{
+			{Name: "Account", Fields: []*parser.Field{
+				{Name: "id", Type: parser.TypeExpr{Name: "string"}},
+				{Name: "balance", Type: parser.TypeExpr{Name: "int"}},
+			}},
+			{Name: "TransferResult", Fields: []*parser.Field{
+				{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+				{Name: "to", Type: parser.TypeExpr{Name: "Account"}},
+				{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
+			}},
+		},
+		Contracts: []*parser.Contract{{
+			Name: "Transfer",
+			Fields: []*parser.Field{
+				{Name: "from", Type: parser.TypeExpr{Name: "Account"}},
+				{Name: "to", Type: parser.TypeExpr{Name: "Account"}},
+				{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
+			},
+			ReturnType: parser.TypeExpr{Name: "TransferResult"},
+			Invariants: []*parser.Invariant{{
+				Name: "conservation",
+				Assertions: []*parser.Assertion{{
+					// output.from and output.to are prefixed (return model)
+					// from and to (bare) are input fields — this is the correct form.
+					Expr: parser.BinaryOp{
+						Left: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "output.from.balance"},
+							Op:    "+",
+							Right: parser.FieldRef{Path: "output.to.balance"},
+						},
+						Op: "==",
+						Right: parser.BinaryOp{
+							Left:  parser.FieldRef{Path: "from.balance"},
+							Op:    "+",
+							Right: parser.FieldRef{Path: "to.balance"},
+						},
+					},
+				}},
+			}},
+		}},
+	}
+	errs := Validate(s, testRegistry())
+	for _, e := range errs {
+		t.Errorf("expected no errors for canonical transfer conservation invariant, got: %v", e)
 	}
 }
