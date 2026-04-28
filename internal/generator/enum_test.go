@@ -10,7 +10,7 @@ func TestGenerateEnum(t *testing.T) {
 	variants := []string{"http", "process", "playwright"}
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{Name: "plugin", Type: parser.TypeExpr{Name: "enum", Variants: variants}},
 			},
 		},
@@ -52,7 +52,7 @@ func TestGenerateEnum(t *testing.T) {
 func TestGenerateEnum_SingleVariant(t *testing.T) {
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{Name: "mode", Type: parser.TypeExpr{Name: "enum", Variants: []string{"default"}}},
 			},
 		},
@@ -75,7 +75,7 @@ func TestGenerateEnum_SingleVariant(t *testing.T) {
 func TestGenerateEnum_Optional(t *testing.T) {
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{
 					Name: "role",
 					Type: parser.TypeExpr{

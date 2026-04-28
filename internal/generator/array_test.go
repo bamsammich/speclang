@@ -9,7 +9,7 @@ import (
 func TestGenerateArray(t *testing.T) {
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{
 					Name: "tags",
 					Type: parser.TypeExpr{
@@ -40,7 +40,7 @@ func TestGenerateArray(t *testing.T) {
 func TestGenerateMap(t *testing.T) {
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{Name: "metadata", Type: parser.TypeExpr{
 					Name:    "map",
 					KeyType: &parser.TypeExpr{Name: "string"},
@@ -74,7 +74,7 @@ func TestLenConstraint(t *testing.T) {
 	}
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{
 					Name: "items",
 					Type: parser.TypeExpr{

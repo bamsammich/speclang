@@ -16,10 +16,13 @@ import (
 
 // Generator produces random valid inputs from a contract and model definitions.
 type Generator struct {
-	contract *parser.Contract
-	models   map[string]*parser.Model
-	seed     uint64
-	seqN     uint64
+	contract     *parser.Contract
+	models       map[string]*parser.Model
+	enums        map[string]*parser.NamedEnum
+	config       map[string]parser.Expr
+	seed         uint64
+	seqN         uint64
+	stalledWhen  []string // names of when-conditioned fields that could not be resolved (circular deps)
 }
 
 // New creates a generator for the given contract and models with a reproducible seed.
@@ -29,6 +32,19 @@ func New(contract *parser.Contract, models []*parser.Model, seed uint64) *Genera
 		modelMap[m.Name] = m
 	}
 	return &Generator{contract: contract, models: modelMap, seed: seed}
+}
+
+// SetEnums sets named enums for resolving enum type references during generation.
+func (g *Generator) SetEnums(enums []*parser.NamedEnum) {
+	g.enums = make(map[string]*parser.NamedEnum, len(enums))
+	for _, e := range enums {
+		g.enums[e.Name] = e
+	}
+}
+
+// SetConfig sets spec-level config constants for resolving config.key references.
+func (g *Generator) SetConfig(config map[string]parser.Expr) {
+	g.config = config
 }
 
 // GenerateInput produces one random valid input satisfying the contract's constraints.
@@ -44,8 +60,13 @@ func (g *Generator) GenerateInput() (map[string]any, error) {
 
 	const maxAttempts = 1000
 	for range maxAttempts {
-		input := g.generateFields(rng, g.contract.Input)
-		if checkConstraints(input, g.contract.Input) {
+		g.stalledWhen = nil
+		input := g.generateFields(rng, g.contract.Fields)
+		if len(g.stalledWhen) > 0 {
+			return nil, fmt.Errorf("circular or unresolvable when dependencies on fields: %s",
+				strings.Join(g.stalledWhen, ", "))
+		}
+		if checkConstraints(input, g.contract.Fields, g.config) {
 			return input, nil
 		}
 	}
@@ -78,7 +99,12 @@ func (g *Generator) GenerateMatching(match func(map[string]any) bool) (map[strin
 
 	const maxAttempts = 10000
 	for range maxAttempts {
-		input := g.generateFields(rng, g.contract.Input)
+		g.stalledWhen = nil
+		input := g.generateFields(rng, g.contract.Fields)
+		if len(g.stalledWhen) > 0 {
+			return nil, fmt.Errorf("circular or unresolvable when dependencies on fields: %s",
+				strings.Join(g.stalledWhen, ", "))
+		}
 		if match(input) {
 			return input, nil
 		}
@@ -92,7 +118,7 @@ func (g *Generator) ContractInput() []*parser.Field {
 	if g.contract == nil {
 		return nil
 	}
-	return g.contract.Input
+	return g.contract.Fields
 }
 
 // Eval evaluates an expression against the given variable context.
@@ -101,12 +127,142 @@ func Eval(expr parser.Expr, vars map[string]any) (any, bool) {
 	return ctx.eval(expr)
 }
 
+// EvalWithConfig evaluates an expression with access to spec-level config constants.
+func EvalWithConfig(expr parser.Expr, vars map[string]any, config map[string]parser.Expr) (any, bool) {
+	ctx := &evalCtx{input: vars, config: config}
+	return ctx.eval(expr)
+}
+
 func (g *Generator) generateFields(rng *rand.Rand, fields []*parser.Field) map[string]any {
 	result := make(map[string]any, len(fields))
+
+	// processed tracks fields that have been fully decided: either generated (present
+	// in result) or intentionally absent because their When evaluated to false. This
+	// set lets us distinguish "dependency not yet resolved" from "dependency resolved
+	// as absent" — the latter means a dependent field is also absent, not stalled.
+	processed := make(map[string]bool, len(fields))
+
+	// First pass: generate all fields without When conditions.
+	var deferred []*parser.Field
 	for _, f := range fields {
+		if f.When != nil {
+			deferred = append(deferred, f)
+			continue
+		}
 		result[f.Name] = g.generateValue(rng, f.Type)
+		processed[f.Name] = true
 	}
+
+	// Subsequent passes: evaluate When conditions for deferred fields.
+	// Repeat until no new fields are added or all deferred fields processed.
+	for len(deferred) > 0 {
+		var remaining []*parser.Field
+		progress := false
+		for _, f := range deferred {
+			// If any referenced field is not yet processed, defer to the next pass.
+			if !allDepsProcessed(f.When, processed) {
+				remaining = append(remaining, f)
+				continue
+			}
+			// All dependencies are processed (present or intentionally absent).
+			// Evaluate the When condition.
+			val, ok := Eval(f.When, result)
+			if !ok {
+				// Dependencies are processed but the expression still can't evaluate
+				// (e.g., a dependency is absent). Treat this field as absent too.
+				processed[f.Name] = true
+				progress = true
+				continue
+			}
+			b, isBool := val.(bool)
+			if !isBool {
+				// Non-bool When: treat field as absent.
+				processed[f.Name] = true
+				progress = true
+				continue
+			}
+			processed[f.Name] = true
+			progress = true
+			if b {
+				result[f.Name] = g.generateValue(rng, f.Type)
+			}
+			// If false, field is absent — processed but not added to result.
+		}
+		if !progress {
+			// No progress was made. Remaining deferred fields have circular When deps.
+			// Record the stall so callers can surface an error.
+			for _, f := range remaining {
+				g.stalledWhen = append(g.stalledWhen, f.Name)
+			}
+			break
+		}
+		deferred = remaining
+	}
+
 	return result
+}
+
+// allDepsProcessed reports whether all field names referenced in expr have been
+// processed (either generated or intentionally absent). This prevents a deferred
+// field from being evaluated before its dependencies are resolved, while also
+// allowing a field to be marked absent when its dependencies are absent (not stalled).
+func allDepsProcessed(expr parser.Expr, processed map[string]bool) bool {
+	refs := collectFieldRefs(expr)
+	for name := range refs {
+		if !processed[name] {
+			return false
+		}
+	}
+	return true
+}
+
+// collectFieldRefs collects the top-level field names referenced in an expression.
+// This mirrors the validator's collectFieldRefs but lives in the generator package
+// to avoid a package dependency on the validator.
+func collectFieldRefs(expr parser.Expr) map[string]bool {
+	refs := make(map[string]bool)
+	var walk func(e parser.Expr)
+	walk = func(e parser.Expr) {
+		if e == nil {
+			return
+		}
+		switch v := e.(type) {
+		case parser.FieldRef:
+			// Only top-level names (no dot) are field references within the contract.
+			name := v.Path
+			if idx := strings.Index(name, "."); idx >= 0 {
+				name = name[:idx]
+			}
+			refs[name] = true
+		case parser.BinaryOp:
+			walk(v.Left)
+			walk(v.Right)
+		case parser.UnaryOp:
+			walk(v.Operand)
+		case parser.LenExpr:
+			walk(v.Arg)
+		case parser.ContainsExpr:
+			walk(v.Haystack)
+			walk(v.Needle)
+		case parser.ExistsExpr:
+			walk(v.Arg)
+		case parser.HasKeyExpr:
+			walk(v.Arg)
+			walk(v.Key)
+		case parser.AllExpr:
+			walk(v.Array)
+			walk(v.Predicate)
+		case parser.AnyExpr:
+			walk(v.Array)
+			walk(v.Predicate)
+		case parser.IfExpr:
+			walk(v.Condition)
+			walk(v.Then)
+			walk(v.Else)
+		}
+	}
+	walk(expr)
+	return refs
 }
 
 func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
@@ -116,6 +272,11 @@ func (g *Generator) generateValue(rng *rand.Rand, t parser.TypeExpr) any {
 
 	if m, ok := g.models[t.Name]; ok {
 		return g.generateFields(rng, m.Fields)
+	}
+
+	// Named enum: type name matches a declared enum
+	if e, ok := g.enums[t.Name]; ok && len(e.Variants) > 0 {
+		return e.Variants[rng.IntN(len(e.Variants))]
 	}
 
 	return g.generatePrimitive(rng, t)
@@ -241,12 +402,12 @@ func (g *Generator) generateMap(rng *rand.Rand, valType parser.TypeExpr) map[str
 }
 
 // checkConstraints returns true if all field constraints are satisfied.
-func checkConstraints(input map[string]any, fields []*parser.Field) bool {
+func checkConstraints(input map[string]any, fields []*parser.Field, config map[string]parser.Expr) bool {
 	for _, f := range fields {
 		if f.Constraint == nil {
 			continue
 		}
-		ctx := &evalCtx{input: input, fieldName: f.Name}
+		ctx := &evalCtx{input: input, config: config, fieldName: f.Name}
 		val, ok := ctx.eval(f.Constraint)
 		if !ok {
 			return false
@@ -262,6 +423,7 @@ func checkConstraints(input map[string]any, fields []*parser.Field) bool {
 // evalCtx holds context for evaluating constraint expressions.
 type evalCtx struct {
 	input     map[string]any
+	config    map[string]parser.Expr
 	fieldName string
 }
 
@@ -526,10 +688,20 @@ func (c *evalCtx) withBinding(name string, value any) *evalCtx {
 		merged[k] = v
 	}
 	merged[name] = value
-	return &evalCtx{input: merged, fieldName: c.fieldName}
+	return &evalCtx{input: merged, config: c.config, fieldName: c.fieldName}
 }
 
 func (c *evalCtx) resolveRef(path string) (any, bool) {
+	// Resolve config.key references from spec-level config.
+	if strings.HasPrefix(path, "config.") && c.config != nil {
+		key := path[len("config."):]
+		expr, ok := c.config[key]
+		if !ok {
+			return nil, false
+		}
+		return c.eval(expr)
+	}
+
 	parts := strings.Split(path, ".")
 	var current any = c.input
 

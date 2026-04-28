@@ -24,7 +24,7 @@ func TestGenerateFloat(t *testing.T) {
 func TestGenerateValue_Float(t *testing.T) {
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{Name: "price", Type: parser.TypeExpr{Name: "float"}},
 			},
 		},
@@ -48,7 +48,7 @@ func TestFloatConstraint(t *testing.T) {
 	}
 	g := New(
 		&parser.Contract{
-			Input: []*parser.Field{
+			Fields: []*parser.Field{
 				{Name: "amount", Type: parser.TypeExpr{Name: "float"}, Constraint: constraint},
 			},
 		},
