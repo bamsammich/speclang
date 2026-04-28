@@ -10,8 +10,9 @@ import (
 )
 
 // convertPaths converts OpenAPI paths to speclang scopes.
-// Each path+method combination becomes a scope with config (path, method)
-// and a contract derived from the request body and response schemas.
+// Each path+method combination becomes a scope containing one contract.
+// The contract's action block contains the HTTP call, and its ReturnType
+// references the response model (or is empty if there is no response schema).
 func convertPaths(doc *openapi3.T) []*parser.Scope {
 	if doc.Paths == nil {
 		return nil
@@ -29,42 +30,78 @@ func convertPaths(doc *openapi3.T) []*parser.Scope {
 }
 
 // operationToScope converts a single OpenAPI operation to a speclang Scope.
+// The scope contains one contract whose action block calls the HTTP endpoint.
 func operationToScope(path, method string, op *openapi3.Operation) *parser.Scope {
 	name := op.OperationID
 	if name == "" {
 		name = sanitizeScopeName(method, path)
 	}
 
-	scope := &parser.Scope{
-		Name: name,
-		Use:  "http",
-		Config: map[string]parser.Expr{
-			"path":   parser.LiteralString{Value: path},
-			"method": parser.LiteralString{Value: strings.ToUpper(method)},
+	scope := &parser.Scope{Name: name}
+
+	contract := &parser.Contract{Name: name}
+
+	// Request body → contract input fields
+	if op.RequestBody != nil && op.RequestBody.Value != nil {
+		if sch := jsonSchemaRef(op.RequestBody.Value.Content); sch != nil {
+			contract.Fields = schemaRefToFields(sch)
+		}
+	}
+
+	// Success response → contract return type
+	if resp := successResponse(op.Responses); resp != nil {
+		if sch := jsonSchemaRef(resp.Content); sch != nil {
+			retType := responseReturnType(sch)
+			contract.ReturnType = retType
+		}
+	}
+
+	// Action block: HTTP call
+	contract.Action = buildActionBlock(method, path, contract.Fields)
+
+	scope.Contracts = append(scope.Contracts, contract)
+	return scope
+}
+
+// responseReturnType derives a TypeExpr from a response schema.
+// If the schema references a named model, use that name; otherwise use "any".
+func responseReturnType(ref *openapi3.SchemaRef) parser.TypeExpr {
+	if ref.Ref != "" {
+		if name := refName(ref.Ref); name != "" {
+			return parser.TypeExpr{Name: name}
+		}
+	}
+	return parser.TypeExpr{Name: "any"}
+}
+
+// buildActionBlock constructs an ActionBlock that calls the HTTP endpoint.
+func buildActionBlock(method, path string, fields []*parser.Field) *parser.ActionBlock {
+	lowerMethod := strings.ToLower(method)
+
+	// Build the argument list: path string + optional body object
+	var args []parser.Expr
+	args = append(args, parser.LiteralString{Value: path})
+
+	if (lowerMethod == "post" || lowerMethod == "put" || lowerMethod == "patch") && len(fields) > 0 {
+		var objFields []*parser.ObjField
+		for _, f := range fields {
+			objFields = append(objFields, &parser.ObjField{
+				Key:   f.Name,
+				Value: parser.FieldRef{Path: f.Name},
+			})
+		}
+		args = append(args, parser.ObjectLiteral{Fields: objFields})
+	}
+
+	ret := &parser.ReturnStmt{
+		Value: parser.AdapterCall{
+			Adapter: "http",
+			Method:  lowerMethod,
+			Args:    args,
 		},
 	}
 
-	contract := &parser.Contract{}
-
-	// Request body → contract input
-	if op.RequestBody != nil && op.RequestBody.Value != nil {
-		if sch := jsonSchemaRef(op.RequestBody.Value.Content); sch != nil {
-			contract.Input = schemaRefToFields(sch)
-		}
-	}
-
-	// Success response → contract output
-	if resp := successResponse(op.Responses); resp != nil {
-		if sch := jsonSchemaRef(resp.Content); sch != nil {
-			contract.Output = schemaRefToFields(sch)
-		}
-	}
-
-	if contract.Input != nil || contract.Output != nil {
-		scope.Contract = contract
-	}
-
-	return scope
+	return &parser.ActionBlock{Body: []parser.GivenStep{ret}}
 }
 
 // schemaRefToFields converts an object schema's properties to speclang Fields.

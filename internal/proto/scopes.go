@@ -48,37 +48,28 @@ func rpcToScope(serviceName string, rpc *pb.RPC, models map[string]*parser.Model
 		return nil
 	}
 
-	scope := &parser.Scope{
-		Name: rpc.RPCName,
-		Use:  "http",
-		Config: map[string]parser.Expr{
-			"service": parser.LiteralString{Value: serviceName},
-			"method":  parser.LiteralString{Value: rpc.RPCName},
-		},
-	}
+	scope := &parser.Scope{Name: rpc.RPCName}
 
-	contract := &parser.Contract{}
+	contract := &parser.Contract{Name: rpc.RPCName}
 
-	// Request → contract input
+	// Request → contract input fields (inherit from request model)
 	reqType := normalizeMessageRef(rpc.RPCRequest.MessageType)
 	if reqType != "Empty" && reqType != "google.protobuf.Empty" {
 		if m, ok := models[reqType]; ok {
-			contract.Input = copyFields(m.Fields)
+			contract.Fields = copyFields(m.Fields)
+		} else {
+			// Reference the message type directly
+			contract.Inherits = reqType
 		}
 	}
 
-	// Response → contract output
+	// Response → contract return type
 	respType := normalizeMessageRef(rpc.RPCResponse.MessageType)
 	if respType != "Empty" && respType != "google.protobuf.Empty" {
-		if m, ok := models[respType]; ok {
-			contract.Output = copyFields(m.Fields)
-		}
+		contract.ReturnType = parser.TypeExpr{Name: respType}
 	}
 
-	if contract.Input != nil || contract.Output != nil {
-		scope.Contract = contract
-	}
-
+	scope.Contracts = append(scope.Contracts, contract)
 	return scope
 }
 

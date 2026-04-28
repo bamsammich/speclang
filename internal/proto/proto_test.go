@@ -178,17 +178,15 @@ func TestConvertServices_User(t *testing.T) {
 
 	// CreateUser scope
 	cu := scopes[0]
-	assertConfigValue(t, cu, "service", "UserService")
-	assertConfigValue(t, cu, "method", "CreateUser")
-
-	if cu.Contract == nil {
+	if len(cu.Contracts) == 0 {
 		t.Fatal("CreateUser should have a contract")
 	}
-	if len(cu.Contract.Input) == 0 {
-		t.Error("CreateUser should have contract input fields")
+	cuContract := cu.Contracts[0]
+	if len(cuContract.Fields) == 0 && cuContract.Inherits == "" {
+		t.Error("CreateUser contract should have input fields or inheritance")
 	}
-	if len(cu.Contract.Output) == 0 {
-		t.Error("CreateUser should have contract output fields")
+	if cuContract.ReturnType.Name == "" {
+		t.Error("CreateUser contract should have a return type")
 	}
 }
 
@@ -321,19 +319,3 @@ func assertScopeName(t *testing.T, scopes []*parser.Scope, idx int, name string)
 	}
 }
 
-func assertConfigValue(t *testing.T, scope *parser.Scope, key, expected string) {
-	t.Helper()
-	expr, ok := scope.Config[key]
-	if !ok {
-		t.Errorf("scope %q: config key %q not found", scope.Name, key)
-		return
-	}
-	lit, ok := expr.(parser.LiteralString)
-	if !ok {
-		t.Errorf("scope %q: config %q is not a LiteralString", scope.Name, key)
-		return
-	}
-	if lit.Value != expected {
-		t.Errorf("scope %q: config %q = %q, want %q", scope.Name, key, lit.Value, expected)
-	}
-}

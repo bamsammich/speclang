@@ -183,26 +183,28 @@ func TestConvertPaths_Petstore(t *testing.T) {
 	assertScopeName(t, scopes, 0, "create_pet")
 	assertScopeName(t, scopes, 1, "list_pets")
 
-	// create_pet should have config with path and method
+	// create_pet should have one contract with input fields and a return type
 	createPet := scopes[0]
-	assertConfigValue(t, createPet, "path", "/pets")
-	assertConfigValue(t, createPet, "method", "POST")
-
-	// create_pet should have a contract with input (from request body)
-	if createPet.Contract == nil {
+	if len(createPet.Contracts) == 0 {
 		t.Fatal("create_pet should have a contract")
 	}
-	if len(createPet.Contract.Input) == 0 {
-		t.Error("create_pet should have contract input fields")
+	createContract := createPet.Contracts[0]
+	if len(createContract.Fields) == 0 {
+		t.Error("create_pet contract should have input fields (from request body)")
 	}
-	if len(createPet.Contract.Output) == 0 {
-		t.Error("create_pet should have contract output fields")
+	if createContract.ReturnType.Name == "" {
+		t.Error("create_pet contract should have a return type (from response)")
+	}
+	// Action block should contain the HTTP call
+	if createContract.Action == nil {
+		t.Error("create_pet contract should have an action block")
 	}
 
 	// list_pets: GET with no request body
 	listPets := scopes[1]
-	assertConfigValue(t, listPets, "path", "/pets")
-	assertConfigValue(t, listPets, "method", "GET")
+	if len(listPets.Contracts) == 0 {
+		t.Fatal("list_pets should have a contract")
+	}
 }
 
 func TestConvertPaths_Empty(t *testing.T) {
@@ -280,19 +282,3 @@ func assertField(t *testing.T, f *parser.Field, name, typeName string, optional 
 	}
 }
 
-func assertConfigValue(t *testing.T, scope *parser.Scope, key, expected string) {
-	t.Helper()
-	expr, ok := scope.Config[key]
-	if !ok {
-		t.Errorf("scope %q: config key %q not found", scope.Name, key)
-		return
-	}
-	lit, ok := expr.(parser.LiteralString)
-	if !ok {
-		t.Errorf("scope %q: config %q is not a LiteralString", scope.Name, key)
-		return
-	}
-	if lit.Value != expected {
-		t.Errorf("scope %q: config %q = %q, want %q", scope.Name, key, lit.Value, expected)
-	}
-}
