@@ -1,22 +1,18 @@
 # Test fixture for the error pseudo-field.
 # Uses "error" in then block without it being in the contract output.
-spec ErrorPseudoFieldTest {
-  process {
-    command: "echo"
-  }
+process {
+  command: "echo"
+}
 
-  scope test_error {
-    action run() {
+model ErrorPseudoResult {
+  exit_code: int
+}
+
+scope test_error {
+  contract ErrorPseudoContract -> ErrorPseudoResult {
+    action {
       let result = process.exec("hello")
       return result
-    }
-
-    contract {
-      input {}
-      output {
-        exit_code: int
-      }
-      action: run
     }
 
     # error is not in the output contract — it's the pseudo-field.
@@ -24,7 +20,7 @@ spec ErrorPseudoFieldTest {
     scenario no_error_expected {
       given {}
       then {
-        exit_code == 0
+        output.exit_code == 0
         error == null
       }
     }

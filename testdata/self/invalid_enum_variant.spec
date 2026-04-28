@@ -1,19 +1,21 @@
-spec InvalidEnumVariant {
-  scope test {
-    contract {
-      input {
-        status: enum("active", "inactive")
-      }
-      output {
-        ok: bool
-      }
+model EnumVariantResult {
+  ok: bool
+}
+
+scope test {
+  contract EnumVariantContract -> EnumVariantResult {
+    status: enum("active", "inactive")
+
+    action {
+      return http.get("/test")
     }
+
     scenario smoke {
       given {
         status: "deleted"
       }
       then {
-        ok == true
+        output.ok == true
       }
     }
   }

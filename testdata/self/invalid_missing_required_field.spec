@@ -1,20 +1,22 @@
-spec Bad {
-  scope broken {
-    contract {
-      input {
-        from: string
-        to: string
-      }
-      output {
-        result: int
-      }
+model MissingFieldResult {
+  result: int
+}
+
+scope broken {
+  contract MissingFieldContract -> MissingFieldResult {
+    from: string
+    to: string
+
+    action {
+      return http.get("/test")
     }
+
     scenario smoke {
       given {
         from: "alice"
       }
       then {
-        result == 0
+        output.result == 0
       }
     }
   }

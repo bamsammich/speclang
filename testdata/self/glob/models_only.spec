@@ -1,0 +1,3 @@
+model GlobOnlyModel {
+  value: string
+}

@@ -3,3 +3,9 @@ model Account {
   id: string
   balance: int
 }
+
+model TransferResult {
+  from: Account
+  to: Account
+  error: string?
+}

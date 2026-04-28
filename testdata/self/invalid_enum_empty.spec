@@ -1,12 +1,13 @@
-spec InvalidEnumEmpty {
-  scope test {
-    contract {
-      input {
-        status: enum()
-      }
-      output {
-        ok: bool
-      }
+model EnumEmptyResult {
+  ok: bool
+}
+
+scope test {
+  contract EnumEmptyContract -> EnumEmptyResult {
+    status: enum()
+
+    action {
+      return http.get("/test")
     }
   }
 }

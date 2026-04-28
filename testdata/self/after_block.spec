@@ -1,27 +1,27 @@
-spec AfterBlock {
-  http {
-    base_url: "http://localhost:8080"
+http {
+  base_url: "http://localhost:8080"
+}
+
+model AfterResult {
+  ok: bool
+}
+
+scope test_after {
+  after {
+    http.delete("/cleanup")
   }
 
-  scope test_after {
-    action run(name: string) {
+  contract AfterContract -> AfterResult {
+    name: string
+
+    action {
       let result = http.post("/test", { name: name })
       return result
     }
 
-    after {
-      http.delete("/cleanup")
-    }
-
-    contract {
-      input { name: string }
-      output { ok: bool }
-      action: run
-    }
-
     scenario smoke {
       given { name: "test" }
-      then { ok == true }
+      then { output.ok == true }
     }
   }
 }

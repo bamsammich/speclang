@@ -1,12 +1,13 @@
-spec Bad {
-  scope broken {
-    contract {
-      input {
-        item: Widget
-      }
-      output {
-        result: int
-      }
+model BrokenResult {
+  result: int
+}
+
+scope broken {
+  contract BrokenContract -> BrokenResult {
+    item: Widget
+
+    action {
+      return http.get("/test")
     }
   }
 }

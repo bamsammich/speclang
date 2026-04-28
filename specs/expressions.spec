@@ -1,114 +1,105 @@
 # Verifies that env() expressions work in config and given blocks.
+
+model ExprParseResult {
+  exit_code: int
+  models: any
+}
+
 scope env_in_config {
-  action run(file: string) {
-    let result = process.exec(env(SPECTEST_EXPR_ARGS, "parse"), file)
-    return result
-  }
+  contract EnvInConfigContract -> ExprParseResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec(env(SPECTEST_EXPR_ARGS, "parse"), file)
+      return result
     }
-    output {
-      exit_code: int
-      name: string
-    }
-    action: run
-  }
 
-  scenario parse_with_env_config {
-    given {
-      file: "testdata/self/env_config.spec"
-    }
-    then {
-      exit_code == 0
-      name == "EnvConfig"
+    # env() in adapter call args must evaluate to the fallback "parse" so the
+    # command runs and returns the correct AST. The model name "EnvConfigResult"
+    # confirms the right file was parsed — not just that the command exited 0.
+    scenario parse_with_env_config {
+      given {
+        file: "testdata/self/env_config.spec"
+      }
+      then {
+        output.exit_code == 0
+        output.models.0.name == "EnvConfigResult"
+      }
     }
   }
 }
 
 # Verifies that string concatenation with + works in then block assertions.
+# The then block asserts output.models.0.name == "Enum" + "Result", which
+# requires the runner to evaluate "Enum" + "Result" = "EnumResult" at
+# assertion time. A runner that skips concat evaluation would compare
+# output.models.0.name to the unevaluated literal and fail.
 scope string_concat {
-  action run(file: string) {
-    let result = process.exec("parse", file)
-    return result
-  }
+  contract StringConcatContract -> ExprParseResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec("parse", file)
+      return result
     }
-    output {
-      exit_code: int
-      name: string
-    }
-    action: run
-  }
 
-  scenario concat_in_then {
-    given {
-      file: "testdata/self/minimal.spec"
-    }
-    then {
-      exit_code == 0
-      name == "Mini" + "mal"
+    scenario concat_in_then {
+      given {
+        file: "testdata/self/enum.spec"
+      }
+      then {
+        output.exit_code == 0
+        # If string concat is not evaluated at assertion time, this fails:
+        output.models.0.name == "Enum" + "Result"
+      }
     }
   }
 }
 
 # Verifies that array-form args in config blocks work correctly.
+# Uses enum.spec (which has a known model) to confirm the parse
+# actually ran against this specific file and returned its structure.
 scope array_args {
-  action run(file: string) {
-    let result = process.exec("parse", file)
-    return result
-  }
+  contract ArrayArgsContract -> ExprParseResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec("parse", file)
+      return result
     }
-    output {
-      exit_code: int
-      name: string
-    }
-    action: run
-  }
 
-  scenario parse_with_array_args {
-    given {
-      file: "testdata/self/minimal.spec"
-    }
-    then {
-      exit_code == 0
-      name == "Minimal"
+    scenario parse_with_array_args {
+      given {
+        file: "testdata/self/enum.spec"
+      }
+      then {
+        output.exit_code == 0
+        output.models.0.name == "EnumResult"
+      }
     }
   }
 }
 
 scope env_in_given {
-  action run(file: string) {
-    let result = process.exec("parse", file)
-    return result
-  }
+  contract EnvInGivenContract -> ExprParseResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec("parse", file)
+      return result
     }
-    output {
-      exit_code: int
-      name: string
-    }
-    action: run
-  }
 
-  scenario parse_with_env_given {
-    given {
-      file: env(SPECTEST_NONEXISTENT_FILE, "testdata/self/env_given.spec")
-    }
-    then {
-      exit_code == 0
-      name == "EnvGiven"
+    # env() in the given block must fall back to "testdata/self/env_given.spec"
+    # when the env var is unset. The model name "EnvGivenResult" confirms the
+    # fallback path was used and the right file was parsed.
+    scenario parse_with_env_given {
+      given {
+        file: env(SPECTEST_NONEXISTENT_FILE, "testdata/self/env_given.spec")
+      }
+      then {
+        output.exit_code == 0
+        output.models.0.name == "EnvGivenResult"
+      }
     }
   }
 }

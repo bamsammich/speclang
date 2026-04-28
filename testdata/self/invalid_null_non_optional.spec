@@ -1,19 +1,21 @@
-spec Bad {
-  scope broken {
-    contract {
-      input {
-        name: string
-      }
-      output {
-        result: int
-      }
+model NullNonOptionalResult {
+  result: int
+}
+
+scope broken {
+  contract NullNonOptionalContract -> NullNonOptionalResult {
+    name: string
+
+    action {
+      return http.get("/test")
     }
+
     scenario smoke {
       given {
         name: null
       }
       then {
-        result == 0
+        output.result == 0
       }
     }
   }

@@ -1,63 +1,72 @@
 # Verifies the parser and generator handle extended types (float, bytes, array, map).
+
+model TypesParseResult {
+  exit_code: int
+  models: any
+  scopes: any
+}
+
+model TypesGenerateResult {
+  exit_code: int
+  rating: any
+  data: any
+  tags: any
+  metadata: any
+  items: any
+}
+
 scope parse_types {
-  action run(file: string) {
-    let result = process.exec("parse", file)
-    return result
-  }
+  contract ParseTypesContract -> TypesParseResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec("parse", file)
+      return result
     }
-    output {
-      exit_code: int
-      name: string
-    }
-    action: run
-  }
 
-  # The types spec should parse successfully.
-  scenario types_spec {
-    given {
-      file: "testdata/self/types.spec"
-    }
-    then {
-      exit_code == 0
-      name == "TypesTest"
+    # The types spec should parse successfully. The first model must be "Item"
+    # (the domain model), and the scope must be "typed_inputs" — proving the
+    # parser extracted the struct definitions, not just that the command ran.
+    scenario types_spec {
+      given {
+        file: "testdata/self/types.spec"
+      }
+      then {
+        output.exit_code == 0
+        output.models.0.name == "Item"
+        output.scopes.0.name == "typed_inputs"
+      }
     }
   }
 }
 
 # Verifies the generator produces valid outputs for extended types.
 scope generate_types {
-  action run(seed: int) {
-    let result = process.exec("generate", "testdata/self/types.spec", "--scope", "typed_inputs", "--seed", seed)
-    return result
-  }
+  contract GenerateTypesContract -> TypesGenerateResult {
+    seed: int
 
-  contract {
-    input {
-      seed: int
+    action {
+      let result = process.exec("generate", "testdata/self/types.spec", "--scope", "typed_inputs", "--seed", seed)
+      return result
     }
-    output {
-      exit_code: int
-      rating: any
-      data: any
-      tags: any
-      metadata: any
-      items: any
+
+    # Generation should succeed across seeds.
+    invariant produces_output {
+      output.exit_code == 0
     }
-    action: run
-  }
 
-  # Generation should succeed across seeds.
-  invariant produces_output {
-    exit_code == 0
-  }
+    # Float constraint: rating >= 0.0
+    invariant float_constraint {
+      when output.exit_code == 0:
+        output.rating >= 0.0
+    }
 
-  # Float constraint: rating >= 0.0
-  invariant float_constraint {
-    when exit_code == 0:
-      output.rating >= 0.0
+    # Array constraint: tags must have at least one element (len(tags) >= 1).
+    # A tautological len(tags) >= 0 would never catch a generator emitting
+    # an empty array in violation of the constraint.
+    invariant tags_length_constraint {
+      when output.exit_code == 0:
+        len(output.tags) >= 1
+    }
   }
 }

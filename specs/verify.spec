@@ -1,48 +1,47 @@
 # Verifies that specrun verify passes correct implementations.
+
+model VerifyResult {
+  exit_code: int
+  scenarios_run: int
+  scenarios_passed: int
+  invariants_checked: int
+  invariants_passed: int
+  scopes: any
+}
+
 scope verify_pass {
-  action run(file: string) {
-    let result = process.exec("verify", "--json", file)
-    return result
-  }
+  contract VerifyPassContract -> VerifyResult {
+    file: string
 
-  contract {
-    input {
-      file: string
+    action {
+      let result = process.exec("verify", "--json", file)
+      return result
     }
-    output {
-      exit_code: int
-      scenarios_run: int
-      scenarios_passed: int
-      invariants_checked: int
-      invariants_passed: int
-      scopes: any
-    }
-    action: run
-  }
 
-  # End-to-end: the transfer example must pass all checks.
-  scenario transfer_spec_passes {
-    given {
-      file: "examples/transfer.spec"
+    # End-to-end: the transfer example must pass all checks.
+    scenario transfer_spec_passes {
+      given {
+        file: "examples/transfer.spec"
+      }
+      then {
+        output.exit_code == 0
+        output.scenarios_run == 3
+        output.scenarios_passed == 3
+        output.invariants_checked == 3
+        output.invariants_passed == 3
+      }
     }
-    then {
-      exit_code == 0
-      scenarios_run == 3
-      scenarios_passed == 3
-      invariants_checked == 3
-      invariants_passed == 3
+
+    # Every scope in the verify JSON has a non-empty name.
+    invariant all_scopes_have_names {
+      when output.exit_code == 0:
+        all(output.scopes, s => s.name != "")
     }
-  }
 
-  # Every scope in the verify JSON has a non-empty name.
-  invariant all_scopes_have_names {
-    when exit_code == 0:
-      all(output.scopes, s => s.name != "")
-  }
-
-  # Every check across all scopes passes.
-  invariant all_checks_pass {
-    when exit_code == 0:
-      all(output.scopes, s => all(s.checks, c => c.passed == true))
+    # Every check across all scopes passes.
+    invariant all_checks_pass {
+      when output.exit_code == 0:
+        all(output.scopes, s => all(s.checks, c => c.passed == true))
+    }
   }
 }

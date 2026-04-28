@@ -1,26 +1,22 @@
-spec PluginAssertionTarget {
-  http {
-    base_url: "http://localhost:8080"
-  }
+http {
+  base_url: "http://localhost:8080"
+}
 
-  scope test_http {
-    action run() {
+model PluginAssertionResult {
+  data: string
+}
+
+scope test_http {
+  contract PluginAssertionContract -> PluginAssertionResult {
+    action {
       let result = http.get("/test")
       return result
-    }
-
-    contract {
-      input {}
-      output {
-        data: string
-      }
-      action: run
     }
 
     scenario check_status {
       given {}
       then {
-        status == 200
+        output.status == 200
       }
     }
   }

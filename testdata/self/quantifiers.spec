@@ -1,30 +1,26 @@
-spec Quantifiers {
-  http {
-    base_url: "http://localhost:8080"
-  }
+http {
+  base_url: "http://localhost:8080"
+}
 
-  scope items {
-    action run(ids: []int) {
+model QuantifiersResult {
+  results: any
+}
+
+scope items {
+  contract QuantifiersContract -> QuantifiersResult {
+    ids: []int
+
+    action {
       let result = http.get("/items")
       return result
     }
 
-    contract {
-      input {
-        ids: []int
-      }
-      output {
-        results: any
-      }
-      action: run
-    }
-
     invariant all_positive {
-      all(input.ids, x => x > 0)
+      all(ids, x => x > 0)
     }
 
     invariant any_large {
-      any(input.ids, x => x > 100)
+      any(ids, x => x > 100)
     }
   }
 }

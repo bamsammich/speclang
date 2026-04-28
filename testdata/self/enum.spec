@@ -1,26 +1,20 @@
-spec EnumTest {
-  description: "Fixture exercising enum type for generator and parser testing"
+http {
+  base_url: "http://localhost:8080"
+}
 
-  http {
-    base_url: "http://localhost:8080"
-  }
+model EnumResult {
+  ok: bool
+}
 
-  scope enum_inputs {
-    action run(adapter_name: string, subcommand: string, opt_role: string) {
+scope enum_inputs {
+  contract EnumContract -> EnumResult {
+    adapter_name: enum("http", "process", "playwright")
+    subcommand: enum("parse", "generate", "verify", "install")
+    opt_role: enum("admin", "user")?
+
+    action {
       let result = http.post("/test", { adapter_name: adapter_name, subcommand: subcommand, opt_role: opt_role })
       return result
-    }
-
-    contract {
-      input {
-        adapter_name: enum("http", "process", "playwright")
-        subcommand: enum("parse", "generate", "verify", "install")
-        opt_role: enum("admin", "user")?
-      }
-      output {
-        ok: bool
-      }
-      action: run
     }
 
     scenario smoke {
@@ -30,7 +24,7 @@ spec EnumTest {
         opt_role: "admin"
       }
       then {
-        ok == true
+        output.ok == true
       }
     }
   }

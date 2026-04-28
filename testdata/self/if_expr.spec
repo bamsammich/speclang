@@ -1,22 +1,18 @@
-spec IfExprTest {
-  http {
-    base_url: "http://localhost:8080"
-  }
+http {
+  base_url: "http://localhost:8080"
+}
 
-  scope s {
-    action run(x: int) {
+model IfExprResult {
+  result: int
+}
+
+scope s {
+  contract IfExprContract -> IfExprResult {
+    x: int
+
+    action {
       let result = http.post("/test", { x: x })
       return result
-    }
-
-    contract {
-      input {
-        x: int
-      }
-      output {
-        result: int
-      }
-      action: run
     }
 
     invariant conditional_value {

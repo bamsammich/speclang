@@ -1,18 +1,18 @@
-spec ExistsTest {
-  process {
-    command: "echo"
-  }
+process {
+  command: "echo"
+}
 
-  scope test {
-    action run(name: string) {
+model ExistsResult {
+  status: string
+}
+
+scope test {
+  contract ExistsContract -> ExistsResult {
+    name: string
+
+    action {
       let result = process.exec(name)
       return result
-    }
-
-    contract {
-      input { name: string }
-      output { status: string }
-      action: run
     }
 
     invariant has_name {

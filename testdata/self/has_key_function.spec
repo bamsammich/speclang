@@ -1,18 +1,18 @@
-spec HasKeyTest {
-  process {
-    command: "echo"
-  }
+process {
+  command: "echo"
+}
 
-  scope test {
-    action run(name: string) {
+model HasKeyResult {
+  status: string
+}
+
+scope test {
+  contract HasKeyContract -> HasKeyResult {
+    name: string
+
+    action {
       let result = process.exec(name)
       return result
-    }
-
-    contract {
-      input { name: string }
-      output { status: string }
-      action: run
     }
 
     invariant check_key {

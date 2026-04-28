@@ -1,36 +1,30 @@
-spec LoginUI {
-    description: "Login page UI verification"
+playwright {
+    base_url: env(APP_URL, "http://localhost:3000")
+}
 
-    playwright {
-        base_url: env(APP_URL, "http://localhost:3000")
-    }
+locators {
+    username: [data-testid=username]
+    password: [data-testid=password]
+    submit:   [data-testid=submit]
+    welcome:  [data-testid=welcome]
+    error:    [data-testid=error]
+}
 
-    locators {
-        username: [data-testid=username]
-        password: [data-testid=password]
-        submit:   [data-testid=submit]
-        welcome:  [data-testid=welcome]
-        error:    [data-testid=error]
-    }
+model LoginResult {
+  ok: bool
+}
 
-    scope login {
-        action run(user: string, pass: string) {
+scope login {
+    contract LoginContract -> LoginResult {
+        user: string
+        pass: string
+
+        action {
             playwright.fill(username, user)
             playwright.fill(password, pass)
             playwright.click(submit)
             let result = playwright.snapshot()
             return result
-        }
-
-        contract {
-            input {
-                user: string
-                pass: string
-            }
-            output {
-                ok: bool
-            }
-            action: run
         }
 
         scenario successful_login {

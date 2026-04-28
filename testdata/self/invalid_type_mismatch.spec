@@ -1,19 +1,21 @@
-spec Bad {
-  scope broken {
-    contract {
-      input {
-        count: int
-      }
-      output {
-        result: int
-      }
+model TypeMismatchResult {
+  result: int
+}
+
+scope broken {
+  contract TypeMismatchContract -> TypeMismatchResult {
+    count: int
+
+    action {
+      return http.get("/test")
     }
+
     scenario smoke {
       given {
         count: "not_an_int"
       }
       then {
-        result == 0
+        output.result == 0
       }
     }
   }

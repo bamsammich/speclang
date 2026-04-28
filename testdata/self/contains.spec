@@ -1,35 +1,31 @@
-spec ContainsTest {
-  http {
-    base_url: "http://localhost:8080"
-  }
+http {
+  base_url: "http://localhost:8080"
+}
 
-  scope test {
-    action run(msg: string, items: []int) {
+model ContainsResult {
+  ok: bool
+}
+
+scope test {
+  contract ContainsContract -> ContainsResult {
+    msg: string
+    items: []int
+
+    action {
       let result = http.post("/api/test", { msg: msg, items: items })
       return result
     }
 
-    contract {
-      input {
-        msg: string
-        items: []int
-      }
-      output {
-        ok: bool
-      }
-      action: run
-    }
-
     # Verify contains() works in invariant expressions
     invariant error_has_keyword {
-      when ok == false:
+      when output.ok == false:
         contains(msg, "error")
     }
 
     # Verify contains() works with array membership
     invariant items_has_element {
       when contains(items, 1):
-        ok == true
+        output.ok == true
     }
   }
 }
