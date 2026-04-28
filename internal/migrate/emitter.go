@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bamsammich/speclang/v4/internal/v2parser"
 	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
@@ -45,7 +46,7 @@ func (w *v3Writer) String() string {
 	return w.buf.String()
 }
 
-func (w *v3Writer) emitSpec(s *spec.Spec) {
+func (w *v3Writer) emitSpec(s *v2parser.Spec) {
 	w.open("spec %s {", s.Name)
 
 	if s.Description != "" {
@@ -154,7 +155,7 @@ func (w *v3Writer) emitField(f *spec.Field) {
 	}
 }
 
-func (w *v3Writer) emitScope(sc *spec.Scope, locators map[string]string) {
+func (w *v3Writer) emitScope(sc *v2parser.Scope, locators map[string]string) {
 	w.open("scope %s {", sc.Name)
 
 	// Synthesize action from v2 use+config if the scope has adapter-specific config
@@ -243,7 +244,7 @@ func (w *v3Writer) emitActionDef(a *spec.ActionDef) {
 	w.close()
 }
 
-func (w *v3Writer) emitContract(c *spec.Contract, actionName string) {
+func (w *v3Writer) emitContract(c *v2parser.Contract, actionName string) {
 	w.open("contract {")
 	if len(c.Input) > 0 {
 		w.open("input {")

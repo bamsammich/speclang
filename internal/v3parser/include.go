@@ -32,6 +32,19 @@ func resolveIncludes(
 	filePath string,
 	seen map[string]bool,
 ) ([]Token, error) {
+	return resolveIncludesWithRoot(tokens, dir, filePath, "", seen)
+}
+
+// resolveIncludesWithRoot is resolveIncludes with an explicit containment root.
+// root is the directory of the top-level spec file; all include paths must resolve
+// to a path within root. Pass "" to skip containment enforcement (legacy callers).
+func resolveIncludesWithRoot(
+	tokens []Token,
+	dir string,
+	filePath string,
+	root string,
+	seen map[string]bool,
+) ([]Token, error) {
 	if seen == nil {
 		seen = make(map[string]bool)
 	}
@@ -48,7 +61,7 @@ func resolveIncludes(
 			continue
 		}
 
-		resolved, newIdx, err := processInclude(tokens, i, dir, seen)
+		resolved, newIdx, err := processIncludeWithRoot(tokens, i, dir, root, seen)
 		if err != nil {
 			return nil, err
 		}
@@ -66,6 +79,12 @@ func resolveIncludes(
 // Returns the resolved tokens (with trailing EOF stripped) and the updated
 // token index pointing at the path token.
 func processInclude(tokens []Token, i int, dir string, seen map[string]bool) ([]Token, int, error) {
+	return processIncludeWithRoot(tokens, i, dir, "", seen)
+}
+
+// processIncludeWithRoot handles a single include directive with path-traversal policy.
+// root is the top-level spec's directory; if non-empty, the resolved path must be within it.
+func processIncludeWithRoot(tokens []Token, i int, dir string, root string, seen map[string]bool) ([]Token, int, error) {
 	includeTok := tokens[i]
 	i++
 	if i >= len(tokens) ||
@@ -75,10 +94,25 @@ func processInclude(tokens []Token, i int, dir string, seen map[string]bool) ([]
 	}
 	relPath := tokens[i].Value //nolint:gosec // i is bounds-checked on line above
 
+	// Policy check 1: reject absolute include paths.
+	if filepath.IsAbs(relPath) {
+		return nil, i, fmt.Errorf("%s:%d:%d: include path must be relative, not absolute: %q",
+			includeTok.File, includeTok.Line, includeTok.Col, relPath)
+	}
+
 	absInclude, err := filepath.Abs(filepath.Join(dir, relPath))
 	if err != nil {
 		return nil, i, fmt.Errorf("%s:%d:%d: resolving include path %q: %w",
 			includeTok.File, includeTok.Line, includeTok.Col, relPath, err)
+	}
+
+	// Policy check 2: resolved path must remain inside the spec root directory.
+	if root != "" {
+		rel, relErr := filepath.Rel(root, absInclude)
+		if relErr != nil || (len(rel) >= 2 && rel[:2] == "..") {
+			return nil, i, fmt.Errorf("%s:%d:%d: include path %q escapes spec directory",
+				includeTok.File, includeTok.Line, includeTok.Col, relPath)
+		}
 	}
 
 	if seen[absInclude] {
@@ -88,16 +122,16 @@ func processInclude(tokens []Token, i int, dir string, seen map[string]bool) ([]
 
 	included, err := lexFile(absInclude)
 	if err != nil {
-		return nil, i, fmt.Errorf("%s:%d:%d: %w",
-			includeTok.File, includeTok.Line, includeTok.Col, err)
+		return nil, i, fmt.Errorf("%s:%d:%d: included file is not a valid speclang spec: %s",
+			includeTok.File, includeTok.Line, includeTok.Col, absInclude)
 	}
 
-	resolved, err := resolveIncludes(included, filepath.Dir(absInclude), absInclude, seen)
+	resolved, err := resolveIncludesWithRoot(included, filepath.Dir(absInclude), absInclude, root, seen)
 	if err != nil {
 		return nil, i, err
 	}
 
-	// Strip the trailing EOF (each resolveIncludes call appends its own)
+	// Strip the trailing EOF (each resolveIncludesWithRoot call appends its own)
 	if len(resolved) > 0 && resolved[len(resolved)-1].Type == TokenEOF {
 		resolved = resolved[:len(resolved)-1]
 	}

@@ -7,9 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bamsammich/speclang/v4/internal/parser"
 	"github.com/bamsammich/speclang/v4/internal/v2parser"
-	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // MigratedFile represents a single migrated file with its path and v3 output.
@@ -79,16 +77,6 @@ func MigrateFile(path string) ([]MigratedFile, error) {
 		}
 
 		mf := MigratedFile{Path: f, Output: output}
-
-		// Validate output parses as v3.
-		// Skip for files with includes (parser.Parse doesn't resolve them)
-		// and for fragments (no spec wrapper).
-		if i == 0 && !hasIncludes {
-			if _, err := parser.Parse(output); err != nil {
-				mf.Warning = err.Error()
-			}
-		}
-
 		results = append(results, mf)
 	}
 
@@ -96,7 +84,7 @@ func MigrateFile(path string) ([]MigratedFile, error) {
 }
 
 // MigrateSpec transforms a v2 AST into formatted v3 spec text.
-func MigrateSpec(s *spec.Spec) (string, error) {
+func MigrateSpec(s *v2parser.Spec) (string, error) {
 	w := &v3Writer{}
 	w.emitSpec(s)
 	return w.String(), nil

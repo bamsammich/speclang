@@ -2,17 +2,13 @@ package v2parser
 
 import "github.com/bamsammich/speclang/v4/pkg/spec"
 
-// AST type aliases — all types are defined in pkg/spec and re-exported here
-// for backward compatibility.
-
-type Spec = spec.Spec
-type Scope = spec.Scope
+// Re-export stable types that are unchanged between v2 and v4.
+type Pos = spec.Pos
 type Service = spec.Service
 type Target = spec.Target
 type Model = spec.Model
 type Field = spec.Field
 type TypeExpr = spec.TypeExpr
-type Contract = spec.Contract
 type Action = spec.Action
 type Param = spec.Param
 type Call = spec.Call
@@ -45,3 +41,41 @@ type HasKeyExpr = spec.HasKeyExpr
 type RegexLiteral = spec.RegexLiteral
 type IfExpr = spec.IfExpr
 type ActionDef = spec.ActionDef
+
+// V2-specific types: these had different structure in v2 that was redesigned in v4.
+
+// Spec is the v2 top-level AST node.
+type Spec struct {
+	Pos            spec.Pos
+	Name           string
+	Description    string
+	AdapterConfigs map[string]map[string]spec.Expr
+	Services       []*spec.Service
+	Locators       map[string]string
+	Target         *spec.Target
+	Models         []*spec.Model
+	Actions        []*ActionDef
+	Scopes         []*Scope
+}
+
+// Scope is the v2 scope. In v2, scopes used a 'use' directive for the adapter.
+type Scope struct {
+	Pos        spec.Pos
+	Name       string
+	Use        string
+	Config     map[string]spec.Expr
+	Before     *spec.Block
+	After      *spec.Block
+	Contract   *Contract
+	Actions    []*ActionDef
+	Invariants []*spec.Invariant
+	Scenarios  []*spec.Scenario
+}
+
+// Contract is the v2/v3 contract with input/output field blocks and action name.
+type Contract struct {
+	Pos    spec.Pos
+	Input  []*spec.Field
+	Output []*spec.Field
+	Action string
+}

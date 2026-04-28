@@ -3,15 +3,16 @@ package v3parser
 import (
 	"fmt"
 	"path/filepath"
-
-	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
-// Import type aliases — all types are defined in pkg/spec and re-exported here
-// for backward compatibility.
+// ImportResolver converts an external schema file into v3 speclang AST nodes.
+// This is a v3-specific interface since v3 Scope differs from v4 Scope.
+type ImportResolver interface {
+	Resolve(absPath string) ([]*Model, []*Scope, error)
+}
 
-type ImportResolver = spec.ImportResolver
-type ImportRegistry = spec.ImportRegistry
+// ImportRegistry maps adapter names (e.g., "openapi") to their resolvers.
+type ImportRegistry map[string]ImportResolver
 
 // importResult wraps models and scopes returned by an import resolver
 // for dispatch by parseSpecMember.
@@ -61,6 +62,12 @@ func (p *parser) parseImport() (*importResult, error) {
 
 	// Resolve path relative to spec file directory
 	relPath := pathTok.Value
+
+	// Policy check 1: reject absolute import paths.
+	if filepath.IsAbs(relPath) {
+		return nil, p.errAt(pathTok, fmt.Sprintf("import path must be relative, not absolute: %q", relPath))
+	}
+
 	absPath := relPath
 	if p.fileDir != "" {
 		absPath = filepath.Join(p.fileDir, relPath)
@@ -68,6 +75,14 @@ func (p *parser) parseImport() (*importResult, error) {
 	resolved, err := filepath.Abs(absPath)
 	if err != nil {
 		return nil, p.errAt(pathTok, fmt.Sprintf("resolving import path: %v", err))
+	}
+
+	// Policy check 2: resolved path must remain inside the spec root directory.
+	if p.rootDir != "" {
+		rel, relErr := filepath.Rel(p.rootDir, resolved)
+		if relErr != nil || (len(rel) >= 2 && rel[:2] == "..") {
+			return nil, p.errAt(pathTok, fmt.Sprintf("import path %q escapes spec directory", relPath))
+		}
 	}
 
 	models, scopes, err := resolver.Resolve(resolved)

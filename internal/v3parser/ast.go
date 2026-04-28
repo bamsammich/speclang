@@ -2,18 +2,13 @@ package v3parser
 
 import "github.com/bamsammich/speclang/v4/pkg/spec"
 
-// AST type aliases — all types are defined in pkg/spec and re-exported here
-// for backward compatibility.
-
+// Re-export stable types that are unchanged between v3 and v4.
 type Pos = spec.Pos
-type Spec = spec.Spec
-type Scope = spec.Scope
 type Service = spec.Service
 type Target = spec.Target
 type Model = spec.Model
 type Field = spec.Field
 type TypeExpr = spec.TypeExpr
-type Contract = spec.Contract
 type Action = spec.Action
 type Param = spec.Param
 type Call = spec.Call
@@ -49,3 +44,46 @@ type ActionDef = spec.ActionDef
 type LetBinding = spec.LetBinding
 type ReturnStmt = spec.ReturnStmt
 type AdapterCall = spec.AdapterCall
+
+// V3-specific types: these had different structure in v3 that was redesigned in v4.
+
+// Spec is the v3 top-level AST node. In v3, specs required a "spec Name { }" wrapper.
+// Removed in v4: the file itself is the spec.
+type Spec struct {
+	Pos            spec.Pos
+	Name           string
+	Description    string
+	AdapterConfigs map[string]map[string]spec.Expr
+	Services       []*spec.Service
+	Locators       map[string]string
+	Target         *spec.Target
+	Models         []*spec.Model
+	Actions        []*ActionDef
+	Scopes         []*Scope
+}
+
+// Scope is the v3 scope. In v3, a scope owned exactly one Contract plus its
+// invariants, scenarios, and actions at scope level.
+// Redesigned in v4: scopes are optional groupings that own multiple contracts.
+type Scope struct {
+	Pos        spec.Pos
+	Name       string
+	Use        string              // v3: adapter name
+	Config     map[string]spec.Expr // v3: scope-level adapter config
+	Before     *spec.Block
+	After      *spec.Block
+	Contract   *Contract
+	Actions    []*ActionDef
+	Invariants []*spec.Invariant
+	Scenarios  []*spec.Scenario
+}
+
+// Contract is the v3 contract. In v3, it had separate input/output field blocks
+// and referenced a named action by string. Redesigned in v4 as a self-contained
+// behavioral promise with inline action block and return type.
+type Contract struct {
+	Pos    spec.Pos
+	Input  []*spec.Field
+	Output []*spec.Field
+	Action string // name of action to execute
+}

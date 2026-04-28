@@ -25,10 +25,10 @@ func TestLexTransferSpec(t *testing.T) {
 		t.Fatalf("expected EOF as last token, got %s", tokens[len(tokens)-1].Type)
 	}
 
-	// "spec AccountAPI {" should be first tokens
-	assertToken(t, tokens, 0, TokenSpec, "spec")
-	assertToken(t, tokens, 1, TokenIdent, "AccountAPI")
-	assertToken(t, tokens, 2, TokenLBrace, "{")
+	// v4: no "spec Name {" wrapper; file starts with adapter config block "http {"
+	// The legacy lexers lex this as identifiers
+	assertToken(t, tokens, 0, TokenIdent, "http")
+	assertToken(t, tokens, 1, TokenLBrace, "{")
 
 	// Check that "service" is lexed as a keyword (base_url: service(app))
 	svcIdx := findToken(tokens, TokenService)
@@ -59,7 +59,7 @@ func TestLexTransferSpec(t *testing.T) {
 
 	// Verify line tracking: "spec" should be line 1
 	if tokens[0].Line != 1 {
-		t.Errorf("expected 'spec' on line 1, got line %d", tokens[0].Line)
+		t.Errorf("expected first token on line 1, got line %d", tokens[0].Line)
 	}
 }
 

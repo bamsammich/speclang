@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bamsammich/speclang/v4/internal/parser"
 	"github.com/bamsammich/speclang/v4/internal/v2parser"
+	"github.com/bamsammich/speclang/v4/internal/v3parser"
 	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
@@ -85,7 +85,7 @@ func TestRoundTrip(t *testing.T) {
 				t.Fatalf("migrate: %v", err)
 			}
 
-			if _, err := parser.Parse(output); err != nil {
+			if _, err := v3parser.Parse(output); err != nil {
 				t.Errorf("v3 round-trip parse failed:\n%s\nerror: %v", output, err)
 			}
 		})
@@ -245,14 +245,14 @@ func TestTransformAssertion_ExpressionAssertion(t *testing.T) {
 func TestSynthesizeAction_HTTP_POST(t *testing.T) {
 	t.Parallel()
 
-	sc := &spec.Scope{
+	sc := &v2parser.Scope{
 		Name: "transfer",
 		Use:  "http",
 		Config: map[string]spec.Expr{
 			"method": spec.LiteralString{Value: "POST"},
 			"path":   spec.LiteralString{Value: "/api/transfer"},
 		},
-		Contract: &spec.Contract{
+		Contract: &v2parser.Contract{
 			Input: []*spec.Field{
 				{Name: "from", Type: spec.TypeExpr{Name: "string"}},
 				{Name: "amount", Type: spec.TypeExpr{Name: "int"}},
@@ -279,14 +279,14 @@ func TestSynthesizeAction_HTTP_POST(t *testing.T) {
 func TestSynthesizeAction_HTTP_GET(t *testing.T) {
 	t.Parallel()
 
-	sc := &spec.Scope{
+	sc := &v2parser.Scope{
 		Name: "fetch",
 		Use:  "http",
 		Config: map[string]spec.Expr{
 			"method": spec.LiteralString{Value: "GET"},
 			"path":   spec.LiteralString{Value: "/api/status"},
 		},
-		Contract: &spec.Contract{
+		Contract: &v2parser.Contract{
 			Input: []*spec.Field{
 				{Name: "id", Type: spec.TypeExpr{Name: "string"}},
 			},
@@ -304,14 +304,14 @@ func TestSynthesizeAction_HTTP_GET(t *testing.T) {
 func TestSynthesizeAction_Process(t *testing.T) {
 	t.Parallel()
 
-	sc := &spec.Scope{
+	sc := &v2parser.Scope{
 		Name: "cli_test",
 		Use:  "process",
 		Config: map[string]spec.Expr{
 			"command": spec.LiteralString{Value: "./specrun"},
 			"args":    spec.LiteralString{Value: "parse"},
 		},
-		Contract: &spec.Contract{
+		Contract: &v2parser.Contract{
 			Input: []*spec.Field{
 				{Name: "file", Type: spec.TypeExpr{Name: "string"}},
 			},
@@ -539,7 +539,7 @@ func TestHasSynthesizableConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			sc := &spec.Scope{Config: tt.config}
+			sc := &v2parser.Scope{Config: tt.config}
 			got := hasSynthesizableConfig(sc)
 			if got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)

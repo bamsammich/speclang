@@ -6,12 +6,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bamsammich/speclang/v4/internal/v2parser"
 	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
 // hasSynthesizableConfig returns true if the scope has v2 config that can be
 // converted into a synthesized action (method/path for HTTP, command for process).
-func hasSynthesizableConfig(sc *spec.Scope) bool {
+func hasSynthesizableConfig(sc *v2parser.Scope) bool {
 	if sc.Config == nil {
 		return false
 	}
@@ -30,7 +31,7 @@ type synthesizedAction struct {
 }
 
 // synthesizeAction builds a v3 action definition from v2 scope use+config+contract.
-func synthesizeAction(sc *spec.Scope) *synthesizedAction {
+func synthesizeAction(sc *v2parser.Scope) *synthesizedAction {
 	adapter := sc.Use
 	if adapter == "" {
 		adapter = "http"
@@ -144,7 +145,7 @@ func buildPathExpr(path string) string {
 }
 
 // buildProcessCallExpr builds: process.exec(field1, field2)
-func buildProcessCallExpr(sc *spec.Scope, params []*spec.Param) string {
+func buildProcessCallExpr(sc *v2parser.Scope, params []*spec.Param) string {
 	args := make([]string, len(params))
 	for i, p := range params {
 		args[i] = p.Name
@@ -211,7 +212,7 @@ func formatSelector(sel string) string {
 
 // inferAdapterConfigs extracts adapter config blocks from a v2 target.
 // Returns map[adapter_name] -> map[key] -> formatted_value_string.
-func inferAdapterConfigs(s *spec.Spec) map[string]map[string]string {
+func inferAdapterConfigs(s *v2parser.Spec) map[string]map[string]string {
 	configs := make(map[string]map[string]string)
 
 	if s.Target == nil || len(s.Target.Fields) == 0 {

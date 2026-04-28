@@ -13,6 +13,7 @@ func ParseFile(path string) (*Spec, error) {
 
 // ParseFileWithImports reads a spec file, resolves includes, and returns the AST.
 // The imports registry maps adapter names to import resolvers for the import directive.
+// Include and import paths are constrained to the directory of the top-level spec file.
 func ParseFileWithImports(path string, imports ImportRegistry) (*Spec, error) {
 	absRoot, err := filepath.Abs(path)
 	if err != nil {
@@ -24,7 +25,8 @@ func ParseFileWithImports(path string, imports ImportRegistry) (*Spec, error) {
 		return nil, err
 	}
 
-	resolved, err := resolveIncludes(tokens, filepath.Dir(absRoot), absRoot, nil)
+	rootDir := filepath.Dir(absRoot)
+	resolved, err := resolveIncludesWithRoot(tokens, rootDir, absRoot, rootDir, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +34,8 @@ func ParseFileWithImports(path string, imports ImportRegistry) (*Spec, error) {
 	p := &parser{
 		tokens:  resolved,
 		imports: imports,
-		fileDir: filepath.Dir(absRoot),
+		fileDir: rootDir,
+		rootDir: rootDir,
 	}
 	spec, err := p.parse()
 	if err != nil {
@@ -59,6 +62,7 @@ func Parse(source string) (*Spec, error) {
 type parser struct {
 	imports ImportRegistry
 	fileDir string
+	rootDir string // top-level spec directory; import paths must not escape it
 	tokens  []Token
 	pos     int
 }

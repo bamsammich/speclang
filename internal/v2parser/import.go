@@ -3,15 +3,15 @@ package v2parser
 import (
 	"fmt"
 	"path/filepath"
-
-	"github.com/bamsammich/speclang/v4/pkg/spec"
 )
 
-// Import type aliases — all types are defined in pkg/spec and re-exported here
-// for backward compatibility.
+// ImportResolver converts an external schema file into v2 speclang AST nodes.
+type ImportResolver interface {
+	Resolve(absPath string) ([]*Model, []*Scope, error)
+}
 
-type ImportResolver = spec.ImportResolver
-type ImportRegistry = spec.ImportRegistry
+// ImportRegistry maps adapter names (e.g., "openapi") to their resolvers.
+type ImportRegistry map[string]ImportResolver
 
 // importResult wraps models and scopes returned by an import resolver
 // for dispatch by parseSpecMember.
