@@ -70,19 +70,24 @@ func (a *failingResetAdapter) Reset() error {
 
 func minimalSpec(scopes []*spec.Scope) *spec.Spec {
 	return &spec.Spec{
-		Name:   "test",
 		Scopes: scopes,
 	}
 }
 
-func minimalContract() *spec.Contract {
+// minimalContractWithAction returns a v4 Contract with a single int input field
+// and an action block that calls http.post. Used in before/after lifecycle tests.
+func minimalContractWithAction(scenarios []*spec.Scenario) *spec.Contract {
 	return &spec.Contract{
-		Input: []*spec.Field{
+		Name: "test_contract",
+		Fields: []*spec.Field{
 			{Name: "x", Type: spec.TypeExpr{Name: "int"}},
 		},
-		Output: []*spec.Field{
-			{Name: "result", Type: spec.TypeExpr{Name: "int"}},
+		Action: &spec.ActionBlock{
+			Body: []spec.GivenStep{
+				&spec.AdapterCall{Adapter: "http", Method: "post"},
+			},
 		},
+		Scenarios: scenarios,
 	}
 }
 
@@ -96,7 +101,7 @@ func givenScenario(name string, value int) *spec.Scenario {
 		},
 		Then: &spec.Block{
 			Assertions: []*spec.Assertion{
-				{Target: "result", Expected: spec.LiteralInt{Value: value}},
+				{Expr: spec.LiteralBool{Value: true}},
 			},
 		},
 	}
@@ -115,13 +120,10 @@ func TestBeforeStepsExecuteBeforeGiven(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:     "test_scope",
-			Use:      "http",
-			Config:   map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
-			Before:   beforeBlock,
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("basic", 42),
+			Name:   "test_scope",
+			Before: beforeBlock,
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 42)}),
 			},
 		},
 	})
@@ -156,18 +158,17 @@ func TestBeforeResetBetweenScenarios(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:   "test_scope",
-			Use:    "http",
-			Config: map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Name: "test_scope",
 			Before: &spec.Block{
 				Steps: []spec.GivenStep{
 					&spec.Call{Namespace: "http", Method: "seed_data"},
 				},
 			},
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("first", 1),
-				givenScenario("second", 2),
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{
+					givenScenario("first", 1),
+					givenScenario("second", 2),
+				}),
 			},
 		},
 	})
@@ -200,17 +201,14 @@ func TestBeforeFailureReturnsError(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:   "test_scope",
-			Use:    "http",
-			Config: map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Name: "test_scope",
 			Before: &spec.Block{
 				Steps: []spec.GivenStep{
 					&spec.Call{Namespace: "http", Method: "setup"},
 				},
 			},
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("basic", 1),
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 1)}),
 			},
 		},
 	})
@@ -254,12 +252,11 @@ func TestBeforeBodyRefResolution(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:      "test_scope",
-			Use:       "http",
-			Config:    map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
-			Before:    beforeBlock,
-			Contract:  minimalContract(),
-			Scenarios: []*spec.Scenario{givenScenario("basic", 42)},
+			Name:   "test_scope",
+			Before: beforeBlock,
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 42)}),
+			},
 		},
 	})
 

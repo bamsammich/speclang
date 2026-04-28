@@ -28,53 +28,45 @@ func (a *optionalFieldAdapter) Call(_ context.Context, _ string, args json.RawMe
 }
 
 // buildOptionalFieldSpec creates a spec with one required field and one optional field.
-// The action posts the input as JSON so we can assert on it.
+// The action returns the input fields as output so we can assert on them.
 func buildOptionalFieldSpec(givenSteps []spec.GivenStep, thenAssertions []*spec.Assertion) *spec.Spec {
 	return &spec.Spec{
-		Name: "OptionalFieldTest",
 		Scopes: []*spec.Scope{{
 			Name: "test",
-			Contract: &spec.Contract{
-				Input: []*spec.Field{
-					{Name: "name", Type: spec.TypeExpr{Name: "string"}},
-					{Name: "description", Type: spec.TypeExpr{Name: "string", Optional: true}},
-				},
-				Output: []*spec.Field{
-					{Name: "name", Type: spec.TypeExpr{Name: "string"}},
-					{Name: "description", Type: spec.TypeExpr{Name: "string", Optional: true}},
-				},
-				Action: "run",
-			},
-			Actions: []*spec.ActionDef{{
+			Contracts: []*spec.Contract{{
 				Name: "run",
-				Params: []*spec.Param{
+				Fields: []*spec.Field{
 					{Name: "name", Type: spec.TypeExpr{Name: "string"}},
 					{Name: "description", Type: spec.TypeExpr{Name: "string", Optional: true}},
 				},
-				Body: []spec.GivenStep{
-					&spec.ReturnStmt{Value: spec.ObjectLiteral{
-						Fields: []*spec.ObjField{
-							{Key: "name", Value: spec.FieldRef{Path: "name"}},
-							{Key: "description", Value: spec.FieldRef{Path: "description"}},
-						},
-					}},
+				Action: &spec.ActionBlock{
+					Body: []spec.GivenStep{
+						&spec.ReturnStmt{Value: spec.ObjectLiteral{
+							Fields: []*spec.ObjField{
+								{Key: "name", Value: spec.FieldRef{Path: "name"}},
+								{Key: "description", Value: spec.FieldRef{Path: "description"}},
+							},
+						}},
+					},
 				},
-			}},
-			Scenarios: []*spec.Scenario{{
-				Name: "test_scenario",
-				Given: &spec.Block{
-					Steps: givenSteps,
-				},
-				Then: &spec.Block{
-					Assertions: thenAssertions,
-				},
+				Scenarios: []*spec.Scenario{{
+					Name: "test_scenario",
+					Given: &spec.Block{
+						Steps: givenSteps,
+					},
+					Then: &spec.Block{
+						Assertions: thenAssertions,
+					},
+				}},
 			}},
 		}},
 	}
 }
 
 // TestOptionalFieldDefaultsToNull verifies that omitting an optional field
-// from a given block causes it to default to null in the action context.
+// from a given block causes it to default to null in the action output.
+// The assertion uses output.description — the v4 rule is that bare names resolve
+// to contract input fields; output fields require the "output." prefix.
 func TestOptionalFieldDefaultsToNull(t *testing.T) {
 	t.Parallel()
 
@@ -83,10 +75,10 @@ func TestOptionalFieldDefaultsToNull(t *testing.T) {
 		[]spec.GivenStep{
 			&spec.Assignment{Path: "name", Value: spec.LiteralString{Value: "test"}},
 		},
-		// then: description should be null
+		// then: output.description should be null (omitted optional fields default to null)
 		[]*spec.Assertion{{
 			Expr: spec.BinaryOp{
-				Left:  spec.FieldRef{Path: "description"},
+				Left:  spec.FieldRef{Path: "output.description"},
 				Op:    "==",
 				Right: spec.LiteralNull{},
 			},
@@ -161,7 +153,7 @@ func TestMissingRequiredFieldReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing required field, got nil")
 	}
-	if !strings.Contains(err.Error(), "missing required input field") {
+	if !strings.Contains(err.Error(), "missing required field") {
 		t.Errorf("expected error about missing required field, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "name") {

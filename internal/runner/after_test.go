@@ -23,13 +23,10 @@ func TestAfterStepsExecuteAfterScenario(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:     "test_scope",
-			Use:      "http",
-			Config:   map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
-			After:    afterBlock,
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("basic", 42),
+			Name:  "test_scope",
+			After: afterBlock,
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 42)}),
 			},
 		},
 	})
@@ -42,9 +39,9 @@ func TestAfterStepsExecuteAfterScenario(t *testing.T) {
 	}
 
 	calls := adp.calls()
-	// Expect: reset, action:post (main), action:result (assertion query), action:cleanup (after)
-	if len(calls) < 4 {
-		t.Fatalf("expected at least 4 calls, got %d: %v", len(calls), calls)
+	// Expect: reset, action:post (main), action:cleanup (after)
+	if len(calls) < 3 {
+		t.Fatalf("expected at least 3 calls, got %d: %v", len(calls), calls)
 	}
 	if calls[0] != "reset" {
 		t.Errorf("expected first call to be 'reset', got %q", calls[0])
@@ -65,18 +62,17 @@ func TestAfterExecutesBetweenScenarios(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:   "test_scope",
-			Use:    "http",
-			Config: map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Name: "test_scope",
 			After: &spec.Block{
 				Steps: []spec.GivenStep{
 					&spec.Call{Namespace: "http", Method: "cleanup"},
 				},
 			},
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("first", 1),
-				givenScenario("second", 2),
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{
+					givenScenario("first", 1),
+					givenScenario("second", 2),
+				}),
 			},
 		},
 	})
@@ -109,17 +105,14 @@ func TestAfterExecutesOnFailure(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:   "test_scope",
-			Use:    "http",
-			Config: map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Name: "test_scope",
 			After: &spec.Block{
 				Steps: []spec.GivenStep{
 					&spec.Call{Namespace: "http", Method: "cleanup"},
 				},
 			},
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("basic", 1),
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 1)}),
 			},
 		},
 	})
@@ -151,17 +144,14 @@ func TestAfterErrorDoesNotAffectResult(t *testing.T) {
 
 	s := minimalSpec([]*spec.Scope{
 		{
-			Name:   "test_scope",
-			Use:    "http",
-			Config: map[string]spec.Expr{"method": spec.LiteralString{Value: "POST"}, "path": spec.LiteralString{Value: "/api/test"}},
+			Name: "test_scope",
 			After: &spec.Block{
 				Steps: []spec.GivenStep{
 					&spec.Call{Namespace: "http", Method: "cleanup"},
 				},
 			},
-			Contract: minimalContract(),
-			Scenarios: []*spec.Scenario{
-				givenScenario("basic", 42),
+			Contracts: []*spec.Contract{
+				minimalContractWithAction([]*spec.Scenario{givenScenario("basic", 42)}),
 			},
 		},
 	})

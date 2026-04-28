@@ -58,60 +58,57 @@ func TestGivenWithLetThenContractAction(t *testing.T) {
 	t.Parallel()
 
 	s := &spec.Spec{
-		Name: "GivenCallsTest",
 		Scopes: []*spec.Scope{{
 			Name: "test",
-			Contract: &spec.Contract{
-				Input:  []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Output: []*spec.Field{{Name: "name", Type: spec.TypeExpr{Name: "string"}}},
-				Action: "run",
-			},
-			Actions: []*spec.ActionDef{{
+			Contracts: []*spec.Contract{{
 				Name:   "run",
-				Params: []*spec.Param{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Body: []spec.GivenStep{
-					&spec.LetBinding{
-						Name: "result",
-						Value: spec.AdapterCall{
-							Adapter: "http",
-							Method:  "get",
-							Args: []spec.Expr{spec.ObjectLiteral{
-								Fields: []*spec.ObjField{{Key: "group_id", Value: spec.FieldRef{Path: "group_id"}}},
-							}},
-						},
-					},
-					&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
-				},
-			}},
-			Scenarios: []*spec.Scenario{{
-				Name: "dynamic_input",
-				Given: &spec.Block{
-					Steps: []spec.GivenStep{
-						// Setup call: create a resource, get its ID.
+				Fields: []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
+				Action: &spec.ActionBlock{
+					Body: []spec.GivenStep{
 						&spec.LetBinding{
-							Name: "r0",
+							Name: "result",
 							Value: spec.AdapterCall{
 								Adapter: "http",
-								Method:  "setup",
-								Args:    []spec.Expr{},
+								Method:  "get",
+								Args: []spec.Expr{spec.ObjectLiteral{
+									Fields: []*spec.ObjField{{Key: "group_id", Value: spec.FieldRef{Path: "group_id"}}},
+								}},
 							},
 						},
-						// Use the returned ID as contract input.
-						&spec.Assignment{
-							Path:  "group_id",
-							Value: spec.FieldRef{Path: "r0.id"},
-						},
+						&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
 					},
 				},
-				Then: &spec.Block{
-					Assertions: []*spec.Assertion{{
-						Expr: spec.BinaryOp{
-							Left:  spec.FieldRef{Path: "name"},
-							Op:    "==",
-							Right: spec.LiteralString{Value: "g123"},
+				Scenarios: []*spec.Scenario{{
+					Name: "dynamic_input",
+					Given: &spec.Block{
+						Steps: []spec.GivenStep{
+							// Setup call: create a resource, get its ID.
+							&spec.LetBinding{
+								Name: "r0",
+								Value: spec.AdapterCall{
+									Adapter: "http",
+									Method:  "setup",
+									Args:    []spec.Expr{},
+								},
+							},
+							// Use the returned ID as contract input.
+							&spec.Assignment{
+								Path:  "group_id",
+								Value: spec.FieldRef{Path: "r0.id"},
+							},
 						},
-					}},
-				},
+					},
+					Then: &spec.Block{
+						Assertions: []*spec.Assertion{{
+							// output.name — return-model field (v4: must be prefixed with "output.")
+							Expr: spec.BinaryOp{
+								Left:  spec.FieldRef{Path: "output.name"},
+								Op:    "==",
+								Right: spec.LiteralString{Value: "g123"},
+							},
+						}},
+					},
+				}},
 			}},
 		}},
 	}
@@ -133,49 +130,45 @@ func TestGivenWithLetErrorPropagation(t *testing.T) {
 	t.Parallel()
 
 	s := &spec.Spec{
-		Name: "GivenCallsErrorTest",
 		Scopes: []*spec.Scope{{
 			Name: "test",
-			Contract: &spec.Contract{
-				Input:  []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Output: []*spec.Field{{Name: "error", Type: spec.TypeExpr{Name: "string", Optional: true}}},
-				Action: "run",
-			},
-			Actions: []*spec.ActionDef{{
+			Contracts: []*spec.Contract{{
 				Name:   "run",
-				Params: []*spec.Param{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Body: []spec.GivenStep{
-					&spec.LetBinding{
-						Name: "result",
-						Value: spec.AdapterCall{
-							Adapter: "http",
-							Method:  "fail",
-							Args:    []spec.Expr{},
-						},
-					},
-					&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
-				},
-			}},
-			Scenarios: []*spec.Scenario{{
-				Name: "action_fails",
-				Given: &spec.Block{
-					Steps: []spec.GivenStep{
+				Fields: []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
+				Action: &spec.ActionBlock{
+					Body: []spec.GivenStep{
 						&spec.LetBinding{
-							Name:  "r0",
-							Value: spec.AdapterCall{Adapter: "http", Method: "setup"},
+							Name: "result",
+							Value: spec.AdapterCall{
+								Adapter: "http",
+								Method:  "fail",
+								Args:    []spec.Expr{},
+							},
 						},
-						&spec.Assignment{Path: "group_id", Value: spec.FieldRef{Path: "r0.id"}},
+						&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
 					},
 				},
-				Then: &spec.Block{
-					Assertions: []*spec.Assertion{{
-						Expr: spec.BinaryOp{
-							Left:  spec.FieldRef{Path: "error"},
-							Op:    "==",
-							Right: spec.LiteralNull{},
+				Scenarios: []*spec.Scenario{{
+					Name: "action_fails",
+					Given: &spec.Block{
+						Steps: []spec.GivenStep{
+							&spec.LetBinding{
+								Name:  "r0",
+								Value: spec.AdapterCall{Adapter: "http", Method: "setup"},
+							},
+							&spec.Assignment{Path: "group_id", Value: spec.FieldRef{Path: "r0.id"}},
 						},
-					}},
-				},
+					},
+					Then: &spec.Block{
+						Assertions: []*spec.Assertion{{
+							Expr: spec.BinaryOp{
+								Left:  spec.FieldRef{Path: "error"},
+								Op:    "==",
+								Right: spec.LiteralNull{},
+							},
+						}},
+					},
+				}},
 			}},
 		}},
 	}
@@ -191,55 +184,52 @@ func TestGivenWithLetErrorPropagation(t *testing.T) {
 	}
 }
 
-// TestGivenWithLetExpectedError verifies that when a contract action fails
-// with an expected error, the error pseudo-field assertion passes.
+// TestGivenWithLetExpectedError verifies that when a contract action returns an
+// output body containing an "error" field, it is accessible via output.error.
 func TestGivenWithLetExpectedError(t *testing.T) {
 	t.Parallel()
 
 	s := &spec.Spec{
-		Name: "GivenCallsExpectedErrorTest",
 		Scopes: []*spec.Scope{{
 			Name: "test",
-			Contract: &spec.Contract{
-				Input:  []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Output: []*spec.Field{{Name: "error", Type: spec.TypeExpr{Name: "string", Optional: true}}},
-				Action: "run",
-			},
-			Actions: []*spec.ActionDef{{
+			Contracts: []*spec.Contract{{
 				Name:   "run",
-				Params: []*spec.Param{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
-				Body: []spec.GivenStep{
-					&spec.LetBinding{
-						Name: "result",
-						Value: spec.AdapterCall{
-							Adapter: "http",
-							Method:  "fail",
-							Args:    []spec.Expr{},
-						},
-					},
-					&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
-				},
-			}},
-			Scenarios: []*spec.Scenario{{
-				Name: "expected_error",
-				Given: &spec.Block{
-					Steps: []spec.GivenStep{
+				Fields: []*spec.Field{{Name: "group_id", Type: spec.TypeExpr{Name: "string"}}},
+				Action: &spec.ActionBlock{
+					Body: []spec.GivenStep{
 						&spec.LetBinding{
-							Name:  "r0",
-							Value: spec.AdapterCall{Adapter: "http", Method: "setup"},
+							Name: "result",
+							Value: spec.AdapterCall{
+								Adapter: "http",
+								Method:  "fail",
+								Args:    []spec.Expr{},
+							},
 						},
-						&spec.Assignment{Path: "group_id", Value: spec.FieldRef{Path: "r0.id"}},
+						&spec.ReturnStmt{Value: spec.FieldRef{Path: "result"}},
 					},
 				},
-				Then: &spec.Block{
-					Assertions: []*spec.Assertion{{
-						Expr: spec.BinaryOp{
-							Left:  spec.FieldRef{Path: "error"},
-							Op:    "==",
-							Right: spec.LiteralString{Value: "expected_fail"},
+				Scenarios: []*spec.Scenario{{
+					Name: "expected_error",
+					Given: &spec.Block{
+						Steps: []spec.GivenStep{
+							&spec.LetBinding{
+								Name:  "r0",
+								Value: spec.AdapterCall{Adapter: "http", Method: "setup"},
+							},
+							&spec.Assignment{Path: "group_id", Value: spec.FieldRef{Path: "r0.id"}},
 						},
-					}},
-				},
+					},
+					Then: &spec.Block{
+						Assertions: []*spec.Assertion{{
+							// output.error — "error" is in the action response body (v4: must be prefixed)
+							Expr: spec.BinaryOp{
+								Left:  spec.FieldRef{Path: "output.error"},
+								Op:    "==",
+								Right: spec.LiteralString{Value: "expected_fail"},
+							},
+						}},
+					},
+				}},
 			}},
 		}},
 	}

@@ -116,36 +116,58 @@ func TestVerify_ScopeResults(t *testing.T) {
 func TestRelationalAssertions(t *testing.T) {
 	t.Parallel()
 
-	// Build a spec with relational then-assertions programmatically.
-	spec := &parser.Spec{
-		Name: "RelTest",
+	// Build a spec with relational expression assertions (v4 style).
+	// The contract action calls http.post and returns the result.
+	// The then-block asserts sum == a + b using expression syntax.
+	sp := &parser.Spec{
 		Scopes: []*parser.Scope{{
 			Name: "math",
-			Use:  "http",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/add"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "relational",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "a", Value: parser.LiteralInt{Value: 7}},
-						&parser.Assignment{Path: "b", Value: parser.LiteralInt{Value: 3}},
+			Contracts: []*parser.Contract{{
+				Name: "add",
+				Fields: []*parser.Field{
+					{Name: "a", Type: parser.TypeExpr{Name: "int"}},
+					{Name: "b", Type: parser.TypeExpr{Name: "int"}},
+				},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.LetBinding{
+							Name: "resp",
+							Value: parser.AdapterCall{
+								Adapter: "http",
+								Method:  "post",
+								Args:    []parser.Expr{parser.LiteralString{Value: "/add"}, parser.ObjectLiteral{Fields: []*parser.ObjField{{Key: "a", Value: parser.FieldRef{Path: "a"}}, {Key: "b", Value: parser.FieldRef{Path: "b"}}}}},
+							},
+						},
+						&parser.ReturnStmt{Value: parser.FieldRef{Path: "resp"}},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{
-							Target: "sum",
-							Expected: parser.BinaryOp{
-								Left:  parser.FieldRef{Path: "a"},
-								Op:    "+",
-								Right: parser.FieldRef{Path: "b"},
+				Scenarios: []*parser.Scenario{{
+					Name: "relational",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "a", Value: parser.LiteralInt{Value: 7}},
+							&parser.Assignment{Path: "b", Value: parser.LiteralInt{Value: 3}},
+						},
+					},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{
+								// output.sum == a + b:
+								//   "output.sum" — the return-model field (v4: must be prefixed)
+								//   "a" and "b" — contract input fields (v4: bare refs resolve to input)
+								Expr: parser.BinaryOp{
+									Left: parser.FieldRef{Path: "output.sum"},
+									Op:   "==",
+									Right: parser.BinaryOp{
+										Left:  parser.FieldRef{Path: "a"},
+										Op:    "+",
+										Right: parser.FieldRef{Path: "b"},
+									},
+								},
 							},
 						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -174,7 +196,7 @@ func TestRelationalAssertions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := runner.New(spec, map[string]adapter.Adapter{"http": adp}, 1)
+	r := runner.New(sp, map[string]adapter.Adapter{"http": adp}, 1)
 	res, err := r.Verify(context.Background())
 	if err != nil {
 		t.Fatalf("verify: %v", err)
@@ -187,31 +209,41 @@ func TestRelationalAssertions(t *testing.T) {
 func TestEnvRefInGivenBlock(t *testing.T) {
 	t.Setenv("SPECTEST_RUNNER_VAL", "resolved_value")
 
+	// In v4, env refs are resolved when the given block assigns input fields.
+	// The contract action forwards the input field to the mock adapter.
 	sp := &parser.Spec{
-		Name: "EnvRefTest",
 		Scopes: []*parser.Scope{{
-			Name:   "env_scope",
-			Use:    "test",
-			Config: map[string]parser.Expr{},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "env_given",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{
-							Path:  "file",
-							Value: parser.EnvRef{Var: "SPECTEST_RUNNER_VAL", Default: "fallback"},
+			Name: "env_scope",
+			Contracts: []*parser.Contract{{
+				Name:   "run",
+				Fields: []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.ReturnStmt{
+							Value: parser.AdapterCall{
+								Adapter: "test",
+								Method:  "exec",
+								Args:    []parser.Expr{parser.FieldRef{Path: "file"}},
+							},
 						},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "env_given",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{
+								Path:  "file",
+								Value: parser.EnvRef{Var: "SPECTEST_RUNNER_VAL", Default: "fallback"},
+							},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.LiteralBool{Value: true}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -223,7 +255,7 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	// Find the exec call (first call). The assertion query is a second call.
+	// The contract action should have called exec with the resolved env value.
 	if len(mock.calls) < 1 {
 		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
@@ -234,7 +266,7 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 	if !json.Valid(execCall.Args) {
 		t.Fatalf("invalid JSON in action args: %s", args)
 	}
-	// The process adapter receives exec args as a JSON array.
+	// The mock adapter receives exec args as a JSON array.
 	// The input field "file" should have the resolved env value.
 	var execArgs []any
 	if err := json.Unmarshal(execCall.Args, &execArgs); err != nil {
@@ -252,36 +284,47 @@ func TestEnvRefInGivenBlock(t *testing.T) {
 	}
 }
 
-func TestEnvRefInConfigBlock(t *testing.T) {
+func TestEnvRefInActionBody(t *testing.T) {
 	t.Setenv("SPECTEST_CONFIG_ARGS", "parse")
 
+	// In v4, env refs in contract action bodies are resolved at execution time.
+	// The contract action passes an env-resolved value as the first arg to exec.
 	sp := &parser.Spec{
-		Name: "EnvConfigTest",
 		Scopes: []*parser.Scope{{
 			Name: "env_config",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"args": parser.EnvRef{Var: "SPECTEST_CONFIG_ARGS", Default: "help"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "env_config_scenario",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{
-							Path:  "file",
-							Value: parser.LiteralString{Value: "test.spec"},
+			Contracts: []*parser.Contract{{
+				Name:   "run",
+				Fields: []*parser.Field{{Name: "file", Type: parser.TypeExpr{Name: "string"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.ReturnStmt{
+							Value: parser.AdapterCall{
+								Adapter: "test",
+								Method:  "exec",
+								Args: []parser.Expr{
+									parser.EnvRef{Var: "SPECTEST_CONFIG_ARGS", Default: "help"},
+									parser.FieldRef{Path: "file"},
+								},
+							},
 						},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "env_config_scenario",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{
+								Path:  "file",
+								Value: parser.LiteralString{Value: "test.spec"},
+							},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.LiteralBool{Value: true}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -293,12 +336,11 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	// Find the exec call (first call). The assertion query is a second call.
 	if len(mock.calls) < 1 {
 		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
 
-	// The exec args should start with "parse" from the env-resolved config.
+	// The exec args should start with "parse" from the env-resolved value.
 	var execArgs []any
 	if err := json.Unmarshal(mock.calls[0].Args, &execArgs); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
@@ -314,39 +356,46 @@ func TestEnvRefInConfigBlock(t *testing.T) {
 func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 	t.Parallel()
 
+	// In v4, multiple args are passed directly in the action body.
+	// The action calls exec with an array of string args plus the input field.
 	sp := &parser.Spec{
-		Name: "ArrayArgsTest",
 		Scopes: []*parser.Scope{{
 			Name: "arr_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"args": parser.ArrayLiteral{
-					Elements: []parser.Expr{
-						parser.LiteralString{Value: "verify"},
-						parser.LiteralString{Value: "--json"},
-						parser.LiteralString{Value: "path with spaces/file.spec"},
-					},
-				},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "array_args_scenario",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{
-							Path:  "x",
-							Value: parser.LiteralInt{Value: 1},
+			Contracts: []*parser.Contract{{
+				Name:   "run",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.ReturnStmt{
+							Value: parser.AdapterCall{
+								Adapter: "test",
+								Method:  "exec",
+								Args: []parser.Expr{
+									parser.LiteralString{Value: "verify"},
+									parser.LiteralString{Value: "--json"},
+									parser.LiteralString{Value: "path with spaces/file.spec"},
+									parser.FieldRef{Path: "x"},
+								},
+							},
 						},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "result", Expected: parser.LiteralString{Value: "ok"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "array_args_scenario",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{
+								Path:  "x",
+								Value: parser.LiteralInt{Value: 1},
+							},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.LiteralBool{Value: true}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -358,7 +407,6 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 
-	// Find the exec call (first call). The assertion query is a second call.
 	if len(mock.calls) < 1 {
 		t.Fatalf("expected at least 1 action call, got %d", len(mock.calls))
 	}
@@ -368,7 +416,7 @@ func TestCollectExecArgs_ArrayConfig(t *testing.T) {
 		t.Fatalf("unmarshal args: %v", err)
 	}
 
-	// Array form: 3 config args + 1 input field = 4 total
+	// 3 string args + 1 input field = 4 total
 	if len(execArgs) != 4 {
 		t.Fatalf("expected 4 exec args, got %d: %v", len(execArgs), execArgs)
 	}
@@ -407,31 +455,31 @@ func TestLocatorResolution(t *testing.T) {
 	t.Parallel()
 
 	spec := &parser.Spec{
-		Name: "LocatorTest",
 		Locators: map[string]string{
 			"welcome": "[data-testid=welcome]",
 		},
 		Scopes: []*parser.Scope{{
-			Name:   "ui",
-			Use:    "playwright",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
-				Name: "check_visible",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
-					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{
-							Target:   "welcome",
-							Plugin:   "playwright",
-							Property: "visible",
-							Expected: parser.LiteralBool{Value: true},
+			Name: "ui",
+			Contracts: []*parser.Contract{{
+				Name: "check_welcome",
+				Scenarios: []*parser.Scenario{{
+					Name: "check_visible",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
 						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{
+								Target:   "welcome",
+								Plugin:   "playwright",
+								Property: "visible",
+								Expected: parser.LiteralBool{Value: true},
+							},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -469,29 +517,29 @@ func TestLocatorResolution_MissingLocator(t *testing.T) {
 	t.Parallel()
 
 	spec := &parser.Spec{
-		Name: "LocatorTest",
 		// No locators defined
 		Scopes: []*parser.Scope{{
-			Name:   "ui",
-			Use:    "playwright",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
-				Name: "missing",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
-					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{
-							Target:   "nonexistent",
-							Plugin:   "playwright",
-							Property: "visible",
-							Expected: parser.LiteralBool{Value: true},
+			Name: "ui",
+			Contracts: []*parser.Contract{{
+				Name: "check_missing",
+				Scenarios: []*parser.Scenario{{
+					Name: "missing",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
 						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{
+								Target:   "nonexistent",
+								Plugin:   "playwright",
+								Property: "visible",
+								Expected: parser.LiteralBool{Value: true},
+							},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -509,54 +557,54 @@ func TestGivenStepExecution(t *testing.T) {
 
 	// Spec with mixed given steps: calls and assignments, executed in order.
 	spec := &parser.Spec{
-		Name: "StepTest",
 		Locators: map[string]string{
 			"username": "[data-testid=username]",
 			"submit":   "[data-testid=submit]",
 			"welcome":  "[data-testid=welcome]",
 		},
 		Scopes: []*parser.Scope{{
-			Name:   "login",
-			Use:    "playwright",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
+			Name: "login",
+			Contracts: []*parser.Contract{{
 				Name: "login_flow",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						// playwright.fill(username, "alice")
-						&parser.Call{
-							Namespace: "playwright",
-							Method:    "fill",
-							Args: []parser.Expr{
-								parser.FieldRef{Path: "username"},
-								parser.LiteralString{Value: "alice"},
+				Scenarios: []*parser.Scenario{{
+					Name: "login_flow",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							// playwright.fill(username, "alice")
+							&parser.Call{
+								Namespace: "playwright",
+								Method:    "fill",
+								Args: []parser.Expr{
+									parser.FieldRef{Path: "username"},
+									parser.LiteralString{Value: "alice"},
+								},
 							},
-						},
-						// user: "alice"
-						&parser.Assignment{
-							Path:  "user",
-							Value: parser.LiteralString{Value: "alice"},
-						},
-						// playwright.click(submit)
-						&parser.Call{
-							Namespace: "playwright",
-							Method:    "click",
-							Args: []parser.Expr{
-								parser.FieldRef{Path: "submit"},
+							// user: "alice"
+							&parser.Assignment{
+								Path:  "user",
+								Value: parser.LiteralString{Value: "alice"},
+							},
+							// playwright.click(submit)
+							&parser.Call{
+								Namespace: "playwright",
+								Method:    "click",
+								Args: []parser.Expr{
+									parser.FieldRef{Path: "submit"},
+								},
 							},
 						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{
-							Target:   "welcome",
-							Plugin:   "playwright",
-							Property: "visible",
-							Expected: parser.LiteralBool{Value: true},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{
+								Target:   "welcome",
+								Plugin:   "playwright",
+								Property: "visible",
+								Expected: parser.LiteralBool{Value: true},
+							},
 						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -627,48 +675,53 @@ func TestMultiStepHTTPGivenBlock(t *testing.T) {
 	t.Parallel()
 
 	// Spec with multi-step HTTP given block: POST to create, then GET to verify.
+	// In v4, the contract action sequences the HTTP calls and returns the result.
 	spec := &parser.Spec{
-		Name: "MultiStepHTTP",
 		Scopes: []*parser.Scope{{
-			Name:   "workflow",
-			Use:    "http",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
-				Name: "create_then_verify",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						// http.post("/api/resources", { name: "widget" })
-						&parser.Call{
-							Namespace: "http",
-							Method:    "post",
-							Args: []parser.Expr{
-								parser.LiteralString{Value: "/api/resources"},
-								parser.ObjectLiteral{Fields: []*parser.ObjField{
-									{Key: "name", Value: parser.LiteralString{Value: "widget"}},
-								}},
+			Name: "workflow",
+			Contracts: []*parser.Contract{{
+				Name: "create_resource",
+				Scenarios: []*parser.Scenario{{
+					Name: "create_then_verify",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							// http.post("/api/resources", { name: "widget" })
+							&parser.Call{
+								Namespace: "http",
+								Method:    "post",
+								Args: []parser.Expr{
+									parser.LiteralString{Value: "/api/resources"},
+									parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "name", Value: parser.LiteralString{Value: "widget"}},
+									}},
+								},
+							},
+							// http.get("/api/resources/1")
+							&parser.LetBinding{
+								Name: "item",
+								Value: parser.AdapterCall{
+									Adapter: "http",
+									Method:  "get",
+									Args:    []parser.Expr{parser.LiteralString{Value: "/api/resources/1"}},
+								},
 							},
 						},
-						// http.get("/api/resources/1")
-						&parser.Call{
-							Namespace: "http",
-							Method:    "get",
-							Args: []parser.Expr{
-								parser.LiteralString{Value: "/api/resources/1"},
-							},
-						},
-						// name: "widget" (for assertion evaluation)
-						&parser.Assignment{
-							Path:  "name",
-							Value: parser.LiteralString{Value: "widget"},
+					},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "item.name"},
+								Op:    "==",
+								Right: parser.LiteralString{Value: "widget"},
+							}},
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "item.id"},
+								Op:    "==",
+								Right: parser.LiteralFloat{Value: 1},
+							}},
 						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "name", Expected: parser.FieldRef{Path: "name"}},
-						{Target: "id", Expected: parser.LiteralInt{Value: 1}},
-					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -730,39 +783,44 @@ func TestMultiStepHTTPHeaderPersistence(t *testing.T) {
 	t.Parallel()
 
 	spec := &parser.Spec{
-		Name: "HeaderPersist",
 		Scopes: []*parser.Scope{{
-			Name:   "auth_flow",
-			Use:    "http",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
-				Name: "headers_persist",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						// http.header("Authorization", "Bearer tok")
-						&parser.Call{
-							Namespace: "http",
-							Method:    "header",
-							Args: []parser.Expr{
-								parser.LiteralString{Value: "Authorization"},
-								parser.LiteralString{Value: "Bearer tok"},
+			Name: "auth_flow",
+			Contracts: []*parser.Contract{{
+				Name: "auth_check",
+				Scenarios: []*parser.Scenario{{
+					Name: "headers_persist",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							// http.header("Authorization", "Bearer tok")
+							&parser.Call{
+								Namespace: "http",
+								Method:    "header",
+								Args: []parser.Expr{
+									parser.LiteralString{Value: "Authorization"},
+									parser.LiteralString{Value: "Bearer tok"},
+								},
 							},
-						},
-						// http.get("/api/echo-headers")
-						&parser.Call{
-							Namespace: "http",
-							Method:    "get",
-							Args: []parser.Expr{
-								parser.LiteralString{Value: "/api/echo-headers"},
+							// http.get("/api/echo-headers") — store result in echo
+							&parser.LetBinding{
+								Name: "echo",
+								Value: parser.AdapterCall{
+									Adapter: "http",
+									Method:  "get",
+									Args:    []parser.Expr{parser.LiteralString{Value: "/api/echo-headers"}},
+								},
 							},
 						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "auth", Expected: parser.LiteralString{Value: "Bearer tok"}},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								Left:  parser.FieldRef{Path: "echo.auth"},
+								Op:    "==",
+								Right: parser.LiteralString{Value: "Bearer tok"},
+							}},
+						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -829,9 +887,8 @@ func TestVerifyTransferSpec(t *testing.T) {
 		}
 	}
 
-	if res.Spec != "AccountAPI" {
-		t.Errorf("expected spec name AccountAPI, got %q", res.Spec)
-	}
+	// v4 has no spec name (filename is identity); res.Spec is empty
+	_ = res.Spec
 	if res.ScenariosRun != 3 {
 		t.Errorf("expected 3 scenarios run, got %d", res.ScenariosRun)
 	}
@@ -862,39 +919,35 @@ func TestErrorPseudoField_GivenScenario_ExpectedError(t *testing.T) {
 	t.Parallel()
 
 	// Scenario expects an error and the adapter returns one — should pass.
+	// The contract action calls the adapter which returns {ok: false, error: "..."}.
 	spec := &parser.Spec{
-		Name: "ErrorTest",
 		Scopes: []*parser.Scope{{
 			Name: "fail_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/fail"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input: []*parser.Field{
-					{Name: "x", Type: parser.TypeExpr{Name: "int"}},
-				},
-				// No "error" in output — triggers pseudo-field behavior.
-				Output: []*parser.Field{
-					{Name: "result", Type: parser.TypeExpr{Name: "string"}},
-				},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "expect_failure",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				// No ReturnType with "error" field — triggers pseudo-field behavior.
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{
-							Target:   "error",
-							Expected: parser.LiteralString{Value: "something went wrong"},
+				Scenarios: []*parser.Scenario{{
+					Name: "expect_failure",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
 						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{
+								Target:   "error",
+								Expected: parser.LiteralString{Value: "something went wrong"},
+							},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -918,30 +971,29 @@ func TestErrorPseudoField_GivenScenario_ExpectedNull(t *testing.T) {
 
 	// Scenario asserts error: null but no error occurs — should pass.
 	spec := &parser.Spec{
-		Name: "ErrorNullTest",
 		Scopes: []*parser.Scope{{
 			Name: "ok_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/ok"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "no_error",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralNull{}},
+				Scenarios: []*parser.Scenario{{
+					Name: "no_error",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralNull{}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -962,30 +1014,29 @@ func TestErrorPseudoField_GivenScenario_UnexpectedError(t *testing.T) {
 
 	// Scenario asserts error: null but an error occurs — should fail the assertion.
 	spec := &parser.Spec{
-		Name: "ErrorUnexpectedTest",
 		Scopes: []*parser.Scope{{
 			Name: "err_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/err"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "unexpected_error",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralNull{}},
+				Scenarios: []*parser.Scenario{{
+					Name: "unexpected_error",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralNull{}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -1009,26 +1060,25 @@ func TestErrorPseudoField_NoAssertion_ActionFails(t *testing.T) {
 
 	// Action fails but there's no error assertion — should be a test error.
 	spec := &parser.Spec{
-		Name: "ErrorNoAssertTest",
 		Scopes: []*parser.Scope{{
 			Name: "err_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/err"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "no_error_assertion",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				// No then block with error assertion.
+				Scenarios: []*parser.Scenario{{
+					Name: "no_error_assertion",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
+					},
+					// No then block with error assertion.
+				}},
 			}},
 		}},
 	}
@@ -1046,30 +1096,29 @@ func TestErrorPseudoField_WrongMessage(t *testing.T) {
 
 	// Scenario expects error "foo" but gets "bar" — should fail assertion.
 	spec := &parser.Spec{
-		Name: "ErrorMismatchTest",
 		Scopes: []*parser.Scope{{
 			Name: "mismatch_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/fail"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "wrong_error",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "expected_error"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "wrong_error",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralString{Value: "expected_error"}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -1096,30 +1145,29 @@ func TestErrorPseudoField_ExpectedErrorButNoneOccurred(t *testing.T) {
 
 	// Scenario asserts error: "foo" but no error occurs — should fail.
 	spec := &parser.Spec{
-		Name: "ErrorExpectedButNone",
 		Scopes: []*parser.Scope{{
 			Name: "no_err_scope",
-			Use:  "test",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/ok"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input:  []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
-				Output: []*parser.Field{{Name: "result", Type: parser.TypeExpr{Name: "string"}}},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "expected_error_missing",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+			Contracts: []*parser.Contract{{
+				Name:   "test_contract",
+				Fields: []*parser.Field{{Name: "x", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.AdapterCall{Adapter: "test", Method: "call"},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "should_fail"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "expected_error_missing",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralString{Value: "should_fail"}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
@@ -1140,31 +1188,31 @@ func TestErrorPseudoField_WithGivenCalls(t *testing.T) {
 
 	// Test error assertion with mixed given steps (calls + assignments).
 	spec := &parser.Spec{
-		Name: "ErrorCallTest",
 		Locators: map[string]string{
 			"submit": "[data-testid=submit]",
 		},
 		Scopes: []*parser.Scope{{
-			Name:   "call_scope",
-			Use:    "test",
-			Config: map[string]parser.Expr{},
-			Scenarios: []*parser.Scenario{{
-				Name: "call_fails",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
-						&parser.Call{
-							Namespace: "test",
-							Method:    "click",
-							Args:      []parser.Expr{parser.FieldRef{Path: "submit"}},
+			Name: "call_scope",
+			Contracts: []*parser.Contract{{
+				Name: "click_contract",
+				Scenarios: []*parser.Scenario{{
+					Name: "call_fails",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "x", Value: parser.LiteralInt{Value: 1}},
+							&parser.Call{
+								Namespace: "test",
+								Method:    "click",
+								Args:      []parser.Expr{parser.FieldRef{Path: "submit"}},
+							},
 						},
 					},
-				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "click failed"}},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Target: "error", Expected: parser.LiteralString{Value: "click failed"}},
+						},
 					},
-				},
+				}},
 			}},
 		}},
 	}
@@ -1183,38 +1231,51 @@ func TestErrorPseudoField_WithGivenCalls(t *testing.T) {
 func TestErrorPseudoField_ContractErrorField_NotIntercepted(t *testing.T) {
 	t.Parallel()
 
-	// When "error" is a contract output field, it should go through the adapter's
-	// Assert method, not the pseudo-field handler. This test verifies the transfer
-	// spec pattern still works.
+	// When "error" is in the action output body (not a declared return-type field),
+	// it is accessible via output.error — not bare "error" which resolves to the
+	// pseudo-field (action-level failure) or input (neither applies here).
 	spec := &parser.Spec{
-		Name: "ContractErrorTest",
 		Scopes: []*parser.Scope{{
 			Name: "transfer",
-			Use:  "http",
-			Config: map[string]parser.Expr{
-				"path":   parser.LiteralString{Value: "/transfer"},
-				"method": parser.LiteralString{Value: "POST"},
-			},
-			Contract: &parser.Contract{
-				Input: []*parser.Field{
-					{Name: "amount", Type: parser.TypeExpr{Name: "int"}},
-				},
-				Output: []*parser.Field{
-					{Name: "error", Type: parser.TypeExpr{Name: "string", Optional: true}},
-				},
-			},
-			Scenarios: []*parser.Scenario{{
-				Name: "check_error_field",
-				Given: &parser.Block{
-					Steps: []parser.GivenStep{
-						&parser.Assignment{Path: "amount", Value: parser.LiteralInt{Value: -1}},
+			Contracts: []*parser.Contract{{
+				Name:   "do_transfer",
+				Fields: []*parser.Field{{Name: "amount", Type: parser.TypeExpr{Name: "int"}}},
+				Action: &parser.ActionBlock{
+					Body: []parser.GivenStep{
+						&parser.LetBinding{
+							Name: "resp",
+							Value: parser.AdapterCall{
+								Adapter: "http",
+								Method:  "post",
+								Args: []parser.Expr{
+									parser.LiteralString{Value: "/transfer"},
+									parser.ObjectLiteral{Fields: []*parser.ObjField{
+										{Key: "amount", Value: parser.FieldRef{Path: "amount"}},
+									}},
+								},
+							},
+						},
+						&parser.ReturnStmt{Value: parser.FieldRef{Path: "resp"}},
 					},
 				},
-				Then: &parser.Block{
-					Assertions: []*parser.Assertion{
-						{Target: "error", Expected: parser.LiteralString{Value: "invalid_amount"}},
+				Scenarios: []*parser.Scenario{{
+					Name: "check_error_field",
+					Given: &parser.Block{
+						Steps: []parser.GivenStep{
+							&parser.Assignment{Path: "amount", Value: parser.LiteralInt{Value: -1}},
+						},
 					},
-				},
+					Then: &parser.Block{
+						Assertions: []*parser.Assertion{
+							{Expr: parser.BinaryOp{
+								// output.error — "error" is in the response body (v4: must use output. prefix)
+								Left:  parser.FieldRef{Path: "output.error"},
+								Op:    "==",
+								Right: parser.LiteralString{Value: "invalid_amount"},
+							}},
+						},
+					},
+				}},
 			}},
 		}},
 	}
