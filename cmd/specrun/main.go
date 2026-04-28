@@ -16,8 +16,9 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/speclang/v4/internal/adapter"
-	"github.com/bamsammich/speclang/v4/internal/migrate"
 	"github.com/bamsammich/speclang/v4/internal/generator"
+	"github.com/bamsammich/speclang/v4/internal/migrate"
+	"github.com/bamsammich/speclang/v4/internal/parser"
 	"github.com/bamsammich/speclang/v4/internal/infra"
 	"github.com/bamsammich/speclang/v4/internal/openapi"
 	protoresolver "github.com/bamsammich/speclang/v4/internal/proto"
@@ -26,6 +27,162 @@ import (
 	"github.com/bamsammich/speclang/v4/pkg/specrun"
 	"gopkg.in/yaml.v3"
 )
+
+// expandGlobs resolves a list of patterns (which may include ** for recursive
+// matching) into a sorted, deduplicated list of file paths. Patterns without **
+// are handled by filepath.Glob. Patterns containing ** are resolved via
+// filepath.Walk with per-segment filepath.Match, keeping stdlib-only.
+func expandGlobs(patterns []string) ([]string, error) {
+	seen := make(map[string]struct{})
+	var files []string
+
+	for _, pat := range patterns {
+		if !strings.Contains(pat, "**") {
+			matches, err := filepath.Glob(pat)
+			if err != nil {
+				return nil, fmt.Errorf("invalid glob pattern %q: %w", pat, err)
+			}
+			for _, m := range matches {
+				abs, err := filepath.Abs(m)
+				if err != nil {
+					return nil, fmt.Errorf("abs path %q: %w", m, err)
+				}
+				if _, dup := seen[abs]; !dup {
+					seen[abs] = struct{}{}
+					files = append(files, abs)
+				}
+			}
+			continue
+		}
+
+		// Recursive glob: walk from the non-glob prefix.
+		root, rest := splitDoublestar(pat)
+		if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				return relErr
+			}
+			ok, matchErr := matchDoublestar(rest, rel)
+			if matchErr != nil {
+				return fmt.Errorf("invalid glob segment %q: %w", rest, matchErr)
+			}
+			if !ok {
+				return nil
+			}
+			abs, absErr := filepath.Abs(path)
+			if absErr != nil {
+				return absErr
+			}
+			if _, dup := seen[abs]; !dup {
+				seen[abs] = struct{}{}
+				files = append(files, abs)
+			}
+			return nil
+		}); err != nil {
+			// A walk error on a non-existent root means zero matches, not a fatal error.
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("walk %q: %w", root, err)
+		}
+	}
+
+	return files, nil
+}
+
+// splitDoublestar returns (root, rest) where root is the longest path prefix
+// before the first path segment containing ** and rest is the remainder of the
+// pattern (relative to root). Examples:
+//
+//	"specs/**/*.spec"         → ("specs", "**/*.spec")
+//	"a/b/**/*.spec"           → ("a/b", "**/*.spec")
+//	"**/*.spec"               → (".", "**/*.spec")
+//	"/abs/path/**/*.spec"     → ("/abs/path", "**/*.spec")
+func splitDoublestar(pat string) (root, rest string) {
+	// Use os.PathSeparator-normalised slashes, but track whether path is absolute.
+	slashPat := filepath.ToSlash(pat)
+	segments := strings.Split(slashPat, "/")
+
+	for i, seg := range segments {
+		if !strings.Contains(seg, "**") {
+			continue
+		}
+		if i == 0 {
+			return ".", strings.Join(segments, "/")
+		}
+		// Re-join the prefix segments back into a native path, preserving
+		// any leading separator for absolute patterns.
+		prefix := strings.Join(segments[:i], "/")
+		return filepath.FromSlash(prefix), strings.Join(segments[i:], "/")
+	}
+	// No ** found — shouldn't happen given caller check, but be safe.
+	return filepath.Dir(pat), filepath.Base(pat)
+}
+
+// matchDoublestar reports whether rel (a slash-separated path relative to the
+// walk root) matches the glob pattern pat, which may contain ** segments.
+// ** matches zero or more path segments.
+func matchDoublestar(pat, rel string) (bool, error) {
+	// Normalise to forward slashes for uniform handling.
+	pat = filepath.ToSlash(pat)
+	rel = filepath.ToSlash(rel)
+
+	patSegs := strings.Split(pat, "/")
+	relSegs := strings.Split(rel, "/")
+
+	return matchSegments(patSegs, relSegs)
+}
+
+// matchSegments is the recursive worker for matchDoublestar.
+func matchSegments(patSegs, relSegs []string) (bool, error) {
+	for len(patSegs) > 0 && len(relSegs) > 0 {
+		p := patSegs[0]
+		if p == "**" {
+			// ** can consume zero or more segments. Try all possibilities.
+			for skip := 0; skip <= len(relSegs); skip++ {
+				ok, err := matchSegments(patSegs[1:], relSegs[skip:])
+				if err != nil {
+					return false, err
+				}
+				if ok {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		ok, err := filepath.Match(p, relSegs[0])
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+		patSegs = patSegs[1:]
+		relSegs = relSegs[1:]
+	}
+	// Both exhausted = full match.
+	return len(patSegs) == 0 && len(relSegs) == 0, nil
+}
+
+// specHasContracts reports whether a parsed spec has at least one contract
+// (at top level or inside a scope).
+func specHasContracts(s *spec.Spec) bool {
+	if len(s.Contracts) > 0 {
+		return true
+	}
+	for _, sc := range s.Scopes {
+		if len(sc.Contracts) > 0 {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	colorGreen = color.New(color.FgGreen)
@@ -125,7 +282,7 @@ func verifyCmd() *cli.Command {
 	return &cli.Command{
 		Name:            "verify",
 		Usage:           "verify a spec against a target",
-		ArgsUsage:       "<spec-file>",
+		ArgsUsage:       "<spec-file|glob> [spec-file|glob...]",
 		HideHelpCommand: true,
 		Flags: []cli.Flag{
 			&cli.Uint64Flag{
@@ -148,23 +305,45 @@ func verifyCmd() *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			specFile := cmd.Args().First()
-			if specFile == "" {
+			if cmd.NArg() == 0 {
 				return cli.Exit(
-					"usage: specrun verify <spec-file> [--seed N] [--iterations N] [--json] [--keep-services]",
+					"usage: specrun verify <spec-file|glob> [spec-file|glob...] [--seed N] [--iterations N] [--json] [--keep-services]",
 					1,
 				)
 			}
-			opts := &verifyOpts{
-				specFile:     specFile,
+
+			patterns := make([]string, cmd.NArg())
+			for i := range cmd.NArg() {
+				patterns[i] = cmd.Args().Get(i)
+			}
+
+			files, err := expandGlobs(patterns)
+			if err != nil {
+				return cli.Exit(fmt.Sprintf("glob error: %v", err), 1)
+			}
+			if len(files) == 0 {
+				fmt.Fprintf(os.Stderr, "error: no files matched: %s\n", strings.Join(patterns, " "))
+				return cli.Exit("", 1)
+			}
+
+			baseOpts := &verifyOpts{
 				seed:         cmd.Uint64("seed"),
 				iterations:   cmd.Int("iterations"),
 				jsonOutput:   cmd.Bool("json"),
 				keepServices: cmd.Bool("keep-services"),
 			}
-			code := runVerify(ctx, opts)
-			if code != 0 {
-				return cli.Exit("", code)
+
+			exitCode := 0
+			for _, specFile := range files {
+				opts := *baseOpts
+				opts.specFile = specFile
+				c := runVerify(ctx, &opts)
+				if c != 0 {
+					exitCode = c
+				}
+			}
+			if exitCode != 0 {
+				return cli.Exit("", exitCode)
 			}
 			return nil
 		},
@@ -194,7 +373,7 @@ func installCmd() *cli.Command {
 func migrateCmd() *cli.Command {
 	return &cli.Command{
 		Name:            "migrate",
-		Usage:           "convert a v2 spec to v3 syntax",
+		Usage:           "convert a spec file to a newer syntax version",
 		ArgsUsage:       "<spec-file> [spec-file...]",
 		HideHelpCommand: true,
 		Flags: []cli.Flag{
@@ -203,16 +382,41 @@ func migrateCmd() *cli.Command {
 				Aliases: []string{"w"},
 				Usage:   "write result back to source file(s)",
 			},
+			&cli.StringFlag{
+				Name:  "to",
+				Usage: "target version: v3 (v2→v3) or v4 (v3→v4)",
+				Value: "v4",
+			},
+			&cli.BoolFlag{
+				Name:  "backup",
+				Usage: "write <file>.v3.bak (v4) or <file>.v2.bak (v3) with original content before overwriting (implies --write)",
+			},
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "write output even if it does not re-parse as the target version (skips round-trip validation)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() == 0 {
-				return cli.Exit("usage: specrun migrate <spec-file> [spec-file...]", 1)
+				return cli.Exit("usage: specrun migrate [--to v3|v4] <spec-file> [spec-file...]", 1)
 			}
 			write := cmd.Bool("write")
+			backup := cmd.Bool("backup")
+			force := cmd.Bool("force")
+			target := cmd.String("to")
+			if target != "v3" && target != "v4" {
+				return cli.Exit("--to must be v3 or v4", 1)
+			}
 			code := 0
 			for i := range cmd.NArg() {
 				specFile := cmd.Args().Get(i)
-				if c := runMigrate(specFile, write); c != 0 {
+				var c int
+				if target == "v4" {
+					c = runMigrateV4(specFile, write, backup, force)
+				} else {
+					c = runMigrate(specFile, write, backup)
+				}
+				if c != 0 {
 					code = c
 				}
 			}
@@ -224,7 +428,7 @@ func migrateCmd() *cli.Command {
 	}
 }
 
-func runMigrate(specFile string, write bool) int {
+func runMigrate(specFile string, write, backup bool) int {
 	results, err := migrate.MigrateFile(specFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "migrate error: %v\n", err)
@@ -236,8 +440,20 @@ func runMigrate(specFile string, write bool) int {
 			fmt.Fprintf(os.Stderr, "warning: %s: %s\n", mf.Path, mf.Warning)
 		}
 
-		if write {
-			if err := os.WriteFile(mf.Path, []byte(mf.Output), 0o644); err != nil {
+		if write || backup {
+			orig, err := os.ReadFile(mf.Path)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "read error: %v\n", err)
+				return 1
+			}
+			if backup {
+				bakPath := mf.Path + ".v2.bak"
+				if err := os.WriteFile(bakPath, orig, 0o644); err != nil {
+					fmt.Fprintf(os.Stderr, "backup error: %v\n", err)
+					return 1
+				}
+			}
+			if err := atomicWrite(mf.Path, []byte(mf.Output)); err != nil {
 				fmt.Fprintf(os.Stderr, "write error: %v\n", err)
 				return 1
 			}
@@ -251,6 +467,88 @@ func runMigrate(specFile string, write bool) int {
 	}
 
 	return 0
+}
+
+func runMigrateV4(specFile string, write, backup, force bool) int {
+	src, err := os.ReadFile(specFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "read error: %v\n", err)
+		return 1
+	}
+
+	output, err := migrate.MigrateV3File(string(src))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "migrate error: %v\n", err)
+		return 1
+	}
+
+	// Round-trip parse validation: ensure the migrated output is valid v4.
+	if !force {
+		if _, parseErr := parser.Parse(output); parseErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"migration produced output that does not parse as v4 (internal bug — please file an issue with the input): %v\nuse --force to bypass this check\n",
+				parseErr,
+			)
+			return 1
+		}
+	}
+
+	if write || backup {
+		if backup {
+			bakPath := specFile + ".v3.bak"
+			if err := os.WriteFile(bakPath, src, 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "backup error: %v\n", err)
+				return 1
+			}
+		}
+		if err := atomicWrite(specFile, []byte(output)); err != nil {
+			fmt.Fprintf(os.Stderr, "write error: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "migrated: %s\n", specFile)
+	} else {
+		fmt.Print(output)
+	}
+
+	return 0
+}
+
+// atomicWrite writes data to path using a temp file + rename to avoid
+// leaving a half-written file if the process is interrupted mid-write.
+func atomicWrite(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".migrate-*.spec.tmp")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	// Clean up temp file on any error after creation.
+	var writeErr error
+	defer func() {
+		if writeErr != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		writeErr = fmt.Errorf("writing temp file: %w", err)
+		_ = tmp.Close()
+		return writeErr
+	}
+	if err := tmp.Sync(); err != nil {
+		writeErr = fmt.Errorf("syncing temp file: %w", err)
+		_ = tmp.Close()
+		return writeErr
+	}
+	if err := tmp.Close(); err != nil {
+		writeErr = fmt.Errorf("closing temp file: %w", err)
+		return writeErr
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		writeErr = fmt.Errorf("renaming temp file: %w", err)
+		return writeErr
+	}
+	return nil
 }
 
 func validateSpec(s *spec.Spec) int {
@@ -329,6 +627,11 @@ func runVerify(ctx context.Context, opts *verifyOpts) int {
 		return code
 	}
 
+	if !specHasContracts(s) {
+		fmt.Fprintf(os.Stderr, "%s: no contracts, skipping\n", filepath.Base(opts.specFile))
+		return 0
+	}
+
 	runningServices, cleanup, err := startServices(ctx, s, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -351,23 +654,23 @@ func runVerify(ctx context.Context, opts *verifyOpts) int {
 	r.SetN(opts.iterations)
 
 	if !opts.jsonOutput {
-		colorBold.Printf("Verifying %s", s.Name)
+		colorBold.Printf("Verifying %s", filepath.Base(opts.specFile))
 		colorDim.Printf(" (seed=%d, iterations=%d)\n\n", opts.seed, opts.iterations)
 	}
 
-	return runAndReport(ctx, r, opts.jsonOutput)
+	return runAndReport(ctx, r, opts.jsonOutput, filepath.Base(opts.specFile))
 }
 
-func runAndReport(ctx context.Context, r *runner.Runner, jsonOutput bool) int {
+func runAndReport(ctx context.Context, r *runner.Runner, jsonOutput bool, specName string) int {
 	res, err := r.Verify(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "verification error: %v\n", err)
 		return 1
 	}
+	res.Spec = specName
 
 	if jsonOutput {
 		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
 		if err := enc.Encode(res); err != nil {
 			fmt.Fprintf(os.Stderr, "encoding error: %v\n", err)
 			return 1
@@ -552,20 +855,12 @@ func runInstall(plugin string) int {
 
 // collectPlugins returns the unique set of plugin names from all scopes.
 // In v2 mode, plugins come from scope.Use directives.
-// In v3 mode, plugins come from spec-level AdapterConfigs keys.
+// collectPlugins returns adapter names declared via config blocks (http { ... }, playwright { ... }).
 func collectPlugins(s *spec.Spec) []string {
 	seen := make(map[string]bool)
 	var plugins []string
 
-	// v2: scope.Use directives
-	for _, scope := range s.Scopes {
-		if scope.Use != "" && !seen[scope.Use] {
-			seen[scope.Use] = true
-			plugins = append(plugins, scope.Use)
-		}
-	}
-
-	// v3: adapter config blocks (http { ... }, playwright { ... })
+	// Adapter config blocks (http { ... }, playwright { ... })
 	for name := range s.AdapterConfigs {
 		if !seen[name] {
 			seen[name] = true
@@ -697,7 +992,7 @@ func resolveServiceURL(
 func buildInfraConfig(s *spec.Spec, specFile string) infra.Config {
 	specDir := filepath.Dir(specFile)
 	cfg := infra.Config{
-		SpecName: s.Name,
+		SpecName: filepath.Base(specFile),
 		SpecDir:  specDir,
 	}
 
@@ -721,12 +1016,13 @@ func buildInfraConfig(s *spec.Spec, specFile string) infra.Config {
 // resolving relative paths and copying maps to avoid aliasing the AST.
 func convertServiceDef(specDir string, svc *spec.Service) infra.ServiceDef {
 	def := infra.ServiceDef{
-		Name:   svc.Name,
-		Build:  resolveRelPath(specDir, svc.Build),
-		Image:  svc.Image,
-		Port:   svc.Port,
-		Health: svc.Health,
-		Env:    copyMap(svc.Env),
+		Name:    svc.Name,
+		Build:   resolveRelPath(specDir, svc.Build),
+		Compose: resolveRelPath(specDir, svc.Compose),
+		Image:   svc.Image,
+		Port:    svc.Port,
+		Health:  svc.Health,
+		Env:     copyMap(svc.Env),
 	}
 	if len(svc.Volumes) > 0 {
 		def.Volumes = make(map[string]string, len(svc.Volumes))

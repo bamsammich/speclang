@@ -82,9 +82,9 @@ func TestParse_ValidSpec(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out)
 	}
 
-	name, ok := result["name"].(string)
-	if !ok || name != "AccountAPI" {
-		t.Errorf("expected name=AccountAPI, got %v", result["name"])
+	// v4: no spec name — verify expected structure keys are present
+	if _, ok := result["scopes"]; !ok {
+		t.Errorf("expected 'scopes' key in parse output, got keys: %v", result)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestVerify_JSON(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
 	}
 
-	if result["spec"] != "AccountAPI" {
-		t.Errorf("expected spec=AccountAPI, got %v", result["spec"])
+	if result["spec"] != "transfer.spec" {
+		t.Errorf("expected spec=transfer.spec, got %v", result["spec"])
 	}
 	if result["scenarios_run"] != float64(3) {
 		t.Errorf("expected scenarios_run=3, got %v", result["scenarios_run"])
@@ -223,28 +223,22 @@ func TestVerify_JSON(t *testing.T) {
 func TestVerify_ProcessAdapter(t *testing.T) {
 	bin := specrunBin(t)
 
-	specContent := `spec EchoTest {
-  process {
-    command: "echo"
+	specContent := `process {
+  command: "echo"
+}
+
+model EchoResult {
+  exit_code: int
+}
+
+contract EchoContract -> EchoResult {
+  action {
+    let result = process.exec("{\"hello\":\"world\"}")
+    return result
   }
 
-  scope echo {
-    action run_echo() {
-      let result = process.exec("{\"hello\":\"world\"}")
-      return result
-    }
-
-    contract {
-      input {}
-      output {
-        exit_code: int
-      }
-      action: run_echo
-    }
-
-    invariant always_succeeds {
-      exit_code == 0
-    }
+  invariant always_succeeds {
+    output.exit_code == 0
   }
 }`
 	specFile := filepath.Join(t.TempDir(), "echo.spec")
@@ -370,5 +364,373 @@ func skipIfNoDocker(t *testing.T) {
 	cmd := exec.Command("docker", "info")
 	if err := cmd.Run(); err != nil {
 		t.Skip("skipping: docker daemon not running")
+	}
+}
+
+// ─── Glob verify tests ────────────────────────────────────────────────────────
+
+// echoSpecContent returns a minimal process-adapter spec with one scenario.
+// The spec verifies against the `echo` binary, which is always available,
+// printing its arguments. We only care about exit_code.
+const _echoSpec = `process {
+  command: "echo"
+}
+
+model EchoOut {
+  exit_code: int
+}
+
+contract EchoContract -> EchoOut {
+  action {
+    let result = process.exec("hello")
+    return result
+  }
+
+  invariant always_ok {
+    output.exit_code == 0
+  }
+}
+`
+
+// noContractSpec is a valid spec with only a model — no contracts.
+const _noContractSpec = `model EmptyModel {
+  value: string
+}
+`
+
+func TestVerify_GlobMatchesMultiple(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+
+	// Two specs with contracts, one without.
+	writeFile(t, filepath.Join(dir, "a.spec"), _echoSpec)
+	writeFile(t, filepath.Join(dir, "b.spec"), _echoSpec)
+	writeFile(t, filepath.Join(dir, "empty.spec"), _noContractSpec)
+
+	pattern := filepath.Join(dir, "*.spec")
+
+	cmd := exec.Command(bin, "verify", "--json", "--iterations", "1", pattern)
+	out, err := cmd.CombinedOutput()
+	t.Logf("output:\n%s", out)
+	if err != nil {
+		t.Fatalf("verify glob failed: %v\n%s", err, out)
+	}
+
+	// JSON-lines output: two result objects (a.spec and b.spec).
+	// empty.spec should produce only a stderr skip line, not a JSON result.
+	// CombinedOutput merges stderr into the buffer, so we count only JSON lines.
+	combined := string(out)
+	jsonLines := jsonOnlyLines(combined)
+	if len(jsonLines) != 2 {
+		t.Fatalf("expected 2 JSON result lines (a.spec + b.spec), got %d:\n%s", len(jsonLines), combined)
+	}
+
+	for _, line := range jsonLines {
+		var result map[string]any
+		if err := json.Unmarshal([]byte(line), &result); err != nil {
+			t.Fatalf("line not valid JSON: %v\nline: %s", err, line)
+		}
+	}
+}
+
+func TestVerify_GlobZeroMatches(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	pattern := filepath.Join(dir, "*.spec") // dir is empty
+
+	cmd := exec.Command(bin, "verify", pattern)
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected non-zero exit for zero-match glob, got exit 0")
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 1 {
+		t.Errorf("expected exit code 1, got: %v", err)
+	}
+}
+
+func TestVerify_GlobRecursive(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	writeFile(t, filepath.Join(dir, "root.spec"), _echoSpec)
+	writeFile(t, filepath.Join(subDir, "nested.spec"), _echoSpec)
+
+	pattern := filepath.Join(dir, "**", "*.spec")
+
+	cmd := exec.Command(bin, "verify", "--json", "--iterations", "1", pattern)
+	out, err := cmd.CombinedOutput()
+	t.Logf("output:\n%s", out)
+	if err != nil {
+		t.Fatalf("recursive glob verify failed: %v\n%s", err, out)
+	}
+
+	lines := jsonOnlyLines(string(out))
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 JSON result lines (root.spec + nested.spec), got %d:\n%s", len(lines), string(out))
+	}
+}
+
+func TestVerify_NoContractSkip(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "only_model.spec"), _noContractSpec)
+
+	// Single file, no contracts — should exit 0 with stderr skip message.
+	cmd := exec.Command(bin, "verify", filepath.Join(dir, "only_model.spec"))
+	out, err := cmd.CombinedOutput()
+	t.Logf("output:\n%s", out)
+	if err != nil {
+		t.Fatalf("expected exit 0 for no-contract spec, got: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "no contracts, skipping") {
+		t.Errorf("expected skip message in output, got:\n%s", out)
+	}
+}
+
+func TestVerify_SingleFilePreserved(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "single.spec"), _echoSpec)
+
+	cmd := exec.Command(bin, "verify", "--json", "--iterations", "1", filepath.Join(dir, "single.spec"))
+	out, err := cmd.CombinedOutput()
+	t.Logf("output:\n%s", out)
+	if err != nil {
+		t.Fatalf("single-file verify failed: %v\n%s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output not valid JSON: %v\n%s", err, out)
+	}
+}
+
+// writeFile is a test helper that writes content to path, fatally failing on error.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// jsonOnlyLines returns lines from s that start with '{' (JSON objects).
+// This filters out stderr messages (e.g. skip notices) from CombinedOutput.
+func jsonOnlyLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "{") {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// ─── Migrate command safety tests ─────────────────────────────────────────────
+
+// validV3Spec is a minimal v3 spec that migrates to valid v4.
+const _validV3Spec = `spec Minimal {
+  scope ping {
+    action ping(msg: string) {
+      let result = http.post("/ping", { msg: msg })
+      return result
+    }
+
+    contract {
+      input {
+        msg: string
+      }
+      output {
+        ok: bool
+      }
+      action: ping
+    }
+
+    scenario basic {
+      given {
+        msg: "hello"
+      }
+      then {
+        ok == true
+      }
+    }
+  }
+}
+`
+
+// TestMigrate_V4_DryRunPrintsOutput verifies migrate without --write prints to stdout.
+func TestMigrate_V4_DryRunPrintsOutput(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	specFile := filepath.Join(t.TempDir(), "minimal.spec")
+	writeFile(t, specFile, _validV3Spec)
+
+	cmd := exec.Command(bin, "migrate", "--to", "v4", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("migrate dry-run failed: %v\n%s", err, out)
+	}
+	// Output should contain v4 contract keyword
+	if !strings.Contains(string(out), "contract") {
+		t.Errorf("expected 'contract' in output, got:\n%s", out)
+	}
+	// Original file must be unchanged
+	content, err := os.ReadFile(specFile)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(content) != _validV3Spec {
+		t.Errorf("original file was modified without --write:\ngot:\n%s\nwant:\n%s", content, _validV3Spec)
+	}
+}
+
+// TestMigrate_V4_WriteProducesValidV4 verifies --write overwrites the file with parseable v4.
+func TestMigrate_V4_WriteProducesValidV4(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	specFile := filepath.Join(t.TempDir(), "to_migrate.spec")
+	writeFile(t, specFile, _validV3Spec)
+
+	cmd := exec.Command(bin, "migrate", "--to", "v4", "--write", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("migrate --write failed: %v\n%s", err, out)
+	}
+
+	// File must now exist and contain v4 syntax
+	content, err := os.ReadFile(specFile)
+	if err != nil {
+		t.Fatalf("read migrated file: %v", err)
+	}
+	migrated := string(content)
+	if !strings.Contains(migrated, "contract") {
+		t.Errorf("migrated file missing 'contract' keyword:\n%s", migrated)
+	}
+	// Must not contain v3 scope wrapper (which was the top-level construct)
+	if strings.Contains(migrated, "spec Minimal") {
+		t.Errorf("migrated file still has v3 'spec Minimal' wrapper:\n%s", migrated)
+	}
+	// Verify that specrun can parse the migrated file
+	parseCmd := exec.Command(bin, "parse", specFile)
+	parseOut, parseErr := parseCmd.CombinedOutput()
+	if parseErr != nil {
+		t.Errorf("migrated file does not parse as v4: %v\n%s", parseErr, parseOut)
+	}
+}
+
+// TestMigrate_V4_BackupCreated verifies --backup creates a .v3.bak file.
+func TestMigrate_V4_BackupCreated(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	specFile := filepath.Join(dir, "backup_test.spec")
+	writeFile(t, specFile, _validV3Spec)
+
+	cmd := exec.Command(bin, "migrate", "--to", "v4", "--backup", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("migrate --backup failed: %v\n%s", err, out)
+	}
+
+	bakPath := specFile + ".v3.bak"
+	bak, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf(".v3.bak not created: %v", err)
+	}
+	if string(bak) != _validV3Spec {
+		t.Errorf(".v3.bak content mismatch:\ngot:\n%s\nwant:\n%s", bak, _validV3Spec)
+	}
+	// The spec file itself must have been migrated
+	content, err := os.ReadFile(specFile)
+	if err != nil {
+		t.Fatalf("read migrated file: %v", err)
+	}
+	if !strings.Contains(string(content), "contract") {
+		t.Errorf("migrated file missing 'contract' keyword:\n%s", string(content))
+	}
+}
+
+// TestMigrate_V4_NoBackupByDefault verifies --backup is NOT created by default.
+func TestMigrate_V4_NoBackupByDefault(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	dir := t.TempDir()
+	specFile := filepath.Join(dir, "no_bak.spec")
+	writeFile(t, specFile, _validV3Spec)
+
+	cmd := exec.Command(bin, "migrate", "--to", "v4", "--write", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("migrate --write failed: %v\n%s", err, out)
+	}
+
+	bakPath := specFile + ".v3.bak"
+	if _, err := os.Stat(bakPath); err == nil {
+		t.Errorf(".v3.bak was created without --backup flag")
+	}
+}
+
+// TestMigrate_V4_StringLiteralPreserved verifies && inside a string literal survives migration.
+func TestMigrate_V4_StringLiteralPreserved(t *testing.T) {
+	t.Parallel()
+	bin := specrunBin(t)
+
+	src := `spec API {
+  scope check {
+    action check(url: string) {
+      let result = http.post(url, {})
+      return result
+    }
+
+    contract {
+      input {
+        url: string
+      }
+      output {
+        ok: bool
+      }
+      action: check
+    }
+
+    scenario url_with_ampersand {
+      given {
+        url: "http://example.com?a=1&&b=2"
+      }
+      then {
+        ok == true
+      }
+    }
+  }
+}
+`
+	specFile := filepath.Join(t.TempDir(), "ampersand.spec")
+	writeFile(t, specFile, src)
+
+	cmd := exec.Command(bin, "migrate", "--to", "v4", specFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("migrate failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), `"http://example.com?a=1&&b=2"`) {
+		t.Errorf("string literal with && was corrupted; output:\n%s", out)
 	}
 }

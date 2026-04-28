@@ -65,35 +65,48 @@ func Verify(ctx context.Context, s *spec.Spec, registry *spec.Registry, opts Opt
 	return r.Verify(ctx)
 }
 
-// Generate produces one random input for a named scope.
-func Generate(s *spec.Spec, scopeName string, seed uint64) (map[string]any, error) {
-	for _, scope := range s.Scopes {
-		if scope.Name == scopeName {
-			if scope.Contract == nil {
-				return nil, fmt.Errorf("scope %q has no contract", scopeName)
-			}
-			g := generator.New(scope.Contract, s.Models, seed)
+// Generate produces one random input for a named contract or scope.
+func Generate(s *spec.Spec, name string, seed uint64) (map[string]any, error) {
+	configureGen := func(g *generator.Generator) {
+		if len(s.Enums) > 0 {
+			g.SetEnums(s.Enums)
+		}
+		if len(s.Config) > 0 {
+			g.SetConfig(s.Config)
+		}
+	}
+
+	// Search top-level contracts first
+	for _, c := range s.Contracts {
+		if c.Name == name {
+			g := generator.New(c, s.Models, seed)
+			configureGen(g)
 			return g.GenerateInput()
 		}
 	}
-	return nil, fmt.Errorf("scope %q not found", scopeName)
+	// Search scope contracts: use first contract in matching scope
+	for _, scope := range s.Scopes {
+		if scope.Name == name && len(scope.Contracts) > 0 {
+			g := generator.New(scope.Contracts[0], s.Models, seed)
+			configureGen(g)
+			return g.GenerateInput()
+		}
+	}
+	return nil, fmt.Errorf("contract or scope %q not found", name)
 }
 
 func buildAdapterMap(s *spec.Spec, reg *spec.Registry) (map[string]spec.Adapter, error) {
 	adapters := make(map[string]spec.Adapter)
-	for _, scope := range s.Scopes {
-		if scope.Use == "" {
+	for name := range s.AdapterConfigs {
+		if _, exists := adapters[name]; exists {
 			continue
 		}
-		if _, exists := adapters[scope.Use]; exists {
-			continue
-		}
-		adp, err := reg.Adapter(scope.Use)
+		adp, err := reg.Adapter(name)
 		if err != nil {
 			closeAdapters(context.Background(), adapters)
-			return nil, fmt.Errorf("adapter %q: %w", scope.Use, err)
+			return nil, fmt.Errorf("adapter %q: %w", name, err)
 		}
-		adapters[scope.Use] = adp
+		adapters[name] = adp
 	}
 	return adapters, nil
 }
