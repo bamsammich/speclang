@@ -36,6 +36,7 @@ type ServiceDef struct {
 	Volumes map[string]string // host:container (absolute paths)
 	Name    string
 	Build   string // Dockerfile directory (absolute path)
+	Compose string // docker-compose file path (absolute); mutually exclusive with Build/Image
 	Image   string // pre-built image
 	Health  string // HTTP health path
 	Port    int    // static port (0 = dynamic)
@@ -43,9 +44,17 @@ type ServiceDef struct {
 
 // NewManager creates a ServiceManager based on the config.
 // Returns nil if no services are declared.
+// If any service has a Compose path set, a ComposeManager is returned for the
+// first such service (compose path wins over inline docker services).
 func NewManager(cfg Config) (ServiceManager, error) {
 	if cfg.ComposePath != "" {
 		return NewComposeManager(cfg)
+	}
+	for _, svc := range cfg.Services {
+		if svc.Compose != "" {
+			cfg.ComposePath = svc.Compose
+			return NewComposeManager(cfg)
+		}
 	}
 	if len(cfg.Services) > 0 {
 		return NewDockerManager(cfg)
