@@ -9,9 +9,7 @@ model VerifyFailResult {
 }
 
 scope verify_fail {
-  contract VerifyFailContract -> VerifyFailResult {
-    file: string
-
+  contract VerifyFailContract(file: string) -> VerifyFailResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result

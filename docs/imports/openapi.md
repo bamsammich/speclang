@@ -63,9 +63,7 @@ import openapi("api.yaml")
 #   model CreateUserRequest { name: string  email: string? }
 #   model User { id: int { 1 <= id }  name: string  email: string? }
 #   scope create_user {
-#     contract create_user -> User {
-#       name: string
-#       email: string?
+#     contract create_user(name: string, email: string?) -> User {
 #       action { return http.post("/users", { name: name, email: email }) }
 #     }
 #   }
@@ -141,10 +139,10 @@ import openapi("api.yaml")
 
 # Hand-authored: additional verification on the imported endpoint
 scope create_user_extended {
-  contract CreateUserIdempotentCheck -> User {
-    name: string
-    email: string?
-
+  contract CreateUserIdempotentCheck(
+    name: string,
+    email: string?,
+  ) -> User {
     action {
       return http.post("/users", { name: name, email: email })
     }

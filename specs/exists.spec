@@ -6,9 +6,7 @@ model ExistsParseResult {
 }
 
 scope parse_exists {
-  contract ParseExistsContract -> ExistsParseResult {
-    file: string
-
+  contract ParseExistsContract(file: string) -> ExistsParseResult {
     action {
       let result = process.exec("parse", file)
       return result

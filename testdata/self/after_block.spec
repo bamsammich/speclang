@@ -11,9 +11,7 @@ scope test_after {
     http.delete("/cleanup")
   }
 
-  contract AfterContract -> AfterResult {
-    name: string
-
+  contract AfterContract(name: string) -> AfterResult {
     action {
       let result = http.post("/test", { name: name })
       return result

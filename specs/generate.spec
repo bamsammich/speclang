@@ -8,9 +8,7 @@ model GenerateResult {
 }
 
 scope generate {
-  contract GenerateContract -> GenerateResult {
-    seed: int
-
+  contract GenerateContract(seed: int) -> GenerateResult {
     action {
       let result = process.exec("generate", "examples/transfer.spec", "--scope", "transfer", "--seed", seed)
       return result

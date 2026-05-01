@@ -3,9 +3,7 @@ model NullNonOptionalResult {
 }
 
 scope broken {
-  contract NullNonOptionalContract -> NullNonOptionalResult {
-    name: string
-
+  contract NullNonOptionalContract(name: string) -> NullNonOptionalResult {
     action {
       return http.get("/test")
     }

@@ -18,7 +18,7 @@ A spec file contains any number of top-level declarations, in any order:
 | `enum <Name> { <variant>, ... }` | Named enumeration |
 | `config { <key>: <expr> }` | Spec-level constants |
 | `action <name>(<params>) { ... }` | Reusable action with typed signature |
-| `contract <Name> -> <Type> { ... }` | Behavioral promise (top-level or in scope) |
+| `contract <Name>(<params>) -> <Type> { ... }` | Behavioral promise (top-level or in scope) |
 | `scope <name> { ... }` | Optional grouping of contracts sharing `before`/`after` |
 | `<adapter> { <key>: <expr> }` | Adapter configuration (e.g. `http { ... }`) |
 | `services { ... }` | Docker services as test infrastructure |
@@ -189,8 +189,8 @@ scope transfers {
   before { login("admin", "test") }
   after  { http.delete("/api/session") }
 
-  contract Transfer -> TransferResult { ... }
-  contract Reverse  -> TransferResult { ... }
+  contract Transfer(from: Account, to: Account, amount: int) -> TransferResult { ... }
+  contract Reverse(from: Account, to: Account, amount: int) -> TransferResult { ... }
 }
 ```
 
@@ -220,12 +220,14 @@ The centerpiece of verification. A contract is a self-contained behavioral promi
 
 ### 6.1 Syntax (declared form)
 
-```
-contract <Name> -> <ReturnType> {
-  <field>: <type>
-  <field>: <type> { <constraint> }
-  <field>: <type> when <condition>
+Input fields are declared in the signature parens. The body contains only the `action` block, invariants, and scenarios.
 
+```
+contract <Name>(
+  <field>: <type>,
+  <field>: <type> { <constraint> },
+  <field>: <type> when <condition>,
+) -> <ReturnType> {
   action {
     <steps...>
     return <expr>
@@ -236,6 +238,18 @@ contract <Name> -> <ReturnType> {
   scenario  <name> { when  { ... } then { ... } }
 }
 ```
+
+Single-line and empty-parens forms are also valid:
+
+```
+contract Health() -> HealthResult {
+  action { return http.get("/healthz") }
+}
+
+contract Login(username: string, password: string) -> AuthResult { action { ... } }
+```
+
+Trailing commas in the parameter list are allowed. Commas between params are required.
 
 ### 6.2 Syntax (model-inheritance form)
 
@@ -252,7 +266,7 @@ contract <Name>: <InputModel> -> <ReturnType> {
 }
 ```
 
-When `InputModel` is specified, the contract inherits its fields as inputs. The optional `constrain { }` block adds expressions (bound-style constraints) over those inherited fields. This form is used when pairing with imported schemas (see [§14 Imports](#14-imports)).
+When `InputModel` is specified, the contract inherits its fields as inputs — no parens needed on the signature. The optional `constrain { }` block adds expressions (bound-style constraints) over those inherited fields. This form is used when pairing with imported schemas (see [§14 Imports](#14-imports)).
 
 ### 6.3 Field resolution rules
 
@@ -421,8 +435,8 @@ scope orders {
     http.delete("/api/session")
   }
 
-  contract CreateOrder -> OrderResult { ... }
-  contract UpdateOrder -> OrderResult { ... }
+  contract CreateOrder(...) -> OrderResult { ... }
+  contract UpdateOrder(...) -> OrderResult { ... }
 }
 ```
 
@@ -456,9 +470,10 @@ model Shipment {
   tracking: string when status == "shipped"
 }
 
-contract Update -> ShipmentResult {
-  status: string
-  tracking: string when status == "shipped"
+contract Update(
+  status: string,
+  tracking: string when status == "shipped",
+) -> ShipmentResult {
   action { ... }
 }
 ```
@@ -605,7 +620,7 @@ model Account {
 include "shared/models.spec"
 
 scope transfer {
-  contract Transfer -> TransferResult { ... }
+  contract Transfer(...) -> TransferResult { ... }
 }
 ```
 
@@ -614,7 +629,7 @@ scope transfer {
 include "shared/models.spec"
 
 scope audit {
-  contract Audit -> AuditLog { ... }
+  contract Audit(...) -> AuditLog { ... }
 }
 ```
 

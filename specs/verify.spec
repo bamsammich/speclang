@@ -10,9 +10,7 @@ model VerifyResult {
 }
 
 scope verify_pass {
-  contract VerifyPassContract -> VerifyResult {
-    file: string
-
+  contract VerifyPassContract(file: string) -> VerifyResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result

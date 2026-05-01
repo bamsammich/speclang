@@ -3,9 +3,7 @@ model BrokenResult {
 }
 
 scope broken {
-  contract BrokenContract -> BrokenResult {
-    item: Widget
-
+  contract BrokenContract(item: Widget) -> BrokenResult {
     action {
       return http.get("/test")
     }

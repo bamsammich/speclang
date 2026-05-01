@@ -1028,3 +1028,221 @@ func TestParseIn_BracketAndParenEquivalent(t *testing.T) {
 		}
 	}
 }
+
+// --- New parens-form contract syntax tests ---
+
+// TestParseV4_ContractParensEmpty verifies empty parens contract: contract Name() -> Type { }
+func TestParseV4_ContractParensEmpty(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+scope test {
+  contract Health() -> int {
+    action {
+      return http.get("/health")
+    }
+    scenario ping {
+      given {}
+      then {
+        output.exit_code == 0
+      }
+    }
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := spec.Scopes[0].Contracts[0]
+	if c.Name != "Health" {
+		t.Errorf("expected name Health, got %q", c.Name)
+	}
+	if len(c.Fields) != 0 {
+		t.Errorf("expected 0 fields (empty parens), got %d", len(c.Fields))
+	}
+	if c.Action == nil {
+		t.Error("expected action block")
+	}
+	if len(c.Scenarios) != 1 {
+		t.Errorf("expected 1 scenario, got %d", len(c.Scenarios))
+	}
+}
+
+// TestParseV4_ContractParensSingleField verifies single-field parens form.
+func TestParseV4_ContractParensSingleField(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+scope test {
+  contract GetUser(id: string) -> int {
+    action {
+      return http.get("/users/" + id)
+    }
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := spec.Scopes[0].Contracts[0]
+	if len(c.Fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(c.Fields))
+	}
+	if c.Fields[0].Name != "id" {
+		t.Errorf("expected field name id, got %q", c.Fields[0].Name)
+	}
+	if c.Fields[0].Type.Name != "string" {
+		t.Errorf("expected field type string, got %q", c.Fields[0].Type.Name)
+	}
+}
+
+// TestParseV4_ContractParensMultipleFields verifies multiple fields in parens form.
+func TestParseV4_ContractParensMultipleFields(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+scope test {
+  contract Login(username: string, password: string) -> int {
+    action {
+      return http.post("/login", { username: username, password: password })
+    }
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := spec.Scopes[0].Contracts[0]
+	if len(c.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(c.Fields))
+	}
+	if c.Fields[0].Name != "username" || c.Fields[0].Type.Name != "string" {
+		t.Errorf("field 0: expected username:string, got %s:%s", c.Fields[0].Name, c.Fields[0].Type.Name)
+	}
+	if c.Fields[1].Name != "password" || c.Fields[1].Type.Name != "string" {
+		t.Errorf("field 1: expected password:string, got %s:%s", c.Fields[1].Name, c.Fields[1].Type.Name)
+	}
+}
+
+// TestParseV4_ContractParensMultilineTrailingComma verifies multi-line form with trailing comma.
+func TestParseV4_ContractParensMultilineTrailingComma(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+scope test {
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int,
+  ) -> int {
+    action {
+      return http.post("/transfer", { from: from, to: to, amount: amount })
+    }
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := spec.Scopes[0].Contracts[0]
+	if len(c.Fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d: %v", len(c.Fields), c.Fields)
+	}
+}
+
+// TestParseV4_ContractParensFieldWithConstraint verifies per-field constraint blocks in parens.
+func TestParseV4_ContractParensFieldWithConstraint(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+scope test {
+  contract Transfer(
+    from: Account,
+    amount: int { 0 < amount },
+  ) -> int {
+    action {
+      return http.post("/transfer", {})
+    }
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := spec.Scopes[0].Contracts[0]
+	if len(c.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(c.Fields))
+	}
+	amountField := c.Fields[1]
+	if amountField.Name != "amount" {
+		t.Errorf("expected field amount, got %q", amountField.Name)
+	}
+	if amountField.Constraint == nil {
+		t.Error("expected constraint on amount field")
+	}
+}
+
+// TestParseV4_ContractParensInheritanceForm verifies that the inheritance form still works.
+func TestParseV4_ContractParensInheritanceForm(t *testing.T) {
+	t.Parallel()
+	spec, err := parser.Parse(`
+model PayInput { amount: int }
+contract Pay: PayInput -> int {
+  constrain { amount > 0 }
+  action {
+    return http.post("/pay", {})
+  }
+}`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(spec.Contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(spec.Contracts))
+	}
+	c := spec.Contracts[0]
+	if c.Inherits != "PayInput" {
+		t.Errorf("expected Inherits=PayInput, got %q", c.Inherits)
+	}
+	if len(c.Constraints) != 1 {
+		t.Errorf("expected 1 constraint, got %d", len(c.Constraints))
+	}
+}
+
+// TestParseV4_ContractParensBareFieldInBodyIsError verifies that a bare field declaration
+// in a parens-form contract body is rejected with a helpful error message.
+func TestParseV4_ContractParensBareFieldInBodyIsError(t *testing.T) {
+	t.Parallel()
+	_, err := parser.Parse(`
+scope test {
+  contract Transfer(from: Account) -> int {
+    amount: int
+    action {
+      return http.post("/transfer", {})
+    }
+  }
+}`)
+	if err == nil {
+		t.Fatal("expected parse error for bare field in parens-form contract body")
+	}
+	if !strings.Contains(err.Error(), "signature parens") {
+		t.Fatalf("expected error about 'signature parens', got: %v", err)
+	}
+}
+
+// TestParseV4_ContractParensMissingArrow verifies that missing -> produces an error.
+func TestParseV4_ContractParensMissingArrow(t *testing.T) {
+	t.Parallel()
+	_, err := parser.Parse(`
+scope test {
+  contract Transfer(from: Account) int {
+    action { return http.post("/", {}) }
+  }
+}`)
+	if err == nil {
+		t.Fatal("expected parse error for missing ->")
+	}
+}
+
+// TestParseV4_ContractParensMissingCloseParen verifies that missing ) produces an error.
+func TestParseV4_ContractParensMissingCloseParen(t *testing.T) {
+	t.Parallel()
+	_, err := parser.Parse(`
+scope test {
+  contract Transfer(from: Account -> int {
+    action { return http.post("/", {}) }
+  }
+}`)
+	if err == nil {
+		t.Fatal("expected parse error for missing closing )")
+	}
+}

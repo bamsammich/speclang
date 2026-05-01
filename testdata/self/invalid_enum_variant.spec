@@ -3,9 +3,7 @@ model EnumVariantResult {
 }
 
 scope test {
-  contract EnumVariantContract -> EnumVariantResult {
-    status: enum("active", "inactive")
-
+  contract EnumVariantContract(status: enum("active", "inactive")) -> EnumVariantResult {
     action {
       return http.get("/test")
     }

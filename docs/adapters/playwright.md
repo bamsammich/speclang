@@ -105,10 +105,10 @@ model LoginResult {
 }
 
 scope login_flow {
-  contract Login -> LoginResult {
-    user: string
-    pass: string
-
+  contract Login(
+    user: string,
+    pass: string,
+  ) -> LoginResult {
     action {
       login(user, pass)
       let ok = playwright.visible('[data-testid="welcome"]')

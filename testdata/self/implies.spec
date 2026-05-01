@@ -8,10 +8,10 @@ model TransferResult {
 }
 
 scope implies_test {
-  contract ImpliesContract -> TransferResult {
-    from_balance: int { from_balance >= 0 }
-    amount: int { amount >= 0 }
-
+  contract ImpliesContract(
+    from_balance: int { from_balance >= 0 },
+    amount: int { amount >= 0 },
+  ) -> TransferResult {
     action {
       let result = http.post("/transfer", { from_balance: from_balance, amount: amount })
       return result

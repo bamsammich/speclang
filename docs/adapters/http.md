@@ -75,11 +75,11 @@ model TransferResult {
 }
 
 scope transfer {
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -105,8 +105,8 @@ scope transfer {
         amount: 30
       }
       then {
-        output.from.balance == input.from.balance - amount
-        output.to.balance == input.to.balance + amount
+        output.from.balance == from.balance - amount
+        output.to.balance == to.balance + amount
         output.error == null
       }
     }
@@ -134,9 +134,7 @@ model Widget {
 }
 
 scope create_and_verify {
-  contract CreateWidget -> Widget {
-    name: string
-
+  contract CreateWidget(name: string) -> Widget {
     action {
       let created = http.post("/api/widgets", { name: name })
       let item = http.get("/api/widgets/" + created.body.id)
@@ -173,9 +171,7 @@ scope protected_resource {
     login("admin", "test")
   }
 
-  contract GetResource -> ResourceResult {
-    id: string
-
+  contract GetResource(id: string) -> ResourceResult {
     action {
       return http.get("/api/resources/" + id)
     }

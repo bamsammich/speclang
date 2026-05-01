@@ -6,7 +6,7 @@ model GlobEchoResult {
   exit_code: int
 }
 
-contract GlobEchoA -> GlobEchoResult {
+contract GlobEchoA() -> GlobEchoResult {
   action {
     let result = process.exec("a")
     return result

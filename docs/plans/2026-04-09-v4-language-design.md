@@ -32,7 +32,7 @@ model TransferResult {
   error: string?
 }
 
-contract Transfer -> TransferResult { ... }
+contract Transfer(from: Account, to: Account, amount: int) -> TransferResult { ... }
 ```
 
 **Include semantics:**
@@ -112,11 +112,10 @@ The primary unit of verification. Declares what the system promises and proves i
 **Lives in**: top level or inside a scope
 
 ```
-contract <Name> -> <ReturnModel> {
-  # fields — the input
-  <name>: <type>
-  <name>: <type> { constraint }
-
+contract <Name>(
+  <name>: <type>,
+  <name>: <type> { constraint },
+) -> <ReturnModel> {
   # action — how to execute (uses fields implicitly, no signature)
   action {
     <steps...>
@@ -194,7 +193,7 @@ scenario <name> {
 | `config` | top level | key-value constants |
 | `action` | top level | imperative steps (no verification) |
 | `scope` | top level | before, after, contracts |
-| `contract` | top level or scope | fields, action block, invariants, scenarios |
+| `contract` | top level or scope | parens signature (fields), body: action block, invariants, scenarios |
 | `invariant` | contract | assertions |
 | `scenario` | contract | given/when + then |
 
@@ -205,7 +204,7 @@ scenario <name> {
 |--------|----|----|
 | Spec wrapper | `spec Name { ... }` | No wrapper — file is the spec |
 | Logical operators | `&&`, `\|\|`, `!` | `and`, `or`, `not` |
-| Contract structure | `scope { contract { input/output/action: name } }` | `contract Name -> ReturnType { fields, action { }, invariants, scenarios }` |
+| Contract structure | `scope { contract { input/output/action: name } }` | `contract Name(field: type, ...) -> ReturnType { action { }, invariants, scenarios }` — input fields in signature parens |
 | Output field refs | bare names in assertions | `output.` prefix required |
 | Scope role | owns single contract + invariants + scenarios | optional grouping for shared before/after |
 | Include semantics | Token splicing, anywhere in block | Top-level-only declaration import, include-once |
@@ -276,11 +275,11 @@ scope transfers {
     login("admin", "test")
   }
 
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -359,7 +358,7 @@ Restructure AST types for v4:
 
 - **Remove `Spec.Name`** — filename is identity, no wrapper
 - **Remove `Spec.Description`** — dropped
-- **Contract struct**: `Name`, `Fields []Field`, `Inherits string`, `Constraints []Expr`, `ReturnType TypeExpr`, `Action *ActionBlock`, `Invariants`, `Scenarios`
+- **Contract struct**: `Name`, `Params []Field` (signature parens), `Inherits string`, `Constraints []Expr`, `ReturnType TypeExpr`, `Action *ActionBlock`, `Invariants`, `Scenarios`
 - **ActionBlock struct**: `Body []Step` (no signature — uses contract fields)
 - **Spec struct**: add `Contracts []*Contract`, `Enums []*NamedEnum`, `Config map[string]Expr`. Keep `Models`, `Actions`, `Scopes`, `AdapterConfigs`, `Services`
 - **Scope struct**: add `Contracts []*Contract`, remove single `Contract` pointer. Keep `Before`/`After`
@@ -373,7 +372,7 @@ Restructure AST types for v4:
 - **Remove `spec Name { }` wrapper parsing** — top-level declarations parsed directly
 - **Include-once semantics** — track included paths, skip duplicates
 - **Include is top-level only** — error if include appears inside a block
-- **Contract parsing**: `contract Name -> Type { fields... action { body } invariant... scenario... }`
+- **Contract parsing**: `contract Name(field: type, ...) -> Type { action { body } invariant... scenario... }` — fields in signature parens
 - **Contract inheritance**: `contract Name: Model -> Type { constrain { ... } ... }`
 - **Named enums**: `enum Name { variant1, variant2 }`
 - **Config block**: `config { key: expr }` at top level

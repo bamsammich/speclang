@@ -11,9 +11,7 @@ scope test_before {
     http.header("X-Test", "before-value")
   }
 
-  contract BeforeContract -> BeforeResult {
-    name: string
-
+  contract BeforeContract(name: string) -> BeforeResult {
     action {
       let result = http.post("/test", { name: name })
       return result

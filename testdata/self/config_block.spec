@@ -9,9 +9,7 @@ model ConfigResult {
 }
 
 scope config_block_test {
-  contract ConfigBlockContract -> ConfigResult {
-    amount: int { amount <= config.max_transfer }
-
+  contract ConfigBlockContract(amount: int { amount <= config.max_transfer }) -> ConfigResult {
     action {
       return { ok: true }
     }

@@ -3,9 +3,7 @@ model TypeMismatchResult {
 }
 
 scope broken {
-  contract TypeMismatchContract -> TypeMismatchResult {
-    count: int
-
+  contract TypeMismatchContract(count: int) -> TypeMismatchResult {
     action {
       return http.get("/test")
     }

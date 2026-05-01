@@ -37,11 +37,11 @@ model TransferResult {
 }
 
 scope transfer {
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -66,7 +66,7 @@ This spec declares:
 - An **adapter config** (`http`) pointing at the system under test
 - Two **models** describing the data shapes
 - A **scope** grouping related contracts
-- A **contract** with input fields, an action block that invokes the HTTP endpoint, an invariant that must hold for every generated input, and a scenario asserting on a specific input class
+- A **contract** with input fields declared in the signature parens, an action block that invokes the HTTP endpoint, an invariant that must hold for every generated input, and a scenario asserting on a specific input class
 
 ## Run Verification
 

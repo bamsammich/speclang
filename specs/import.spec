@@ -16,9 +16,7 @@ model ImportParseResult {
 # Models sorted alphabetically: Owner at 0, Pet at 1.
 # Scopes sorted alphabetically: create_pet at 0, list_pets at 1.
 scope import_openapi {
-  contract ImportOpenAPIContract -> ImportParseResult {
-    file: string
-
+  contract ImportOpenAPIContract(file: string) -> ImportParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -85,9 +83,7 @@ scope import_openapi {
 # OpenAPI constraints: verifies minimum/maximum constraints are preserved.
 # constraints.yaml has 1 model (BoundedItem) with constrained int fields.
 scope import_openapi_constraints {
-  contract ImportOpenAPIConstraintsContract -> ImportParseResult {
-    file: string
-
+  contract ImportOpenAPIConstraintsContract(file: string) -> ImportParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -119,9 +115,7 @@ scope import_openapi_constraints {
 # OpenAPI $ref resolution: verifies that $ref fields resolve to model type names.
 # refs.yaml has Order.customer as $ref to Customer.
 scope import_openapi_refs {
-  contract ImportOpenAPIRefsContract -> ImportParseResult {
-    file: string
-
+  contract ImportOpenAPIRefsContract(file: string) -> ImportParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -153,9 +147,7 @@ scope import_openapi_refs {
 # Models sorted: CreateUserRequest, CreateUserResponse, GetUserRequest, GetUserResponse, User.
 # Scopes sorted: CreateUser, GetUser.
 scope import_proto {
-  contract ImportProtoContract -> ImportParseResult {
-    file: string
-
+  contract ImportProtoContract(file: string) -> ImportParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -227,9 +219,7 @@ scope import_proto {
 # Protobuf streaming: verifies streaming RPCs are skipped, only unary RPCs produce scopes.
 # streaming.proto has 4 RPCs: 1 unary (SendEvent), 3 streaming (skipped).
 scope import_proto_streaming {
-  contract ImportProtoStreamingContract -> ImportParseResult {
-    file: string
-
+  contract ImportProtoStreamingContract(file: string) -> ImportParseResult {
     action {
       let result = process.exec("parse", file)
       return result

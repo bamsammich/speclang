@@ -62,11 +62,11 @@ model TransferResult {
 }
 
 scope transfer {
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -118,7 +118,7 @@ When a check fails, you get a shrunk counterexample — the minimal input that s
 v4 is the current syntax. The file itself is the spec — no wrapper block. The filename is the spec's identity.
 
 - **No spec wrapper.** Top-level declarations appear directly in the file.
-- **`contract Name -> ReturnModel { fields, action { }, invariants, scenarios }`** — the primary unit of verification. Input fields, an `action` block that invokes the system, invariants the response must satisfy, scenarios for generative or concrete probes.
+- **`contract Name(field: type, ...) -> ReturnModel { action { }, invariants, scenarios }`** — the primary unit of verification. Input fields declared in the signature parens, an `action` block that invokes the system, invariants the response must satisfy, scenarios for generative or concrete probes.
 - **`model` / `enum`** — data structures and named variant sets. Named enums are referenced as `Role.admin`, validated at parse time against their declaration.
 - **`scope`** — optional grouping for contracts that share `before` / `after` lifecycle hooks.
 - **`config { max_transfer: 1_000_000 }`** — spec-level constants, referenced as `config.max_transfer` in expressions.

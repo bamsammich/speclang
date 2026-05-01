@@ -33,11 +33,11 @@ Each anti-pattern below has a compilable, v4-syntax example of the bad version a
 **Bad**:
 
 ```
-contract Transfer -> TransferResult {
-  from: Account
-  to: Account
-  amount: int { 0 < amount <= from.balance }
-
+contract Transfer(
+  from: Account,
+  to: Account,
+  amount: int { 0 < amount <= from.balance },
+) -> TransferResult {
   action {
     return http.post("/transfer", { from: from, to: to, amount: amount })
   }

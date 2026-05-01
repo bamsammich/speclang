@@ -8,9 +8,7 @@ model AdapterVerifyResult {
 }
 
 scope verify_http_adapter {
-  contract VerifyHTTPAdapterContract -> AdapterVerifyResult {
-    file: string
-
+  contract VerifyHTTPAdapterContract(file: string) -> AdapterVerifyResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result
@@ -30,9 +28,7 @@ scope verify_http_adapter {
 }
 
 scope verify_process_adapter {
-  contract VerifyProcessAdapterContract -> AdapterVerifyResult {
-    file: string
-
+  contract VerifyProcessAdapterContract(file: string) -> AdapterVerifyResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result

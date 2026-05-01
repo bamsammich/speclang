@@ -39,7 +39,7 @@ model HTTPHeaderResult {
 
 # GET — list items, check status, body dot-path, and response header
 scope http_get {
-  contract HTTPGetContract -> HTTPGetResult {
+  contract HTTPGetContract() -> HTTPGetResult {
     action {
       let result = http.get("/api/items")
       return result
@@ -58,7 +58,7 @@ scope http_get {
 
 # GET — single item with dot-path assertions
 scope http_get_item {
-  contract HTTPGetItemContract -> HTTPGetItemResult {
+  contract HTTPGetItemContract() -> HTTPGetItemResult {
     action {
       let result = http.get("/api/items/1")
       return result
@@ -77,9 +77,7 @@ scope http_get_item {
 
 # POST — create item, check 201 status and echoed body
 scope http_post {
-  contract HTTPPostContract -> HTTPPostResult {
-    name: string
-
+  contract HTTPPostContract(name: string) -> HTTPPostResult {
     action {
       let result = http.post("/api/items", { name: name })
       return result
@@ -100,9 +98,7 @@ scope http_post {
 
 # PUT — update item, check echoed body
 scope http_put {
-  contract HTTPPutContract -> HTTPPostResult {
-    name: string
-
+  contract HTTPPutContract(name: string) -> HTTPPostResult {
     action {
       let result = http.put("/api/items/1", { name: name })
       return result
@@ -123,7 +119,7 @@ scope http_put {
 
 # DELETE — delete item
 scope http_delete {
-  contract HTTPDeleteContract -> HTTPDeleteResult {
+  contract HTTPDeleteContract() -> HTTPDeleteResult {
     action {
       let result = http.delete("/api/items/1")
       return result
@@ -141,9 +137,7 @@ scope http_delete {
 
 # Multi-step workflow — POST to create, then GET to verify
 scope http_multi_step {
-  contract HTTPMultiStepContract -> HTTPPostResult {
-    name: string
-
+  contract HTTPMultiStepContract(name: string) -> HTTPPostResult {
     action {
       http.post("/api/resources", { name: name })
       let result = http.get("/api/resources/1")
@@ -165,7 +159,7 @@ scope http_multi_step {
 
 # Multi-step with header persistence — set header, then make two requests
 scope http_multi_step_headers {
-  contract HTTPMultiStepHeadersContract -> HTTPHeaderResult {
+  contract HTTPMultiStepHeadersContract() -> HTTPHeaderResult {
     action {
       http.header("Authorization", "Bearer multi-token")
       http.header("X-Custom", "persistent-value")
@@ -186,7 +180,7 @@ scope http_multi_step_headers {
 
 # Header action — set persistent headers then make a request
 scope http_header {
-  contract HTTPHeaderContract -> HTTPHeaderResult {
+  contract HTTPHeaderContract() -> HTTPHeaderResult {
     action {
       http.header("Authorization", "Bearer test-token")
       http.header("X-Custom", "custom-value")

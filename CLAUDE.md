@@ -18,7 +18,7 @@ See [docs/language-reference.md](docs/language-reference.md) for the complete sy
 
 - **v4 is the current syntax version** — see [docs/plans/2026-04-09-v4-language-design.md](docs/plans/2026-04-09-v4-language-design.md) for the full design and [docs/migration-v4.md](docs/migration-v4.md) for migration from v3
 - **Filename is spec identity** — no `spec Name { }` wrapper; top-level declarations live directly in the file
-- **Contract is the unit of verification** — `contract Name -> ReturnModel { fields, action { body }, invariants, scenarios }`
+- **Contract is the unit of verification** — `contract Name(field: type, ...) -> ReturnModel { action { body }, invariants, scenarios }` — input fields declared in the signature parens, not the body
 - **Optional inheritance** — `contract Name: InputModel -> ReturnModel { constrain { ... } ... }` to layer constraints onto an inherited input model
 - **Field resolution rules**: bare names → contract fields (input); `output.<field>` → return type; `config.<key>` → spec config
 - **Logical operators are word-form**: `and`, `or`, `not`, `in`, `implies` (lowest precedence)

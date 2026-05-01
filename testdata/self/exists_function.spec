@@ -7,9 +7,7 @@ model ExistsResult {
 }
 
 scope test {
-  contract ExistsContract -> ExistsResult {
-    name: string
-
+  contract ExistsContract(name: string) -> ExistsResult {
     action {
       let result = process.exec(name)
       return result

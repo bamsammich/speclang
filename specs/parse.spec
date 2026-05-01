@@ -1,8 +1,6 @@
 # Verifies the parser accepts valid specs and produces expected AST structure.
 scope parse_valid {
-  contract ParseValidContract -> ParseResult {
-    file: string
-
+  contract ParseValidContract(file: string) -> ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -148,9 +146,7 @@ model ParseResult {
 
 # Verifies the parser rejects malformed specs with a non-zero exit code.
 scope parse_invalid {
-  contract ParseInvalidContract -> ParseResult {
-    file: string
-
+  contract ParseInvalidContract(file: string) -> ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -288,9 +284,7 @@ scope parse_invalid {
 
 # Verifies the validator rejects semantically invalid specs with a non-zero exit code.
 scope validate_invalid {
-  contract ValidateInvalidContract -> ParseResult {
-    file: string
-
+  contract ValidateInvalidContract(file: string) -> ParseResult {
     action {
       let result = process.exec("parse", file)
       return result

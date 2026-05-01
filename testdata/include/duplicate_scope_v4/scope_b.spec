@@ -1,5 +1,4 @@
 scope transfer {
-  contract Transfer -> int {
-    x: int
+  contract Transfer(x: int) -> int {
   }
 }

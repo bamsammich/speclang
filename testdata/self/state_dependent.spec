@@ -8,10 +8,10 @@ model ShipmentResult {
 }
 
 scope state_dependent_test {
-  contract StateDependentContract -> ShipmentResult {
-    status: string
-    tracking: string when status == "shipped"
-
+  contract StateDependentContract(
+    status: string,
+    tracking: string when status == "shipped",
+  ) -> ShipmentResult {
     action {
       return { ok: true }
     }

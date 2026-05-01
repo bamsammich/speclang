@@ -6,9 +6,7 @@ model ExprParseResult {
 }
 
 scope env_in_config {
-  contract EnvInConfigContract -> ExprParseResult {
-    file: string
-
+  contract EnvInConfigContract(file: string) -> ExprParseResult {
     action {
       let result = process.exec(env(SPECTEST_EXPR_ARGS, "parse"), file)
       return result
@@ -35,9 +33,7 @@ scope env_in_config {
 # assertion time. A runner that skips concat evaluation would compare
 # output.models.0.name to the unevaluated literal and fail.
 scope string_concat {
-  contract StringConcatContract -> ExprParseResult {
-    file: string
-
+  contract StringConcatContract(file: string) -> ExprParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -60,9 +56,7 @@ scope string_concat {
 # Uses enum.spec (which has a known model) to confirm the parse
 # actually ran against this specific file and returned its structure.
 scope array_args {
-  contract ArrayArgsContract -> ExprParseResult {
-    file: string
-
+  contract ArrayArgsContract(file: string) -> ExprParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -81,9 +75,7 @@ scope array_args {
 }
 
 scope env_in_given {
-  contract EnvInGivenContract -> ExprParseResult {
-    file: string
-
+  contract EnvInGivenContract(file: string) -> ExprParseResult {
     action {
       let result = process.exec("parse", file)
       return result

@@ -7,9 +7,7 @@ model IfExprResult {
 }
 
 scope s {
-  contract IfExprContract -> IfExprResult {
-    x: int
-
+  contract IfExprContract(x: int) -> IfExprResult {
     action {
       let result = http.post("/test", { x: x })
       return result

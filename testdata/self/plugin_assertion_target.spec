@@ -7,7 +7,7 @@ model PluginAssertionResult {
 }
 
 scope test_http {
-  contract PluginAssertionContract -> PluginAssertionResult {
+  contract PluginAssertionContract() -> PluginAssertionResult {
     action {
       let result = http.get("/test")
       return result

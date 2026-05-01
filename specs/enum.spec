@@ -11,9 +11,7 @@ model EnumGenerateResult {
 }
 
 scope parse_enum {
-  contract ParseEnumContract -> EnumParseResult {
-    file: string
-
+  contract ParseEnumContract(file: string) -> EnumParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -37,9 +35,7 @@ scope parse_enum {
 
 # Verifies the parser rejects empty enum types.
 scope parse_enum_invalid {
-  contract ParseEnumInvalidContract -> EnumParseResult {
-    file: string
-
+  contract ParseEnumInvalidContract(file: string) -> EnumParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -59,9 +55,7 @@ scope parse_enum_invalid {
 
 # Verifies the validator rejects invalid enum variants.
 scope validate_enum_invalid {
-  contract ValidateEnumInvalidContract -> EnumParseResult {
-    file: string
-
+  contract ValidateEnumInvalidContract(file: string) -> EnumParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -81,9 +75,7 @@ scope validate_enum_invalid {
 
 # Verifies the generator produces valid enum values.
 scope generate_enum {
-  contract GenerateEnumContract -> EnumGenerateResult {
-    seed: int
-
+  contract GenerateEnumContract(seed: int) -> EnumGenerateResult {
     action {
       let result = process.exec("generate", "testdata/self/enum.spec", "--scope", "enum_inputs", "--seed", seed)
       return result

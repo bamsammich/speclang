@@ -14,9 +14,7 @@ model GenerateAllTypesResult {
 }
 
 scope generate_all_types {
-  contract GenerateAllTypesContract -> GenerateAllTypesResult {
-    seed: int
-
+  contract GenerateAllTypesContract(seed: int) -> GenerateAllTypesResult {
     action {
       let result = process.exec("generate", "testdata/self/all_types.spec", "--scope", "all_types", "--seed", seed)
       return result

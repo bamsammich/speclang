@@ -17,7 +17,7 @@ Plus: named enums, `config { }` constants, state-dependent fields, contract inhe
 | Spec wrapper | `spec Name { ... }` around everything | No wrapper — file is the spec |
 | Spec name / description | `spec Name { description: "..." }` | Removed; filename is identity, description goes in a comment |
 | Logical operators | `&&`, `\|\|`, `!` | `and`, `or`, `not` (symbolic forms rejected by the lexer) |
-| Contract structure | `scope s { contract { input { } output { } action: <name> } action <name>(...) { } invariant ... scenario ... }` | `contract Name -> ReturnModel { <input fields> action { <body> } invariant ... scenario ... }` |
+| Contract structure | `scope s { contract { input { } output { } action: <name> } action <name>(...) { } invariant ... scenario ... }` | `contract Name(field: type, ...) -> ReturnModel { action { <body> } invariant ... scenario ... }` — input fields are in the signature parens, not the body |
 | Output field refs | Bare names in `then` blocks | `output.` prefix required (`output.balance`, not `balance`) |
 | Role of `scope` | Owns a single contract + its invariants/scenarios + its action | Optional grouping; only holds `before`/`after` + contracts |
 | Action definition location | Top-level *or* inside a scope | Top-level only (reusable actions) or inside a contract as the `action { }` block |
@@ -168,11 +168,11 @@ model TransferResult {
 }
 
 scope transfer {
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       let result = http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -217,6 +217,7 @@ Notable transformations:
 - Spec wrapper and `description:` removed.
 - `output { ... }` extracted into `model TransferResult { ... }`.
 - `scope transfer` retained (no `before`/`after` in this example, but kept by the migrator when present; here it reads fine as a group).
+- **Input fields moved from the v3 `input { }` block into the contract signature parens.** v3 used `contract { input { from: Account ... } }`. v4 uses `contract Transfer(from: Account, ...) -> TransferResult { }`. If you are coming from v3 and expecting an `input { }` block in the body, that is now a parse error — fields belong in the parens.
 - The v3 `action transfer(...) { }` body is inlined as the contract's `action { }`.
 - `input.from.balance` in the v3 invariant becomes bare `from.balance` (the v4 contract field resolution makes the `input.` prefix unnecessary).
 - All `then`-block assertions gained `output.` on their LHS.
@@ -239,6 +240,7 @@ scenario overdraft {
 
 ## Gotchas
 
+- **Contract input fields are in the signature parens, not the body.** v3 used an `input { }` block inside the contract body. v4 declares fields in the contract signature: `contract Transfer(from: Account, amount: int) -> TransferResult { ... }`. Bare field declarations inside a contract body (outside a `constrain { }`) are a parse error in v4.
 - **`output.` is required** even for a bare field name you could previously write. `balance == 100` is an input reference in v4 — if you meant the return value, write `output.balance == 100`.
 - **Bare names in contracts are inputs.** v3's flat namespace mixed input and output; v4 splits them cleanly. Any assertion that ignores this split will either fail to parse (unknown field) or silently check the wrong side.
 - **Includes inside blocks are a bad idea.** v3 allowed `include` anywhere because the token stream was spliced at the point of inclusion. v4 still splices mechanically, but there's no `spec { }` wrapper anymore — write all includes at the top level. A mid-block include will either splice invalidly or leak declarations out of the block and fail later.

@@ -7,9 +7,7 @@ model QuantifiersResult {
 }
 
 scope items {
-  contract QuantifiersContract -> QuantifiersResult {
-    ids: []int
-
+  contract QuantifiersContract(ids: []int) -> QuantifiersResult {
     action {
       let result = http.get("/items")
       return result

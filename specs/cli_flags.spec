@@ -24,7 +24,7 @@ model CLIVerifyResult {
 
 # --help exits zero and is handled by urfave/cli.
 scope cli_help {
-  contract CLIHelpContract -> CLIExitResult {
+  contract CLIHelpContract() -> CLIExitResult {
     action {
       let result = process.exec("--help")
       return result
@@ -40,7 +40,7 @@ scope cli_help {
 }
 
 scope cli_verify_help {
-  contract CLIVerifyHelpContract -> CLIExitResult {
+  contract CLIVerifyHelpContract() -> CLIExitResult {
     action {
       let result = process.exec("verify", "--help")
       return result
@@ -58,7 +58,7 @@ scope cli_verify_help {
 # Different seeds produce different generated output.
 # Seed 1 and seed 2 produce different amounts for the transfer scope.
 scope generate_seed_1 {
-  contract GenerateSeed1Contract -> CLIAmountResult {
+  contract GenerateSeed1Contract() -> CLIAmountResult {
     action {
       let result = process.exec("generate", "examples/transfer.spec", "--scope", "transfer", "--seed", "1")
       return result
@@ -75,7 +75,7 @@ scope generate_seed_1 {
 }
 
 scope generate_seed_2 {
-  contract GenerateSeed2Contract -> CLIAmountResult {
+  contract GenerateSeed2Contract() -> CLIAmountResult {
     action {
       let result = process.exec("generate", "examples/transfer.spec", "--scope", "transfer", "--seed", "2")
       return result
@@ -94,10 +94,7 @@ scope generate_seed_2 {
 # Iteration count is respected: --iterations controls inputs_run in JSON output.
 # scopes.0.checks.3 is the first invariant ("conservation") in the transfer scope.
 scope verify_iterations {
-  contract VerifyIterationsContract -> CLIScopesResult {
-    iterations: int
-    file: string
-
+  contract VerifyIterationsContract(iterations: int, file: string) -> CLIScopesResult {
     action {
       let result = process.exec("verify", "--json", "--iterations", iterations, file)
       return result
@@ -118,7 +115,7 @@ scope verify_iterations {
 
 # JSON flag changes output format: verify --json produces parseable JSON with expected fields.
 scope verify_json_output {
-  contract VerifyJSONOutputContract -> CLIVerifyResult {
+  contract VerifyJSONOutputContract() -> CLIVerifyResult {
     action {
       let result = process.exec("verify", "--json", "examples/transfer.spec")
       return result
@@ -139,7 +136,7 @@ scope verify_json_output {
 
 # Unknown subcommand is rejected with exit code 1.
 scope cli_unknown_command {
-  contract CLIUnknownCommandContract -> CLIExitResult {
+  contract CLIUnknownCommandContract() -> CLIExitResult {
     action {
       let result = process.exec("unknown")
       return result
@@ -156,7 +153,7 @@ scope cli_unknown_command {
 
 # Missing required args: generate with no spec file exits with error.
 scope cli_missing_args_generate {
-  contract CLIMissingArgsGenerateContract -> CLIExitResult {
+  contract CLIMissingArgsGenerateContract() -> CLIExitResult {
     action {
       let result = process.exec("generate")
       return result
@@ -173,7 +170,7 @@ scope cli_missing_args_generate {
 
 # Missing required args: parse with no spec file exits with error.
 scope cli_missing_args_parse {
-  contract CLIMissingArgsParseContract -> CLIExitResult {
+  contract CLIMissingArgsParseContract() -> CLIExitResult {
     action {
       let result = process.exec("parse")
       return result
@@ -191,7 +188,7 @@ scope cli_missing_args_parse {
 # Flag position flexibility: flags before or after spec file produce same output.
 # urfave/cli handles interspersed flags natively.
 scope generate_flags_after {
-  contract GenerateFlagsAfterContract -> CLIAmountResult {
+  contract GenerateFlagsAfterContract() -> CLIAmountResult {
     action {
       let result = process.exec("generate", "examples/transfer.spec", "--scope", "transfer", "--seed", "1")
       return result
@@ -208,7 +205,7 @@ scope generate_flags_after {
 }
 
 scope generate_flags_before {
-  contract GenerateFlagsBeforeContract -> CLIAmountResult {
+  contract GenerateFlagsBeforeContract() -> CLIAmountResult {
     action {
       let result = process.exec("generate", "--scope", "transfer", "--seed", "1", "examples/transfer.spec")
       return result

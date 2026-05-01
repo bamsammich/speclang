@@ -1,9 +1,9 @@
 scope transfer {
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount

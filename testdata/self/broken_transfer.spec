@@ -16,11 +16,11 @@ model BrokenTransferResult {
 }
 
 scope transfer {
-  contract BrokenTransfer -> BrokenTransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract BrokenTransfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> BrokenTransferResult {
     action {
       let result = http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount

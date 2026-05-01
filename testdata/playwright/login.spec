@@ -15,10 +15,7 @@ model LoginResult {
 }
 
 scope login {
-    contract LoginContract -> LoginResult {
-        user: string
-        pass: string
-
+    contract LoginContract(user: string, pass: string) -> LoginResult {
         action {
             playwright.fill(username, user)
             playwright.fill(password, pass)

@@ -15,9 +15,7 @@ model V4GenerateResult {
 # Verifies the parser accepts named enum declarations and model fields using
 # a named enum type, and that enum variants appear in the AST.
 scope parse_named_enum {
-  contract ParseNamedEnumContract -> V4ParseResult {
-    file: string
-
+  contract ParseNamedEnumContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -44,9 +42,7 @@ scope parse_named_enum {
 
 # Verifies the generator only produces declared variants for a named-enum field.
 scope generate_named_enum {
-  contract GenerateNamedEnumContract -> V4GenerateResult {
-    seed: int
-
+  contract GenerateNamedEnumContract(seed: int) -> V4GenerateResult {
     action {
       let result = process.exec("generate", "testdata/self/named_enum.spec", "--scope", "named_enum_inputs", "--seed", seed)
       return result
@@ -70,9 +66,7 @@ scope generate_named_enum {
 # Verifies the `in` operator parses in when predicates (array literal RHS)
 # and in invariant expressions (single-value binary form).
 scope parse_in_operator {
-  contract ParseInOperatorContract -> V4ParseResult {
-    file: string
-
+  contract ParseInOperatorContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -98,9 +92,7 @@ scope parse_in_operator {
 # Verifies the `implies` operator parses in invariant assertions.
 # implies has the lowest precedence: `a implies b` means `not a or b`.
 scope parse_implies {
-  contract ParseImpliesContract -> V4ParseResult {
-    file: string
-
+  contract ParseImpliesContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -126,9 +118,7 @@ scope parse_implies {
 # Verifies that underscore-separated numeric literals (1_000_000, 500_000)
 # parse as their underlying integer values.
 scope parse_underscore_numeric {
-  contract ParseUnderscoreNumericContract -> V4ParseResult {
-    file: string
-
+  contract ParseUnderscoreNumericContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -154,9 +144,7 @@ scope parse_underscore_numeric {
 # Verifies that `contract Name: InputModel -> OutputModel { constrain { ... } }`
 # parses correctly: the `inherits` field and `constrain` block are present in the AST.
 scope parse_contract_inheritance {
-  contract ParseContractInheritanceContract -> V4ParseResult {
-    file: string
-
+  contract ParseContractInheritanceContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -185,9 +173,7 @@ scope parse_contract_inheritance {
 # "config" lexes as TokenConfig (a keyword), which required routing via
 # parseTopLevelDecl → parseTopLevelIdentDecl.
 scope parse_config_block {
-  contract ParseConfigBlockContract -> V4ParseResult {
-    file: string
-
+  contract ParseConfigBlockContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -213,9 +199,7 @@ scope parse_config_block {
 # Verifies that `field: type when condition` parses correctly into the AST
 # (Field.When is populated). Both model fields and contract input fields are exercised.
 scope parse_state_dependent_fields {
-  contract ParseStateDependentContract -> V4ParseResult {
-    file: string
-
+  contract ParseStateDependentContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -244,9 +228,7 @@ scope parse_state_dependent_fields {
 # verifies the feature by parsing a spec with top-level model + scope + contract
 # with no enclosing spec block.
 scope parse_no_wrapper {
-  contract ParseNoWrapperContract -> V4ParseResult {
-    file: string
-
+  contract ParseNoWrapperContract(file: string) -> V4ParseResult {
     action {
       let result = process.exec("parse", file)
       return result

@@ -7,10 +7,7 @@ model ContainsResult {
 }
 
 scope test {
-  contract ContainsContract -> ContainsResult {
-    msg: string
-    items: []int
-
+  contract ContainsContract(msg: string, items: []int) -> ContainsResult {
     action {
       let result = http.post("/api/test", { msg: msg, items: items })
       return result

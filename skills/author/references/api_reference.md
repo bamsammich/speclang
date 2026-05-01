@@ -46,11 +46,11 @@ action <name>(<param>: <type>, ...) {
 }
 
 # Top-level contract (or inside a scope)
-contract <Name> -> <ReturnModel> {
-  # Input fields
-  <field>: <type>
-  <field>: <type> { <constraint> }
-
+# Input fields in the signature parens; body has action, invariants, scenarios only
+contract <Name>(
+  <field>: <type>,
+  <field>: <type> { <constraint> },
+) -> <ReturnModel> {
   # Action block (inline — no external action reference)
   action {
     let <var> = <adapter>.<method>(<args>)
@@ -159,12 +159,14 @@ process { command: "./my-binary" }
 
 ## Contract
 
-```
-contract Transfer -> TransferResult {
-  from: Account
-  to: Account
-  amount: int { 0 < amount <= from.balance }
+Input fields are declared in the signature parens. The body contains only the `action` block, invariants, and scenarios. Bare field declarations inside the body are a parse error.
 
+```
+contract Transfer(
+  from: Account,
+  to: Account,
+  amount: int { 0 < amount <= from.balance },
+) -> TransferResult {
   action {
     return http.post("/api/v1/accounts/transfer", {
       from: from, to: to, amount: amount
@@ -183,8 +185,8 @@ contract Transfer -> TransferResult {
       amount: 30
     }
     then {
-      output.from.balance == input.from.balance - amount
-      output.to.balance == input.to.balance + amount
+      output.from.balance == from.balance - amount
+      output.to.balance == to.balance + amount
       output.error == null
     }
   }
@@ -194,6 +196,17 @@ contract Transfer -> TransferResult {
     then { output.error == "insufficient_funds" }
   }
 }
+```
+
+Single-line and empty-parens forms:
+
+```
+contract Health() -> HealthResult {
+  action { return http.get("/healthz") }
+}
+
+contract Login(username: string, password: string) -> AuthResult { action { ... } }
+```
 ```
 
 ## Invariant
@@ -288,7 +301,7 @@ scope transfer {
     http.delete("/api/cleanup")   # errors logged, never fatal
   }
 
-  contract Transfer -> TransferResult { ... }
+  contract Transfer(...) -> TransferResult { ... }
 }
 ```
 

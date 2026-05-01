@@ -13,7 +13,7 @@ model ServicesParseResult {
 }
 
 scope verify_service_lifecycle {
-  contract VerifyServiceLifecycleContract -> ServicesVerifyResult {
+  contract VerifyServiceLifecycleContract() -> ServicesVerifyResult {
     action {
       let result = process.exec("verify", "--json", "testdata/self/services.spec")
       return result
@@ -31,7 +31,7 @@ scope verify_service_lifecycle {
 }
 
 scope parse_service_ref {
-  contract ParseServiceRefContract -> ServicesParseResult {
+  contract ParseServiceRefContract() -> ServicesParseResult {
     action {
       let result = process.exec("parse", "testdata/self/services.spec")
       return result

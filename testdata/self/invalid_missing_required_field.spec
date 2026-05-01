@@ -3,10 +3,7 @@ model MissingFieldResult {
 }
 
 scope broken {
-  contract MissingFieldContract -> MissingFieldResult {
-    from: string
-    to: string
-
+  contract MissingFieldContract(from: string, to: string) -> MissingFieldResult {
     action {
       return http.get("/test")
     }

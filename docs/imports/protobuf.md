@@ -40,9 +40,7 @@ import proto("api.proto")
 #   model CreateUserRequest { name: string  email: string }
 #   model CreateUserResponse { user: User  success: bool }
 #   scope CreateUser {
-#     contract CreateUser -> CreateUserResponse {
-#       name: string
-#       email: string
+#     contract CreateUser(name: string, email: string) -> CreateUserResponse {
 #       # action is empty — YOU must fill this in
 #     }
 #   }
@@ -145,10 +143,10 @@ import proto("api.proto")
 
 # After import, extend the generated contract by writing a companion spec:
 scope CreateUser_verified {
-  contract CreateUserVerified -> CreateUserResponse {
-    name: string
-    email: string
-
+  contract CreateUserVerified(
+    name: string,
+    email: string,
+  ) -> CreateUserResponse {
     action {
       return http.post("/UserService/CreateUser", { name: name, email: email })
     }
@@ -177,10 +175,10 @@ process {
 import proto("api.proto")
 
 scope CreateUser_via_cli {
-  contract CreateUserCliContract -> CreateUserResponse {
-    name: string
-    email: string
-
+  contract CreateUserCliContract(
+    name: string,
+    email: string,
+  ) -> CreateUserResponse {
     action {
       return process.exec("call", "localhost:50051", "UserService.CreateUser",
         "name: '" + name + "', email: '" + email + "'")

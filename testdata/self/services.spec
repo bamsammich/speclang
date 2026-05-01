@@ -20,7 +20,7 @@ model ServiceHealthResult {
 }
 
 scope service_health {
-  contract ServiceHealthContract -> ServiceHealthResult {
+  contract ServiceHealthContract() -> ServiceHealthResult {
     action {
       let result = http.get("/api/items")
       return result

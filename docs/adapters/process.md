@@ -50,7 +50,7 @@ process {
 }
 
 scope help {
-  contract HelpContract -> HelpResult {
+  contract HelpContract() -> HelpResult {
     action {
       return process.exec("--help")
     }
@@ -82,9 +82,7 @@ model ParseResult {
 }
 
 scope parse_valid {
-  contract ParseValidContract -> ParseResult {
-    file: string
-
+  contract ParseValidContract(file: string) -> ParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -126,9 +124,7 @@ model VerifyResult {
 }
 
 scope verify_pass {
-  contract VerifyPassContract -> VerifyResult {
-    file: string
-
+  contract VerifyPassContract(file: string) -> VerifyResult {
     action {
       return process.exec("verify", "--json", file)
     }
@@ -155,9 +151,7 @@ model ParseResult {
 }
 
 scope parse_valid {
-  contract ParseValidContract -> ParseResult {
-    file: string
-
+  contract ParseValidContract(file: string) -> ParseResult {
     action {
       let result = process.exec("parse", file)
       return result

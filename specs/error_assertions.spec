@@ -12,9 +12,7 @@ model ErrorVerifyResult {
 
 # Verifies the parser accepts specs with error pseudo-field in then blocks.
 scope parse_error_pseudo_field {
-  contract ParseErrorPseudoFieldContract -> ErrorParseResult {
-    file: string
-
+  contract ParseErrorPseudoFieldContract(file: string) -> ErrorParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -38,9 +36,7 @@ scope parse_error_pseudo_field {
 
 # Verifies specrun verify passes on a spec using the error pseudo-field.
 scope verify_error_pseudo_field {
-  contract VerifyErrorPseudoFieldContract -> ErrorVerifyResult {
-    file: string
-
+  contract VerifyErrorPseudoFieldContract(file: string) -> ErrorVerifyResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result

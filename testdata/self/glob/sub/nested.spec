@@ -6,7 +6,7 @@ model GlobEchoNested {
   exit_code: int
 }
 
-contract GlobEchoNested -> GlobEchoNested {
+contract GlobEchoNested() -> GlobEchoNested {
   action {
     let result = process.exec("nested")
     return result

@@ -9,7 +9,7 @@ model ErrorPseudoResult {
 }
 
 scope test_error {
-  contract ErrorPseudoContract -> ErrorPseudoResult {
+  contract ErrorPseudoContract() -> ErrorPseudoResult {
     action {
       let result = process.exec("hello")
       return result

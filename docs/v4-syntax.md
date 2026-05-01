@@ -112,11 +112,11 @@ Optional grouping for shared lifecycle hooks. See [Layer 4](#layer-4--scope).
 The behavioral promise — the primary verification unit.
 
 ```
-contract <Name> -> <ReturnType> {
-  <field>: <type>
-  <field>: <type> { <constraint> }
-  <field>: <type> when <condition>
-
+contract <Name>(
+  <field>: <type>,
+  <field>: <type> { <constraint> },
+  <field>: <type> when <condition>,
+) -> <ReturnType> {
   action {
     <steps>
     return <expr>
@@ -125,6 +125,16 @@ contract <Name> -> <ReturnType> {
   invariant <name> { ... }
   scenario  <name> { ... }
 }
+```
+
+Single-line and empty-parens forms are also valid:
+
+```
+contract Health() -> HealthResult {
+  action { return http.get("/healthz") }
+}
+
+contract Login(username: string, password: string) -> AuthResult { action { ... } }
 ```
 
 ### With model inheritance
@@ -144,13 +154,13 @@ The inherited model supplies input fields; `constrain { }` adds bound-style expr
 
 ### What a contract contains
 
-| Member | Count | Purpose |
-|--------|-------|---------|
-| Input fields | 0+ | Implicit inputs (bare identifiers in the body refer to these) |
-| `constrain { }` | 0 or 1 | Additional expressions over inherited fields |
-| `action { }` | 0 or 1 | Execution recipe — no signature, sees fields implicitly |
-| `invariant` | 0+ | Universal laws |
-| `scenario` | 0+ | Concrete or generative cases |
+| Member | Where | Count | Purpose |
+|--------|-------|-------|---------|
+| Input fields | Signature parens | 0+ | Implicit inputs (bare identifiers in the body refer to these) |
+| `constrain { }` | Body (inheritance form only) | 0 or 1 | Additional expressions over inherited fields |
+| `action { }` | Body | 0 or 1 | Execution recipe — no signature, sees fields implicitly |
+| `invariant` | Body | 0+ | Universal laws |
+| `scenario` | Body | 0+ | Concrete or generative cases |
 
 ### Field resolution inside a contract
 
@@ -261,7 +271,7 @@ Generative test — the runtime draws many inputs matching the predicates and ch
 | Adapter config (`http { }` etc.) | Top level | Key-value expressions |
 | `services` | Top level | Service definitions |
 | `scope` | Top level | `before`, `after`, contracts |
-| `contract` | Top level *or* scope | Fields, `constrain`, `action`, invariants, scenarios |
+| `contract` | Top level *or* scope | Parens signature (fields), body: `constrain`, `action`, invariants, scenarios |
 | `before` / `after` | Scope | Steps (`let` / adapter call / action call) |
 | `action { }` block | Contract | Steps (`let` / adapter call / action call / `return`) |
 | `constrain { }` block | Contract (with inheritance) | Boolean expressions over inherited fields |

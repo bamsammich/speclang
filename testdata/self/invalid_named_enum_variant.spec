@@ -5,9 +5,7 @@ model RoleResult {
 }
 
 scope test {
-  contract RoleContract -> RoleResult {
-    role: Role
-
+  contract RoleContract(role: Role) -> RoleResult {
     action {
       return http.get("/test")
     }

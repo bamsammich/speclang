@@ -14,9 +14,7 @@ model ShrinkingResult {
 }
 
 scope shrinking {
-  contract ShrinkingContract -> ShrinkingResult {
-    file: string
-
+  contract ShrinkingContract(file: string) -> ShrinkingResult {
     action {
       let result = process.exec("verify", "--json", file)
       return result

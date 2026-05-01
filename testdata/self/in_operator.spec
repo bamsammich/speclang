@@ -7,9 +7,7 @@ model StatusResult {
 }
 
 scope in_operator_test {
-  contract InOperatorContract -> StatusResult {
-    status: string
-
+  contract InOperatorContract(status: string) -> StatusResult {
     action {
       let result = http.post("/status", { status: status })
       return result

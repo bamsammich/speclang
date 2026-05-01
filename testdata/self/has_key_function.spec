@@ -7,9 +7,7 @@ model HasKeyResult {
 }
 
 scope test {
-  contract HasKeyContract -> HasKeyResult {
-    name: string
-
+  contract HasKeyContract(name: string) -> HasKeyResult {
     action {
       let result = process.exec(name)
       return result

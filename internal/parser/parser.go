@@ -901,9 +901,20 @@ func (p *parser) parseNamedEnum() (*NamedEnum, error) {
 	return ne, nil
 }
 
-// parseContract parses: contract Name [: InheritedModel] -> ReturnType { body }
+// parseContract parses a contract declaration in one of two forms:
 //
-// The body contains: fields, constrain block, action block, invariants, scenarios.
+// New (parens) form — fields declared in signature:
+//
+//	contract Name(field: type, ...) -> ReturnType { body }
+//	contract Name: InheritedModel -> ReturnType { body }
+//
+// Old (inline) form — fields declared in body (backward compatibility):
+//
+//	contract Name -> ReturnType { field: type ... action { } ... }
+//	contract Name: InheritedModel -> ReturnType { constrain { } action { } ... }
+//
+// The body contains: constrain block, action block, invariants, scenarios.
+// In the parens form, bare field declarations in the body are a parse error.
 func (p *parser) parseContract() (*Contract, error) {
 	contractTok := p.advance() // consume "contract"
 
@@ -924,6 +935,27 @@ func (p *parser) parseContract() (*Contract, error) {
 		c.Inherits = inherits.Value
 	}
 
+	// New parens form: contract Name(params) -> ReturnType { body }
+	// Parens are only present in the new form; inheritance form never has parens.
+	parensForm := false
+	if p.peek().Type == TokenLParen {
+		parensForm = true
+		p.advance() // consume "("
+		for p.peek().Type != TokenRParen && p.peek().Type != TokenEOF {
+			field, err := p.parseContractParam()
+			if err != nil {
+				return nil, err
+			}
+			c.Fields = append(c.Fields, field)
+			if p.peek().Type == TokenComma {
+				p.advance() // consume comma (trailing comma allowed)
+			}
+		}
+		if _, err := p.expect(TokenRParen); err != nil {
+			return nil, err
+		}
+	}
+
 	// Required: -> ReturnType
 	if _, err := p.expect(TokenArrow); err != nil {
 		return nil, err
@@ -940,7 +972,7 @@ func (p *parser) parseContract() (*Contract, error) {
 	}
 
 	for p.peek().Type != TokenRBrace && p.peek().Type != TokenEOF {
-		if err := p.parseContractMember(c); err != nil {
+		if err := p.parseContractMember(c, parensForm); err != nil {
 			return nil, err
 		}
 	}
@@ -951,8 +983,16 @@ func (p *parser) parseContract() (*Contract, error) {
 	return c, nil
 }
 
+// parseContractParam parses a single field declaration in a contract parameter list:
+// name: type [{ constraint }] [when expr]
+// This mirrors parseField but is used in the parens context.
+func (p *parser) parseContractParam() (*Field, error) {
+	return p.parseField()
+}
+
 // parseContractMember parses one element inside a contract body.
-func (p *parser) parseContractMember(c *Contract) error {
+// When parensForm is true, bare field declarations are rejected with a helpful error.
+func (p *parser) parseContractMember(c *Contract, parensForm bool) error {
 	tok := p.peek()
 
 	switch tok.Type {
@@ -1009,8 +1049,17 @@ func (p *parser) parseContractMember(c *Contract) error {
 		return nil
 
 	default:
-		// Must be a field declaration: name: type [{ constraint }] [when condition]
 		if isIdentLike(tok.Type) {
+			if parensForm {
+				// In the parens form, bare field declarations in the body are an error.
+				// Fields must be declared in the contract signature: contract Name(field: type, ...).
+				return p.errAt(tok, fmt.Sprintf(
+					"contract field %q must be declared in the signature parens, not the body: "+
+						"use 'contract %s(%s: type, ...) -> ...'",
+					tok.Value, c.Name, tok.Value,
+				))
+			}
+			// Old (inline) form: field declaration in body (backward compatibility).
 			field, err := p.parseField()
 			if err != nil {
 				return err

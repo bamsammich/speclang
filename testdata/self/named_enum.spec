@@ -13,9 +13,7 @@ model NamedEnumResult {
 }
 
 scope named_enum_inputs {
-  contract NamedEnumContract -> NamedEnumResult {
-    role: Role
-
+  contract NamedEnumContract(role: Role) -> NamedEnumResult {
     action {
       let result = http.post("/test", { role: role })
       return result

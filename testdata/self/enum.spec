@@ -7,11 +7,11 @@ model EnumResult {
 }
 
 scope enum_inputs {
-  contract EnumContract -> EnumResult {
-    adapter_name: enum("http", "process", "playwright")
-    subcommand: enum("parse", "generate", "verify", "install")
-    opt_role: enum("admin", "user")?
-
+  contract EnumContract(
+    adapter_name: enum("http", "process", "playwright"),
+    subcommand: enum("parse", "generate", "verify", "install"),
+    opt_role: enum("admin", "user")?,
+  ) -> EnumResult {
     action {
       let result = http.post("/test", { adapter_name: adapter_name, subcommand: subcommand, opt_role: opt_role })
       return result

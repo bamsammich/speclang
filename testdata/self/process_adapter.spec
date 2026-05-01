@@ -28,9 +28,7 @@ model ProcessJSONResult {
 
 # exec with JSON stdout — verify exit_code and dot-path traversal
 scope process_json_stdout {
-  contract ProcessJSONStdoutContract -> ProcessGreetResult {
-    name: string
-
+  contract ProcessJSONStdoutContract(name: string) -> ProcessGreetResult {
     action {
       let result = process.exec("greet", name)
       return result
@@ -51,9 +49,7 @@ scope process_json_stdout {
 
 # exec with non-zero exit code
 scope process_exit_code {
-  contract ProcessExitCodeContract -> ProcessExitResult {
-    code: string
-
+  contract ProcessExitCodeContract(code: string) -> ProcessExitResult {
     action {
       let result = process.exec("exit", code)
       return result
@@ -72,9 +68,7 @@ scope process_exit_code {
 
 # exec with stderr output
 scope process_stderr {
-  contract ProcessStderrContract -> ProcessStderrResult {
-    message: string
-
+  contract ProcessStderrContract(message: string) -> ProcessStderrResult {
     action {
       let result = process.exec("stderr", message)
       return result
@@ -94,9 +88,7 @@ scope process_stderr {
 
 # exec with raw JSON passthrough
 scope process_raw_json {
-  contract ProcessRawJSONContract -> ProcessJSONResult {
-    payload: string
-
+  contract ProcessRawJSONContract(payload: string) -> ProcessJSONResult {
     action {
       let result = process.exec("json", payload)
       return result

@@ -53,11 +53,11 @@ scope transfers {
     login("admin", "test")
   }
 
-  contract Transfer -> TransferResult {
-    from: Account
-    to: Account
-    amount: int { 0 < amount <= from.balance }
-
+  contract Transfer(
+    from: Account,
+    to: Account,
+    amount: int { 0 < amount <= from.balance },
+  ) -> TransferResult {
     action {
       return http.post("/api/v1/accounts/transfer", {
         from: from, to: to, amount: amount
@@ -76,8 +76,8 @@ scope transfers {
         amount: 30
       }
       then {
-        output.from.balance == input.from.balance - amount
-        output.to.balance == input.to.balance + amount
+        output.from.balance == from.balance - amount
+        output.to.balance == to.balance + amount
         output.error == null
       }
     }
@@ -96,7 +96,7 @@ scope transfers {
 - [ ] `include "path"` at top level only (not inside scopes or contracts)
 - [ ] Top-level `action` blocks for reusable flows (login, setup) with typed params, `let`, `return`
 - [ ] `scope` blocks to group related contracts with shared `before`/`after`
-- [ ] Each `contract Name -> ReturnType { fields... action { } invariants... scenarios... }`
+- [ ] Each `contract Name(field: type, ...) -> ReturnType { action { } invariants... scenarios... }` — input fields in the signature parens, **not** in the body
 - [ ] Contract `action` block: inlines the execution steps, uses `return` to emit output
 - [ ] `output.` prefix required for all return-type field references in assertions/invariants
 - [ ] Bare field names (`from`, `amount`) reference contract input fields
@@ -119,14 +119,13 @@ A single spec can use multiple adapters. A single scope can mix adapters.
 
 ## Contract Structure
 
-In v4 a contract is self-contained:
+In v4 a contract is self-contained. Input fields are declared in the signature parens; the body contains only the `action` block, invariants, and scenarios:
 
 ```
-contract Name -> ReturnModel {
-  # Input fields — the generator's input space
-  field1: type
-  field2: type { constraint }
-
+contract Name(
+  field1: type,
+  field2: type { constraint },
+) -> ReturnModel {
   # Action block — how to execute (uses fields implicitly)
   action {
     let result = http.post("/path", { field1: field1, field2: field2 })
@@ -139,6 +138,18 @@ contract Name -> ReturnModel {
   scenario class_name { when { ... } then { ... } }
 }
 ```
+
+Single-line and empty-parens forms are also valid:
+
+```
+contract Health() -> HealthResult {
+  action { return http.get("/healthz") }
+}
+
+contract Login(username: string, password: string) -> AuthResult { action { ... } }
+```
+
+**Bare field declarations inside the contract body are a parse error.** Fields must be in the parens.
 
 **No `action:` reference to an external action.** The action block is inline inside the contract. Named top-level actions are for `before` blocks and shared setup — not for contract dispatch.
 
@@ -258,8 +269,7 @@ model Order {
   tracking: string when status == OrderStatus.shipped
 }
 
-contract GetOrder -> Order {
-  id: string
+contract GetOrder(id: string) -> Order {
   action { return http.get("/api/orders/" + id) }
 
   scenario shipped_has_tracking {
@@ -313,7 +323,7 @@ scope transfer {
     login("admin", "test")
   }
 
-  contract Transfer -> TransferResult { ... }
+  contract Transfer(...) -> TransferResult { ... }
 }
 ```
 

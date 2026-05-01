@@ -3,9 +3,7 @@ model EnumEmptyResult {
 }
 
 scope test {
-  contract EnumEmptyContract -> EnumEmptyResult {
-    status: enum()
-
+  contract EnumEmptyContract(status: enum()) -> EnumEmptyResult {
     action {
       return http.get("/test")
     }

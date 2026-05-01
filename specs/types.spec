@@ -16,9 +16,7 @@ model TypesGenerateResult {
 }
 
 scope parse_types {
-  contract ParseTypesContract -> TypesParseResult {
-    file: string
-
+  contract ParseTypesContract(file: string) -> TypesParseResult {
     action {
       let result = process.exec("parse", file)
       return result
@@ -42,9 +40,7 @@ scope parse_types {
 
 # Verifies the generator produces valid outputs for extended types.
 scope generate_types {
-  contract GenerateTypesContract -> TypesGenerateResult {
-    seed: int
-
+  contract GenerateTypesContract(seed: int) -> TypesGenerateResult {
     action {
       let result = process.exec("generate", "testdata/self/types.spec", "--scope", "typed_inputs", "--seed", seed)
       return result

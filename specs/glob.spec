@@ -10,7 +10,7 @@ model GlobResult {
 # Verifies a simple glob (*.spec) matches multiple files and passes.
 # The fixture dir contains two specs with contracts + one models-only spec.
 scope verify_glob_simple {
-  contract VerifyGlobSimpleContract -> GlobResult {
+  contract VerifyGlobSimpleContract() -> GlobResult {
     action {
       let result = process.exec("verify", "testdata/self/glob/*.spec")
       return result
@@ -28,7 +28,7 @@ scope verify_glob_simple {
 
 # Verifies a recursive glob (**/*.spec) finds files in nested directories.
 scope verify_glob_recursive {
-  contract VerifyGlobRecursiveContract -> GlobResult {
+  contract VerifyGlobRecursiveContract() -> GlobResult {
     action {
       let result = process.exec("verify", "testdata/self/glob/**/*.spec")
       return result
@@ -45,7 +45,7 @@ scope verify_glob_recursive {
 
 # Verifies that a file with no contracts is skipped (exit 0, not failure).
 scope verify_glob_no_contracts {
-  contract VerifyGlobNoContractsContract -> GlobResult {
+  contract VerifyGlobNoContractsContract() -> GlobResult {
     action {
       let result = process.exec("verify", "testdata/self/glob/models_only.spec")
       return result
@@ -62,7 +62,7 @@ scope verify_glob_no_contracts {
 
 # Verifies that a glob matching zero files produces exit code 1.
 scope verify_glob_no_match {
-  contract VerifyGlobNoMatchContract -> GlobResult {
+  contract VerifyGlobNoMatchContract() -> GlobResult {
     action {
       let result = process.exec("verify", "testdata/self/glob/nonexistent/*.spec")
       return result
